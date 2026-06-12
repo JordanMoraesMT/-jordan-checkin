@@ -1,15 +1,15 @@
 {
-  "routes": [
+  "framework": null,
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "rewrites": [
     {
-      "src": "/api/agendor/(.*)",
-      "dest": "https://api.agendor.com.br/v3/$1"
+      "source": "/api/agendor/:path*",
+      "destination": "https://api.agendor.com.br/v3/:path*"
     },
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
