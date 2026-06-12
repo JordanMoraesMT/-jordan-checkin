@@ -68,7 +68,7 @@ function Login({ onLogin }) {
   const go = async () => {
     if (!tk.trim()) return; setLd(true); setEr("");
     try { const d = await agFetch("/users/me", tk.trim()); d.data ? onLogin(tk.trim(), d.data) : setEr("Token inválido."); }
-    catch { setEr("Falha na conexão. Verifique o token."); } setLd(false);
+   catch (e) { setEr("Erro: " + e.message); } setLd(false);
   };
   return (
     <div style={{ padding: "2rem 0" }}>
