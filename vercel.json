@@ -1,8 +1,15 @@
 {
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/agendor/:path*",
-      "destination": "https://api.agendor.com.br/v3/:path*"
+      "src": "/api/agendor/(.*)",
+      "dest": "https://api.agendor.com.br/v3/$1"
+    },
+    {
+      "handle": "filesystem"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }
