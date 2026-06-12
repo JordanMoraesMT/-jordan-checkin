@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 
-const API = "https://api.agendor.com.br/v3";
+const API = "/api/agendor";
 const OSRM = "https://router.project-osrm.org/route/v1/driving";
 
 // ─── Helpers ───
@@ -31,7 +31,8 @@ async function roadKm(lat1, lng1, lat2, lng2) {
 
 // ─── Agendor ───
 async function agFetch(path, token, opts = {}) {
-  const r = await fetch(`${API}${path}`, { ...opts, headers: { Authorization: `Token ${token}`, "Content-Type": "application/json", ...(opts.headers || {}) } });
+  const cleanPath = path.startsWith('/') ? path.slice(1) : path;
+  const r = await fetch(`${API}?path=${encodeURIComponent(cleanPath)}`, { ...opts, headers: { Authorization: `Token ${token}`, "Content-Type": "application/json", ...(opts.headers || {}) } });
   if (!r.ok) throw new Error(`${r.status}`);
   return r.json();
 }
