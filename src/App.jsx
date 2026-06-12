@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 
-const API = "/api/agendor";
+const API = "https://agendor-proxy.administrativo-fc3.workers.dev";
 const OSRM = "https://router.project-osrm.org/route/v1/driving";
 
 // ─── Helpers ───
