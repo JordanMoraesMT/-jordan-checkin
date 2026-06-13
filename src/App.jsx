@@ -6,7 +6,7 @@ const HOMES = {
   743088: { lat: -15.677694, lng: -55.954778, label: "Casa Jordan" },
   743347: { lat: -15.653611, lng: -56.026833, label: "Casa Alisson" },
 };
-const LUNCH_START = 11.5, LUNCH_END = 13.5; // 11:30-13:30
+const LUNCH_START = 12, LUNCH_END = 13; // 12:00-13:00
 
 // ─── Helpers ───
 const fT = (d) => new Date(d).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
@@ -170,7 +170,7 @@ function RotasTab({visits,fuelPrice,dayBases,user}){
 }
 
 // ─── Relatório Tab ───
-function RelatorioTab({visits,fuelPrice,setFuelPrice,dayBases,user}){
+function RelatorioTab({visits,dayBases,user}){
   const[period,setPeriod]=useState("week");
   const home=HOMES[user?.id];
   const now=new Date();
@@ -187,12 +187,11 @@ function RelatorioTab({visits,fuelPrice,setFuelPrice,dayBases,user}){
 
   const totalMin=periodVisits.reduce((s,v)=>s+mins(v.checkinTime,v.checkoutTime),0);
   const avgMin=periodVisits.length>0?Math.round(totalMin/periodVisits.length):0;
-  const fuelCost=(totalKm/10)*fuelPrice;
   const maxBar=Math.max(1,...byDay.map(([,v])=>v.length));
 
   // Excel export
   const exportExcel=()=>{
-    const rows=[["Data","Vendedor","Origem","Destino (último PDV)","Qtd Visitas","Km Total (est.)","Combustível (R$)","Tempo em PDV","Média/Visita","Clientes Visitados"]];
+    const rows=[["Data","Vendedor","Origem","Destino (retorno)","Qtd Visitas","Km Total (est.)","Tempo em PDV","Média/Visita","Clientes Visitados"]];
     byDay.forEach(([date,dvs])=>{
       const sorted=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
       const base=dayBases[date]||home;
@@ -203,11 +202,10 @@ function RelatorioTab({visits,fuelPrice,setFuelPrice,dayBases,user}){
       const dayMin=dvs.reduce((s,v)=>s+mins(v.checkinTime,v.checkoutTime),0);
       const clients=dvs.map(v=>v.orgName).join(", ");
       const origin=base?.label||"N/A";const dest=base?.label||"N/A";
-      rows.push([fD(date+"T12:00"),user?.name||"",origin,dest,dvs.length,dayKm.toFixed(1),(dayKm/10*fuelPrice).toFixed(2),hrsMin(dayMin),dvs.length>0?Math.round(dayMin/dvs.length)+" min":"",clients]);
+      rows.push([fD(date+"T12:00"),user?.name||"",origin,dest,dvs.length,dayKm.toFixed(1),hrsMin(dayMin),dvs.length>0?Math.round(dayMin/dvs.length)+" min":"",clients]);
     });
-    // Totals row
     rows.push([]);
-    rows.push(["TOTAL","","","",periodVisits.length,totalKm.toFixed(1),fuelCost.toFixed(2),hrsMin(totalMin),avgMin+" min",""]);
+    rows.push(["TOTAL","","","",periodVisits.length,totalKm.toFixed(1),hrsMin(totalMin),avgMin+" min",""]);
     exportToCSV(rows,`relatorio-km-${user?.name||"vendedor"}-${period}.csv`);
   };
 
@@ -224,16 +222,11 @@ function RelatorioTab({visits,fuelPrice,setFuelPrice,dayBases,user}){
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
       <Stat icon="🛣️" label="Km total" value={`${totalKm.toFixed(0)} km`} bg="#EFF6FF" color="#1D4ED8"/>
-      <Stat icon="⛽" label="Combustível" value={`R$ ${fuelCost.toFixed(0)}`} bg="#FFFBEB" color="#D97706"/>
       <Stat icon="📍" label="Visitas" value={periodVisits.length} bg="#ECFDF5" color="#059669"/>
       <Stat icon="📅" label="Dias" value={byDay.length} bg="#EFF6FF" color="#1D4ED8"/>
       <Stat icon="⏱" label="Tempo PDV" value={hrsMin(totalMin)} bg="#ECFDF5" color="#059669"/>
       <Stat icon="📊" label="Média/visita" value={`${avgMin} min`} bg="#FFFBEB" color="#D97706"/>
-    </div>
-    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,background:"#F3F4F6",borderRadius:8,padding:"8px 12px"}}>
-      <span style={{fontSize:12,color:"#6B7280"}}>⛽ R$/L</span>
-      <input type="number" value={fuelPrice} onChange={e=>{const v=parseFloat(e.target.value)||6;setFuelPrice(v);saveJSON("jc:fuelPrice",v);}} step="0.10" min="3" max="12" style={{width:70,fontSize:13,textAlign:"center",padding:"4px 6px",border:"1px solid #D1D5DB",borderRadius:6}}/>
-      <span style={{fontSize:11,color:"#9CA3AF",flex:1,textAlign:"right"}}>{(totalKm/10).toFixed(1)}L — 10km/L</span>
+      <Stat icon="📏" label="Km/dia" value={byDay.length>0?`${(totalKm/byDay.length).toFixed(0)} km`:"-"} bg="#FFFBEB" color="#D97706"/>
     </div>
     {/* Export buttons */}
     <div style={{display:"flex",gap:8,marginBottom:16}}>
@@ -274,6 +267,24 @@ export default function App(){
   useEffect(()=>{
     if(token&&user){const today=new Date().toISOString().slice(0,10);if(!dayBases[today])setShowDayBase(true);}
   },[token,user]);
+
+  // Reminder: active visit > 2 hours
+  const[activeReminder,setActiveReminder]=useState(false);
+  useEffect(()=>{
+    if(!active)return setActiveReminder(false);
+    const check=()=>{const elapsed=mins(active.checkinTime,new Date());if(elapsed>=120)setActiveReminder(true);};
+    check();const iv=setInterval(check,60000);return()=>clearInterval(iv);
+  },[active]);
+
+  // Reminder: unclosed visits from previous days
+  const[prevDayReminder,setPrevDayReminder]=useState(null);
+  useEffect(()=>{
+    if(!token||!user)return;
+    const today=new Date().toDateString();
+    if(active&&new Date(active.checkinTime).toDateString()!==today){
+      setPrevDayReminder(active);
+    }
+  },[token,user,active]);
 
   const loggedIn=!!(token&&user);
   const handleLogin=(t,u)=>{setToken(t);setUser(u);saveJSON("jc:token",t);saveJSON("jc:user",u);syncOrgs(t);};
@@ -321,6 +332,27 @@ export default function App(){
 
     {active&&tab!=="config"&&<Banner v={active} orgs={orgs}/>}
 
+    {/* Reminder: previous day unclosed visit */}
+    {prevDayReminder&&(<div style={{background:"#FEF2F2",border:"1px solid #FEE2E2",borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+      <p style={{fontSize:13,fontWeight:500,color:"#DC2626",margin:"0 0 6px"}}>⚠️ Visita não fechada de {fD(prevDayReminder.checkinTime)}</p>
+      <p style={{fontSize:12,color:"#6B7280",margin:"0 0 10px"}}>{prevDayReminder.orgName} — check-in às {fT(prevDayReminder.checkinTime)}</p>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>{
+          const closeTime=new Date(prevDayReminder.checkinTime);closeTime.setHours(18,0,0,0);
+          const done={...prevDayReminder,checkoutTime:closeTime.toISOString(),note:"Check-out automático (esquecido)",synced:false};
+          setVisits(prev=>[done,...prev]);setActive(null);setPrevDayReminder(null);
+        }} style={{flex:1,padding:"8px",fontSize:12,border:"none",borderRadius:8,background:"#DC2626",color:"#fff",cursor:"pointer",fontWeight:500}}>Fechar como 18:00</button>
+        <button onClick={()=>setCoTarget({id:prevDayReminder.orgId,name:prevDayReminder.orgName})} style={{flex:1,padding:"8px",fontSize:12,border:"1px solid #D1D5DB",borderRadius:8,background:"#fff",cursor:"pointer",fontWeight:500}}>Fechar com obs.</button>
+      </div>
+    </div>)}
+
+    {/* Reminder: active visit > 2 hours */}
+    {activeReminder&&!prevDayReminder&&(<div style={{background:"#FFFBEB",border:"1px solid #FEF3C7",borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+      <p style={{fontSize:13,fontWeight:500,color:"#D97706",margin:"0 0 4px"}}>⏰ Visita ativa há mais de 2 horas</p>
+      <p style={{fontSize:12,color:"#6B7280",margin:"0 0 8px"}}>{active?.orgName} — desde {fT(active?.checkinTime)}</p>
+      <button onClick={()=>setCoTarget({id:active.orgId,name:active.orgName})} style={{width:"100%",padding:"8px",fontSize:12,border:"1px solid #D97706",borderRadius:8,background:"#FFFBEB",color:"#D97706",cursor:"pointer",fontWeight:500}}>Fazer check-out agora</button>
+    </div>)}
+
     {/* PDVs */}
     {tab==="pdvs"&&(<div>
       {syncing&&<p style={{fontSize:13,color:"#6B7280",textAlign:"center",padding:"2rem 0"}}>Sincronizando...</p>}
@@ -337,7 +369,7 @@ export default function App(){
     </div>)}
 
     {tab==="rotas"&&<RotasTab visits={visits} fuelPrice={fuelPrice} dayBases={dayBases} user={user}/>}
-    {tab==="relatorio"&&<RelatorioTab visits={visits} fuelPrice={fuelPrice} setFuelPrice={setFuelPrice} dayBases={dayBases} user={user}/>}
+    {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user}/>}
 
     {tab==="config"&&(<div>
       <div style={{background:"#fff",border:"1px solid #E5E7EB",borderRadius:12,padding:"1rem 1.25rem",marginBottom:12}}>
