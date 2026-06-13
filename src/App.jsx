@@ -32,7 +32,7 @@ async function agFetch(path,token,opts={}){
   if(!r.ok)throw new Error(`${r.status}`);return r.json();
 }
 async function fetchOrgs(token){let pg=1,all=[];while(true){const d=await agFetch(`/organizations?page=${pg}&per_page=100`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}return all;}
-async function postAct(token,orgId,text){return agFetch(`/organizations/${orgId}/tasks`,token,{method:"POST",body:JSON.stringify({text,type:"VISITA",done:true})});}
+async function postAct(token,orgId,text,type="VISITA"){return agFetch(`/organizations/${orgId}/tasks`,token,{method:"POST",body:JSON.stringify({text,type,done:true})});}
 function getGPS(){return new Promise((res,rej)=>{if(!navigator.geolocation)return rej(new Error("GPS"));navigator.geolocation.getCurrentPosition((p)=>res({lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)}),rej,{enableHighAccuracy:true,timeout:15000,maximumAge:0});});}
 
 // ─── Excel Export ───
@@ -63,7 +63,20 @@ function OrgCard({org,active,onIn,onOut,ldId,pdvLocs}){
 
 function Banner({v,orgs}){const o=orgs.find((x)=>x.id===v.orgId);const[el,setEl]=useState(0);useEffect(()=>{const fn=()=>setEl(mins(v.checkinTime,new Date()));fn();const iv=setInterval(fn,15000);return()=>clearInterval(iv);},[v.checkinTime]);return(<div style={{background:"#EFF6FF",border:"1px solid #BFDBFE",borderRadius:12,padding:"10px 14px",marginBottom:12}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,borderRadius:"50%",background:"#059669",flexShrink:0}}/><p style={{fontSize:13,fontWeight:500,color:"#1D4ED8",margin:0}}>Em visita: {o?.name||o?.nickname}</p></div><p style={{fontSize:12,color:"#3B82F6",margin:"3px 0 0 16px"}}>{fT(v.checkinTime)} — {el} min</p></div>);}
 
-function NoteModal({org,onSave,onCancel}){const[n,setN]=useState("");return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:50}}><div style={{background:"#fff",borderRadius:"16px 16px 0 0",padding:"1.25rem",width:"100%",maxWidth:480}}><p style={{fontWeight:500,fontSize:15,margin:"0 0 4px"}}>Observações do check-out</p><p style={{fontSize:12,color:"#6B7280",margin:"0 0 12px"}}>{org?.name||org?.nickname}</p><textarea value={n} onChange={(e)=>setN(e.target.value)} placeholder="Descreva o que aconteceu nesta visita (obrigatório)" rows={3} style={{width:"100%",boxSizing:"border-box",marginBottom:4,resize:"vertical",padding:"10px",border:`1px solid ${n.trim()?"#D1D5DB":"#FCA5A5"}`,borderRadius:8,fontSize:14}}/>{!n.trim()&&<p style={{fontSize:11,color:"#DC2626",margin:"0 0 8px"}}>Preencha a observação para finalizar</p>}<div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1,padding:"10px",border:"1px solid #D1D5DB",borderRadius:8,background:"#fff",cursor:"pointer"}}>Cancelar</button><button onClick={()=>n.trim()&&onSave(n)} disabled={!n.trim()} style={{flex:1,background:n.trim()?"#DC2626":"#F3F4F6",color:n.trim()?"#fff":"#9CA3AF",border:"none",fontWeight:500,padding:"10px",borderRadius:8,cursor:n.trim()?"pointer":"default"}}>Finalizar</button></div></div></div>);}
+const TASK_TYPES=[{id:"VISITA",label:"Visita",icon:"📍"},{id:"LIGACAO",label:"Ligação",icon:"📞"},{id:"EMAIL",label:"E-mail",icon:"📧"},{id:"REUNIAO",label:"Reunião",icon:"🤝"},{id:"WHATSAPP",label:"WhatsApp",icon:"💬"},{id:"PROPOSTA",label:"Proposta",icon:"📋"}];
+
+function NoteModal({org,onSave,onCancel}){const[n,setN]=useState("");const[type,setType]=useState("VISITA");return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:50}}><div style={{background:"#fff",borderRadius:"16px 16px 0 0",padding:"1.25rem",width:"100%",maxWidth:480}}>
+  <p style={{fontWeight:500,fontSize:15,margin:"0 0 4px"}}>Registrar atividade</p>
+  <p style={{fontSize:12,color:"#6B7280",margin:"0 0 12px"}}>{org?.name||org?.nickname}</p>
+  <p style={{fontSize:12,color:"#374151",margin:"0 0 6px",fontWeight:500}}>Tipo de atividade</p>
+  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:12}}>
+    {TASK_TYPES.map(t=>(<button key={t.id} onClick={()=>setType(t.id)} style={{padding:"8px 4px",fontSize:11,border:type===t.id?"2px solid #1D4ED8":"1px solid #E5E7EB",borderRadius:8,background:type===t.id?"#EFF6FF":"#fff",color:type===t.id?"#1D4ED8":"#374151",cursor:"pointer",fontWeight:type===t.id?600:400}}>{t.icon} {t.label}</button>))}
+  </div>
+  <p style={{fontSize:12,color:"#374151",margin:"0 0 6px",fontWeight:500}}>Observação</p>
+  <textarea value={n} onChange={(e)=>setN(e.target.value)} placeholder="Descreva o que aconteceu (obrigatório)" rows={3} style={{width:"100%",boxSizing:"border-box",marginBottom:4,resize:"vertical",padding:"10px",border:`1px solid ${n.trim()?"#D1D5DB":"#FCA5A5"}`,borderRadius:8,fontSize:14}}/>
+  {!n.trim()&&<p style={{fontSize:11,color:"#DC2626",margin:"0 0 8px"}}>Preencha a observação para finalizar</p>}
+  <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={onCancel} style={{flex:1,padding:"10px",border:"1px solid #D1D5DB",borderRadius:8,background:"#fff",cursor:"pointer"}}>Cancelar</button><button onClick={()=>n.trim()&&onSave(n,type)} disabled={!n.trim()} style={{flex:1,background:n.trim()?"#1D4ED8":"#F3F4F6",color:n.trim()?"#fff":"#9CA3AF",border:"none",fontWeight:500,padding:"10px",borderRadius:8,cursor:n.trim()?"pointer":"default"}}>Registrar</button></div>
+</div></div>);}
 
 function DayBaseModal({user,onSave,onCancel}){
   const home=HOMES[user?.id];
@@ -306,12 +319,12 @@ export default function App(){
     setLdId(null);
   };
 
-  const handleCheckout=async(note)=>{
+  const handleCheckout=async(note,type="VISITA")=>{
     if(!active||ldId)return;setLdId(active.orgId);
     const now=new Date();let geo=null;try{geo=await getGPS();}catch{}
     const duration=mins(active.checkinTime,now);
-    const done={...active,checkoutTime:now.toISOString(),checkoutLat:geo?.lat,checkoutLng:geo?.lng,note:note||""};
-    try{await postAct(token,active.orgId,note);done.synced=true;}catch{}
+    const done={...active,checkoutTime:now.toISOString(),checkoutLat:geo?.lat,checkoutLng:geo?.lng,note:note||"",taskType:type};
+    try{await postAct(token,active.orgId,note,type);done.synced=true;}catch{}
     setVisits(prev=>[done,...prev]);setActive(null);setCoTarget(null);setLdId(null);
   };
 
