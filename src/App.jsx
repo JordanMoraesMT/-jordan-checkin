@@ -32,7 +32,7 @@ async function agFetch(path,token,opts={}){
   if(!r.ok)throw new Error(`${r.status}`);return r.json();
 }
 async function fetchOrgs(token){let pg=1,all=[];while(true){const d=await agFetch(`/organizations?page=${pg}&per_page=100`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}return all;}
-async function postAct(token,orgId,text,type="VISITA"){return agFetch(`/organizations/${orgId}/tasks`,token,{method:"POST",body:JSON.stringify({text,type,done:true})});}
+async function postAct(token,orgId,text,type="VISITA",done=true,dueDate=null){const body={text,type,done};if(dueDate)body.due_date=dueDate;return agFetch(`/organizations/${orgId}/tasks`,token,{method:"POST",body:JSON.stringify(body)});}
 function getGPS(){return new Promise((res,rej)=>{if(!navigator.geolocation)return rej(new Error("GPS"));navigator.geolocation.getCurrentPosition((p)=>res({lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)}),rej,{enableHighAccuracy:true,timeout:15000,maximumAge:0});});}
 
 // ─── Excel Export ───
@@ -65,17 +65,42 @@ function Banner({v,orgs}){const o=orgs.find((x)=>x.id===v.orgId);const[el,setEl]
 
 const TASK_TYPES=[{id:"VISITA",label:"Visita",icon:"📍"},{id:"LIGACAO",label:"Ligação",icon:"📞"},{id:"EMAIL",label:"E-mail",icon:"📧"},{id:"REUNIAO",label:"Reunião",icon:"🤝"},{id:"WHATSAPP",label:"WhatsApp",icon:"💬"},{id:"PROPOSTA",label:"Proposta",icon:"📋"}];
 
-function NoteModal({org,onSave,onCancel}){const[n,setN]=useState("");const[type,setType]=useState("VISITA");return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:50}}><div style={{background:"#fff",borderRadius:"16px 16px 0 0",padding:"1.25rem",width:"100%",maxWidth:480}}>
-  <p style={{fontWeight:500,fontSize:15,margin:"0 0 4px"}}>Registrar atividade</p>
+function NoteModal({org,onSave,onCancel}){
+  const[n,setN]=useState("");const[type,setType]=useState("VISITA");
+  const[nextType,setNextType]=useState("VISITA");const[nextDate,setNextDate]=useState("");const[nextTime,setNextTime]=useState("09:00");const[nextDesc,setNextDesc]=useState("");
+  const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);const minDate=new Date().toISOString().slice(0,10);
+  const allFilled=n.trim()&&nextDate&&nextDesc.trim();
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:50,overflowY:"auto"}}><div style={{background:"#fff",borderRadius:"16px 16px 0 0",padding:"1.25rem",width:"100%",maxWidth:480,maxHeight:"90vh",overflowY:"auto"}}>
+  <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Registrar atividade</p>
   <p style={{fontSize:12,color:"#6B7280",margin:"0 0 12px"}}>{org?.name||org?.nickname}</p>
-  <p style={{fontSize:12,color:"#374151",margin:"0 0 6px",fontWeight:500}}>Tipo de atividade</p>
-  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:12}}>
-    {TASK_TYPES.map(t=>(<button key={t.id} onClick={()=>setType(t.id)} style={{padding:"8px 4px",fontSize:11,border:type===t.id?"2px solid #1D4ED8":"1px solid #E5E7EB",borderRadius:8,background:type===t.id?"#EFF6FF":"#fff",color:type===t.id?"#1D4ED8":"#374151",cursor:"pointer",fontWeight:type===t.id?600:400}}>{t.icon} {t.label}</button>))}
+
+  <p style={{fontSize:12,color:"#374151",margin:"0 0 6px",fontWeight:500}}>O que foi feito?</p>
+  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:10}}>
+    {TASK_TYPES.map(t=>(<button key={t.id} onClick={()=>setType(t.id)} style={{padding:"7px 4px",fontSize:11,border:type===t.id?"2px solid #1D4ED8":"1px solid #E5E7EB",borderRadius:8,background:type===t.id?"#EFF6FF":"#fff",color:type===t.id?"#1D4ED8":"#374151",cursor:"pointer",fontWeight:type===t.id?600:400}}>{t.icon} {t.label}</button>))}
   </div>
-  <p style={{fontSize:12,color:"#374151",margin:"0 0 6px",fontWeight:500}}>Observação</p>
-  <textarea value={n} onChange={(e)=>setN(e.target.value)} placeholder="Descreva o que aconteceu (obrigatório)" rows={3} style={{width:"100%",boxSizing:"border-box",marginBottom:4,resize:"vertical",padding:"10px",border:`1px solid ${n.trim()?"#D1D5DB":"#FCA5A5"}`,borderRadius:8,fontSize:14}}/>
-  {!n.trim()&&<p style={{fontSize:11,color:"#DC2626",margin:"0 0 8px"}}>Preencha a observação para finalizar</p>}
-  <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={onCancel} style={{flex:1,padding:"10px",border:"1px solid #D1D5DB",borderRadius:8,background:"#fff",cursor:"pointer"}}>Cancelar</button><button onClick={()=>n.trim()&&onSave(n,type)} disabled={!n.trim()} style={{flex:1,background:n.trim()?"#1D4ED8":"#F3F4F6",color:n.trim()?"#fff":"#9CA3AF",border:"none",fontWeight:500,padding:"10px",borderRadius:8,cursor:n.trim()?"pointer":"default"}}>Registrar</button></div>
+
+  <textarea value={n} onChange={(e)=>setN(e.target.value)} placeholder="Descreva o que aconteceu (obrigatório)" rows={2} style={{width:"100%",boxSizing:"border-box",marginBottom:12,resize:"vertical",padding:"10px",border:`1px solid ${n.trim()?"#D1D5DB":"#FCA5A5"}`,borderRadius:8,fontSize:14}}/>
+
+  <div style={{borderTop:"1px solid #E5E7EB",paddingTop:12,marginBottom:8}}>
+    <p style={{fontSize:13,fontWeight:600,margin:"0 0 8px",color:"#1D4ED8"}}>Próximo passo (obrigatório)</p>
+    <p style={{fontSize:12,color:"#374151",margin:"0 0 6px",fontWeight:500}}>Tipo do próximo contato</p>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6,marginBottom:10}}>
+      {TASK_TYPES.map(t=>(<button key={t.id} onClick={()=>setNextType(t.id)} style={{padding:"7px 4px",fontSize:11,border:nextType===t.id?"2px solid #059669":"1px solid #E5E7EB",borderRadius:8,background:nextType===t.id?"#ECFDF5":"#fff",color:nextType===t.id?"#059669":"#374151",cursor:"pointer",fontWeight:nextType===t.id?600:400}}>{t.icon} {t.label}</button>))}
+    </div>
+
+    <div style={{display:"flex",gap:8,marginBottom:10}}>
+      <div style={{flex:1}}><p style={{fontSize:12,color:"#374151",margin:"0 0 4px",fontWeight:500}}>Data</p><input type="date" value={nextDate} min={minDate} onChange={e=>setNextDate(e.target.value)} style={{width:"100%",boxSizing:"border-box",padding:"8px",border:`1px solid ${nextDate?"#D1D5DB":"#FCA5A5"}`,borderRadius:8,fontSize:13}}/></div>
+      <div style={{width:100}}><p style={{fontSize:12,color:"#374151",margin:"0 0 4px",fontWeight:500}}>Hora</p><input type="time" value={nextTime} onChange={e=>setNextTime(e.target.value)} style={{width:"100%",boxSizing:"border-box",padding:"8px",border:"1px solid #D1D5DB",borderRadius:8,fontSize:13}}/></div>
+    </div>
+
+    <textarea value={nextDesc} onChange={e=>setNextDesc(e.target.value)} placeholder="O que fazer no próximo contato? (obrigatório)" rows={2} style={{width:"100%",boxSizing:"border-box",marginBottom:4,resize:"vertical",padding:"10px",border:`1px solid ${nextDesc.trim()?"#D1D5DB":"#FCA5A5"}`,borderRadius:8,fontSize:14}}/>
+  </div>
+
+  {!allFilled&&<p style={{fontSize:11,color:"#DC2626",margin:"4px 0 8px"}}>Preencha todos os campos obrigatórios</p>}
+  <div style={{display:"flex",gap:8,marginTop:4}}>
+    <button onClick={onCancel} style={{flex:1,padding:"10px",border:"1px solid #D1D5DB",borderRadius:8,background:"#fff",cursor:"pointer"}}>Cancelar</button>
+    <button onClick={()=>allFilled&&onSave(n,type,{nextType,nextDate,nextTime,nextDesc})} disabled={!allFilled} style={{flex:1,background:allFilled?"#1D4ED8":"#F3F4F6",color:allFilled?"#fff":"#9CA3AF",border:"none",fontWeight:500,padding:"10px",borderRadius:8,cursor:allFilled?"pointer":"default"}}>Registrar</button>
+  </div>
 </div></div>);}
 
 function DayBaseModal({user,onSave,onCancel}){
@@ -312,19 +337,30 @@ export default function App(){
       const v={orgId:org.id,orgName:org.name||org.nickname,city,checkinTime:new Date().toISOString(),lat:geo.lat,lng:geo.lng,accuracy:geo.acc,checkoutTime:null,note:"",synced:false};
       // Save PDV location on first visit
       if(!pdvLocs[org.id]){setPdvLocs(prev=>({...prev,[org.id]:{lat:geo.lat,lng:geo.lng,date:new Date().toISOString()}}));}
-      else{const saved=pdvLocs[org.id];const dist=haversine(saved.lat,saved.lng,geo.lat,geo.lng)*1000;if(dist>500){v.distFromSaved=Math.round(dist);}}
-      try{const now=new Date();v.synced=true;}catch{}
+      else{
+        const saved=pdvLocs[org.id];const dist=haversine(saved.lat,saved.lng,geo.lat,geo.lng)*1000;
+        if(dist>500){
+          v.distFromSaved=Math.round(dist);
+          const ok=confirm(`Voce esta a ${Math.round(dist)}m do local cadastrado para ${org.name||org.nickname}.\n\nIsso pode indicar cliente errado. Deseja continuar?`);
+          if(!ok){setLdId(null);return;}
+        }
+      }
+      v.synced=true;
       setActive(v);
     }catch{setGeoErr("GPS indisponível. Verifique permissões.");}
     setLdId(null);
   };
 
-  const handleCheckout=async(note,type="VISITA")=>{
+  const handleCheckout=async(note,type="VISITA",nextStep=null)=>{
     if(!active||ldId)return;setLdId(active.orgId);
     const now=new Date();let geo=null;try{geo=await getGPS();}catch{}
     const duration=mins(active.checkinTime,now);
     const done={...active,checkoutTime:now.toISOString(),checkoutLat:geo?.lat,checkoutLng:geo?.lng,note:note||"",taskType:type};
-    try{await postAct(token,active.orgId,note,type);done.synced=true;}catch{}
+    try{await postAct(token,active.orgId,note,type,true);done.synced=true;}catch{}
+    // Create next step as scheduled task
+    if(nextStep&&nextStep.nextDate&&nextStep.nextDesc){
+      try{const dueDate=`${nextStep.nextDate}T${nextStep.nextTime||"09:00"}:00-04:00`;await postAct(token,active.orgId,nextStep.nextDesc,nextStep.nextType||"VISITA",false,dueDate);}catch{}
+    }
     setVisits(prev=>[done,...prev]);setActive(null);setCoTarget(null);setLdId(null);
   };
 
