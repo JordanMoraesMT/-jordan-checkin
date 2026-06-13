@@ -33,14 +33,14 @@ function Login({onLogin}){
 }
 
 // ─── OrgCard ───
-function OrgCard({org,active,onIn,onOut,onPerson,onQuick,ldId,plocs}){
+function OrgCard({org,active,onIn,onOut,onEdit,onPerson,onQuick,ldId,plocs}){
   const isA=active?.orgId===org.id;const a=org.addr||{};
   const addr=[a.street,a.number].filter(Boolean).join(", ");
   const loc=[a.district||a.neighborhood,a.city_name||a.city,a.state].filter(Boolean).join(" · ");
   const cc=org.cat==="Ativo"?S.ok:org.cat==="Inativo"?S.dng:org.cat==="Online - B2B"?S.gold:S.acc;
   return(<div style={{background:isA?S.cl:S.card,border:`${isA?2:1}px solid ${isA?S.pri:S.brd}`,borderRadius:12,padding:"12px 14px"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-      <div style={{flex:1,minWidth:0}} onClick={()=>onPerson&&onPerson(org)}>
+      <div style={{flex:1,minWidth:0}}>
         <p style={{fontWeight:500,fontSize:14,margin:"0 0 2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{plocs[org.id]?<span style={{color:S.ok,fontSize:10,marginRight:4}}>●</span>:null}{org.name||org.nickname}</p>
         {org.cnpj&&<p style={{fontSize:11,color:S.td,margin:"0 0 1px"}}>{org.cnpj}</p>}
         {addr&&<p style={{fontSize:11,color:S.ts,margin:"0 0 1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{addr}</p>}
@@ -50,12 +50,18 @@ function OrgCard({org,active,onIn,onOut,onPerson,onQuick,ldId,plocs}){
           {org.sector&&<span style={{fontSize:9,color:S.ts,background:S.bg,padding:"1px 6px",borderRadius:4}}>{org.sector}</span>}
         </div>
       </div>
-      {isA?<button onClick={()=>onOut(org)} disabled={ldId===org.id} style={{background:S.dng,border:"none",fontSize:12,fontWeight:500,padding:"8px 14px",whiteSpace:"nowrap"}}>{ldId===org.id?"...":"Check-out"}</button>
-      :<div style={{display:"flex",gap:4,flexShrink:0}}>
-        <button onClick={()=>onIn(org)} disabled={!!active||ldId===org.id} style={{background:active?S.cl:S.acc,border:"none",fontSize:11,fontWeight:500,padding:"8px 10px",opacity:active?0.4:1}}>{ldId===org.id?"...":"Check-in"}</button>
-        <button onClick={()=>onQuick&&onQuick(org,"WHATSAPP")} title="WhatsApp" style={{background:S.ok+"22",border:`1px solid ${S.ok}44`,fontSize:14,padding:"6px 8px",lineHeight:1}}>💬</button>
-        <button onClick={()=>onQuick&&onQuick(org,"LIGACAO")} title="Ligação" style={{background:S.pri+"22",border:`1px solid ${S.pri}44`,fontSize:14,padding:"6px 8px",lineHeight:1}}>📞</button>
-      </div>}
+      <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
+        {isA?<button onClick={()=>onOut(org)} disabled={ldId===org.id} style={{background:S.dng,border:"none",fontSize:11,fontWeight:500,padding:"8px 12px"}}>{ldId===org.id?"...":"Check-out"}</button>
+        :<div style={{display:"flex",gap:3}}>
+          <button onClick={()=>onIn(org)} disabled={!!active||ldId===org.id} style={{background:active?S.cl:S.acc,border:"none",fontSize:11,fontWeight:500,padding:"7px 10px",opacity:active?0.4:1}}>{ldId===org.id?"...":"Check-in"}</button>
+          <button onClick={()=>onQuick&&onQuick(org,"WHATSAPP")} style={{background:S.ok+"22",border:`1px solid ${S.ok}44`,fontSize:12,padding:"6px 7px",lineHeight:1}}>💬</button>
+          <button onClick={()=>onQuick&&onQuick(org,"LIGACAO")} style={{background:S.pri+"22",border:`1px solid ${S.pri}44`,fontSize:12,padding:"6px 7px",lineHeight:1}}>📞</button>
+        </div>}
+        <div style={{display:"flex",gap:3,justifyContent:"flex-end"}}>
+          <button onClick={()=>onEdit&&onEdit(org)} style={{fontSize:10,padding:"3px 8px",color:S.ts,background:"transparent",border:`1px solid ${S.brd}`}}>✏️</button>
+          <button onClick={()=>onPerson&&onPerson(org)} style={{fontSize:10,padding:"3px 8px",color:S.ts,background:"transparent",border:`1px solid ${S.brd}`}}>👤+</button>
+        </div>
+      </div>
     </div>
     {isA&&<p style={{fontSize:12,color:S.pl,margin:"8px 0 0",paddingTop:8,borderTop:`1px solid ${S.brd}`}}>Em visita desde {fT(active.checkinTime)}</p>}
   </div>);
@@ -97,6 +103,7 @@ function NoteModal({org,onSave,onCancel,token}){
 const SECTORS=[{id:4512997,n:"Açougues"},{id:4513651,n:"Agropecuarias"},{id:4513000,n:"Atacados"},{id:4512998,n:"Decoração"},{id:4513649,n:"Eletromoveis"},{id:4724740,n:"Embalagens"},{id:4513001,n:"Garden"},{id:4512999,n:"Mat. Construção"},{id:4513019,n:"Outros"},{id:4513020,n:"Papelaria"},{id:4513650,n:"Presenteiros"},{id:4512995,n:"Supermercados"},{id:4512996,n:"Variedades"}];
 const CAT_IDS=[{id:3186598,n:"Ativo"},{id:3186011,n:"Prospecção"},{id:3186601,n:"Somente Visita"},{id:3186600,n:"Inativo"},{id:4136717,n:"Online - B2B"}];
 const ORIGINS=[{id:1981672,n:"Carteira"},{id:1979723,n:"Indicação"},{id:1980476,n:"Prospecção"},{id:1979725,n:"Site"},{id:1980477,n:"Instagram"},{id:1980478,n:"Leads"}];
+const LB=({t,children})=><div style={{marginBottom:6}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px",textTransform:"uppercase",letterSpacing:.5}}>{t}</p>{children}</div>;
 
 function NewClientModal({token,onSave,onCancel}){
   const[step,setStep]=useState(1);const[orgId,setOrgId]=useState(null);const[orgName,setOrgName]=useState("");
@@ -104,61 +111,39 @@ function NewClientModal({token,onSave,onCancel}){
   const[city,setCity]=useState("");const[state,setState]=useState("MT");const[district,setDistrict]=useState("");const[street,setStreet]=useState("");const[num,setNum]=useState("");const[comp,setComp]=useState("");const[cep,setCep]=useState("");const[phone,setPhone]=useState("");
   const[catId,setCatId]=useState(3186598);const[sectorId,setSectorId]=useState("");const[originId,setOriginId]=useState("");const[grupo,setGrupo]=useState("");
   const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[fetching,setFetching]=useState(false);
-  // Person fields
   const[pName,setPName]=useState("");const[pEmail,setPEmail]=useState("");const[pPhone,setPPhone]=useState("");const[pWhats,setPWhats]=useState("");const[pMsg,setPMsg]=useState("");
 
-  const buscarCNPJ=async()=>{
-    const clean=cnpj.replace(/[.\-\/]/g,"");if(clean.length!==14){setEr("CNPJ deve ter 14 digitos");return;}
-    setFetching(true);setEr("");
-    try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);if(!r.ok)throw new Error("CNPJ nao encontrado");const d=await r.json();
-      setName(d.nome_fantasia||"");setLegal(d.razao_social||"");
-      setStreet([d.descricao_tipo_de_logradouro,d.logradouro].filter(Boolean).join(" ")||"");setNum(d.numero||"");setComp(d.complemento||"");
-      setDistrict(d.bairro||"");setCity(d.municipio||"");setState(d.uf||"MT");setCep(d.cep||"");
-      if(d.ddd_telefone_1)setPhone(d.ddd_telefone_1.replace(/[^\d]/g,""));
-    }catch(e){setEr(e.message);}setFetching(false);};
-
-  const createOrg=async()=>{if(!name.trim()&&!legal.trim())return;setLo(true);setEr("");
-    try{const body={name:name.trim()||legal.trim(),legalName:legal.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");
-      const addr={};if(street)addr.streetName=street;if(num)addr.streetNumber=num;if(comp)addr.additionalInfo=comp;if(district)addr.district=district;if(city)addr.city=city;if(state)addr.state=state;if(cep)addr.postal_code=cep;
-      if(Object.keys(addr).length)body.address=addr;if(phone)body.contact={work:phone};
-      if(catId)body.category=catId;if(sectorId)body.sector=parseInt(sectorId);if(originId)body.leadOrigin=parseInt(originId);if(grupo)body.description=`Grupo: ${grupo}`;
-      const d=await agF("/organizations",token,{method:"POST",body:JSON.stringify(body)});
-      if(d.data){setOrgId(d.data.id);setOrgName(d.data.name||name);setStep(2);}else setEr("Erro ao criar");
-    }catch(e){setEr(e.message==="400"?"Cliente ja existe na base do Agendor":"Erro: "+e.message);}setLo(false);};
-
-  const createPerson=async()=>{if(!pName.trim()){onSave(strip({id:orgId,name:orgName||name,legalName:legal,cnpj,address:{city,state,district},category:{id:catId,name:CAT_IDS.find(c=>c.id===catId)?.n},sector:{id:parseInt(sectorId),name:SECTORS.find(s=>s.id===parseInt(sectorId))?.n}}));return;}
-    setLo(true);setPMsg("");
-    try{const body={name:pName.trim(),organization:orgId};if(pEmail)body.email=pEmail;const ct={};if(pPhone)ct.mobile=pPhone;if(pWhats)ct.whatsapp=pWhats;if(Object.keys(ct).length)body.contact=ct;
-      await agF("/people",token,{method:"POST",body:JSON.stringify(body)});
-      onSave(strip({id:orgId,name:orgName||name,legalName:legal,cnpj,address:{city,state,district},category:{id:catId,name:CAT_IDS.find(c=>c.id===catId)?.n},sector:{id:parseInt(sectorId),name:SECTORS.find(s=>s.id===parseInt(sectorId))?.n}}));
-    }catch(e){setPMsg("Erro: "+e.message);}setLo(false);};
+  const buscarCNPJ=async()=>{const clean=cnpj.replace(/[.\-\/]/g,"");if(clean.length!==14){setEr("CNPJ deve ter 14 digitos");return;}setFetching(true);setEr("");try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);if(!r.ok)throw new Error("CNPJ nao encontrado");const d=await r.json();setName(d.nome_fantasia||"");setLegal(d.razao_social||"");setStreet([d.descricao_tipo_de_logradouro,d.logradouro].filter(Boolean).join(" ")||"");setNum(d.numero||"");setComp(d.complemento||"");setDistrict(d.bairro||"");setCity(d.municipio||"");setState(d.uf||"MT");setCep(d.cep||"");if(d.ddd_telefone_1)setPhone(d.ddd_telefone_1.replace(/[^\d]/g,""));}catch(e){setEr(e.message);}setFetching(false);};
+  const createOrg=async()=>{if(!name.trim()&&!legal.trim())return;setLo(true);setEr("");try{const body={name:name.trim()||legal.trim(),legalName:legal.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");const addr={};if(street)addr.streetName=street;if(num)addr.streetNumber=num;if(comp)addr.additionalInfo=comp;if(district)addr.district=district;if(city)addr.city=city;if(state)addr.state=state;if(cep)addr.postal_code=cep;if(Object.keys(addr).length)body.address=addr;if(phone)body.contact={work:phone};if(catId)body.category=catId;if(sectorId)body.sector=parseInt(sectorId);if(originId)body.leadOrigin=parseInt(originId);if(grupo)body.description=`Grupo: ${grupo}`;const d=await agF("/organizations",token,{method:"POST",body:JSON.stringify(body)});if(d.data){setOrgId(d.data.id);setOrgName(d.data.name||name);setStep(2);}else setEr("Erro");}catch(e){setEr(e.message==="400"?"Cliente ja existe na base do Agendor":"Erro: "+e.message);}setLo(false);};
+  const mkOrg=()=>strip({id:orgId,name:orgName||name,legalName:legal,cnpj,address:{city,state,district},category:{id:catId,name:CAT_IDS.find(c=>c.id===catId)?.n},sector:{id:parseInt(sectorId),name:SECTORS.find(s=>s.id===parseInt(sectorId))?.n}});
+  const finish=(wp)=>{if(wp&&!pName.trim())return;if(!wp){onSave(mkOrg());return;}setLo(true);agF("/people",token,{method:"POST",body:JSON.stringify({name:pName,organization:orgId,...(pEmail?{email:pEmail}:{}),contact:{...(pPhone?{mobile:pPhone}:{}),...(pWhats?{whatsapp:pWhats}:{})}})}).then(()=>onSave(mkOrg())).catch(()=>onSave(mkOrg()));};
 
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
   {step===1?<>
-  <p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Novo Cliente — Empresa</p>
+  <p style={{fontWeight:600,fontSize:16,margin:"0 0 2px"}}>Novo Cliente — Empresa</p>
   <p style={{fontSize:11,color:S.ts,margin:"0 0 10px"}}>Etapa 1 de 2</p>
-  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="CNPJ" style={{flex:1}} onKeyDown={e=>e.key==="Enter"&&buscarCNPJ()}/><button onClick={buscarCNPJ} disabled={fetching} style={{padding:"8px 12px",background:S.acc,border:"none",fontWeight:600,fontSize:11}}>{fetching?"...":"Buscar"}</button></div>
-  {fetching&&<p style={{fontSize:11,color:S.acc,margin:"0 0 6px"}}>Consultando Receita Federal...</p>}
-  <input value={name} onChange={e=>setName(e.target.value)} placeholder="Nome Fantasia" style={{width:"100%",marginBottom:6}}/>
-  <input value={legal} onChange={e=>setLegal(e.target.value)} placeholder="Razao Social" style={{width:"100%",marginBottom:6}}/>
-  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Endereco" style={{flex:1}}/><input value={num} onChange={e=>setNum(e.target.value)} placeholder="No" style={{width:50}}/></div>
-  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={comp} onChange={e=>setComp(e.target.value)} placeholder="Complemento" style={{flex:1}}/><input value={cep} onChange={e=>setCep(e.target.value)} placeholder="CEP" style={{width:85}}/></div>
-  <input value={district} onChange={e=>setDistrict(e.target.value)} placeholder="Bairro" style={{width:"100%",marginBottom:6}}/>
-  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Cidade" style={{flex:1}}/><select value={state} onChange={e=>setState(e.target.value)} style={{width:60}}><option>MT</option><option>MS</option><option>PA</option><option>GO</option><option>RO</option><option>TO</option></select></div>
-  <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone" style={{width:"100%",marginBottom:6}}/>
-  <div style={{display:"flex",gap:6,marginBottom:6}}><select value={catId} onChange={e=>setCatId(parseInt(e.target.value))} style={{flex:1,fontSize:11}}>{CAT_IDS.map(c=><option key={c.id} value={c.id}>{c.n}</option>)}</select><select value={originId} onChange={e=>setOriginId(e.target.value)} style={{flex:1,fontSize:11}}><option value="">Origem</option>{ORIGINS.map(o=><option key={o.id} value={o.id}>{o.n}</option>)}</select></div>
-  <div style={{display:"flex",gap:6,marginBottom:6}}><select value={sectorId} onChange={e=>setSectorId(e.target.value)} style={{flex:1,fontSize:11}}><option value="">Setor/Segmento</option>{SECTORS.map(s=><option key={s.id} value={s.id}>{s.n}</option>)}</select><input value={grupo} onChange={e=>setGrupo(e.target.value)} placeholder="Grupo" style={{flex:1}}/></div>
+  <LB t="CNPJ"><div style={{display:"flex",gap:6}}><input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="00.000.000/0000-00" style={{flex:1}} onKeyDown={e=>e.key==="Enter"&&buscarCNPJ()}/><button onClick={buscarCNPJ} disabled={fetching} style={{padding:"8px 12px",background:S.acc,border:"none",fontWeight:600,fontSize:11}}>{fetching?"...":"Buscar"}</button></div></LB>
+  {fetching&&<p style={{fontSize:11,color:S.acc,margin:"0 0 4px"}}>Consultando Receita Federal...</p>}
+  <LB t="NOME FANTASIA"><input value={name} onChange={e=>setName(e.target.value)} placeholder="Preencha o nome fantasia" style={{width:"100%"}}/></LB>
+  <LB t="RAZÃO SOCIAL"><input value={legal} onChange={e=>setLegal(e.target.value)} placeholder="Razao social da empresa" style={{width:"100%"}}/></LB>
+  <LB t="ENDEREÇO / Nº"><div style={{display:"flex",gap:6}}><input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Rua / Avenida" style={{flex:1}}/><input value={num} onChange={e=>setNum(e.target.value)} placeholder="Nº" style={{width:50}}/></div></LB>
+  <LB t="COMPLEMENTO / CEP"><div style={{display:"flex",gap:6}}><input value={comp} onChange={e=>setComp(e.target.value)} placeholder="Sala, Loja..." style={{flex:1}}/><input value={cep} onChange={e=>setCep(e.target.value)} placeholder="CEP" style={{width:85}}/></div></LB>
+  <LB t="BAIRRO"><input value={district} onChange={e=>setDistrict(e.target.value)} style={{width:"100%"}}/></LB>
+  <LB t="CIDADE / UF"><div style={{display:"flex",gap:6}}><input value={city} onChange={e=>setCity(e.target.value)} style={{flex:1}}/><select value={state} onChange={e=>setState(e.target.value)} style={{width:60}}><option>MT</option><option>MS</option><option>PA</option><option>GO</option><option>RO</option><option>TO</option></select></div></LB>
+  <LB t="TELEFONE"><input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="(00) 0000-0000" style={{width:"100%"}}/></LB>
+  <LB t="CATEGORIA / ORIGEM"><div style={{display:"flex",gap:6}}><select value={catId} onChange={e=>setCatId(parseInt(e.target.value))} style={{flex:1,fontSize:11}}>{CAT_IDS.map(c=><option key={c.id} value={c.id}>{c.n}</option>)}</select><select value={originId} onChange={e=>setOriginId(e.target.value)} style={{flex:1,fontSize:11}}><option value="">Origem</option>{ORIGINS.map(o=><option key={o.id} value={o.id}>{o.n}</option>)}</select></div></LB>
+  <LB t="SETOR / GRUPO"><div style={{display:"flex",gap:6}}><select value={sectorId} onChange={e=>setSectorId(e.target.value)} style={{flex:1,fontSize:11}}><option value="">Setor</option>{SECTORS.map(s=><option key={s.id} value={s.id}>{s.n}</option>)}</select><input value={grupo} onChange={e=>setGrupo(e.target.value)} placeholder="Grupo" style={{flex:1}}/></div></LB>
   {er&&<p style={{fontSize:12,color:S.dng,margin:"0 0 6px"}}>{er}</p>}
-  <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={createOrg} disabled={lo||(!name.trim()&&!legal.trim())} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"Salvando...":"Proximo →"}</button></div>
+  <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={createOrg} disabled={lo||(!name.trim()&&!legal.trim())} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"Salvando...":"Próximo →"}</button></div>
   </>:<>
-  <p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Contato — {orgName}</p>
-  <p style={{fontSize:11,color:S.ts,margin:"0 0 10px"}}>Etapa 2 de 2 — Pessoa responsavel</p>
-  <input value={pName} onChange={e=>setPName(e.target.value)} placeholder="Nome do responsavel" style={{width:"100%",marginBottom:6}}/>
-  <input value={pEmail} onChange={e=>setPEmail(e.target.value)} placeholder="E-mail" type="email" style={{width:"100%",marginBottom:6}}/>
-  <input value={pPhone} onChange={e=>setPPhone(e.target.value)} placeholder="Telefone" style={{width:"100%",marginBottom:6}}/>
-  <input value={pWhats} onChange={e=>setPWhats(e.target.value)} placeholder="WhatsApp" style={{width:"100%",marginBottom:6}}/>
-  {pMsg&&<p style={{fontSize:12,color:pMsg.startsWith("Erro")?S.dng:S.ok,margin:"0 0 6px"}}>{pMsg}</p>}
-  <div style={{display:"flex",gap:8}}><button onClick={()=>createPerson()} style={{flex:1,fontSize:12,color:S.ts}}>Pular</button><button onClick={createPerson} disabled={lo||!pName.trim()} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>{lo?"Salvando...":"Finalizar"}</button></div>
+  <p style={{fontWeight:600,fontSize:16,margin:"0 0 2px"}}>Contato — {orgName}</p>
+  <p style={{fontSize:11,color:S.ts,margin:"0 0 10px"}}>Etapa 2 de 2 — Pessoa responsável</p>
+  <LB t="NOME"><input value={pName} onChange={e=>setPName(e.target.value)} placeholder="Nome do responsável" style={{width:"100%"}}/></LB>
+  <LB t="E-MAIL"><input value={pEmail} onChange={e=>setPEmail(e.target.value)} type="email" style={{width:"100%"}}/></LB>
+  <LB t="TELEFONE"><input value={pPhone} onChange={e=>setPPhone(e.target.value)} style={{width:"100%"}}/></LB>
+  <LB t="WHATSAPP"><input value={pWhats} onChange={e=>setPWhats(e.target.value)} style={{width:"100%"}}/></LB>
+  {pMsg&&<p style={{fontSize:12,color:S.dng,margin:"0 0 6px"}}>{pMsg}</p>}
+  <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={()=>finish(false)} style={{flex:1,fontSize:12,color:S.ts}}>Pular</button><button onClick={()=>finish(true)} disabled={lo||!pName.trim()} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>{lo?"Salvando...":"Finalizar"}</button></div>
   </>}
 </div></div>);}
 
@@ -179,6 +164,31 @@ function PersonModal({org,token,onClose}){
   <input value={whats} onChange={e=>setWhats(e.target.value)} placeholder="WhatsApp" style={{width:"100%",marginBottom:8}}/>
   {msg&&<p style={{fontSize:12,color:msg.startsWith("Erro")?S.dng:S.ok,margin:"0 0 8px"}}>{msg}</p>}
   <div style={{display:"flex",gap:8}}><button onClick={onClose} style={{flex:1}}>Fechar</button><button onClick={go} disabled={lo||!name.trim()} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>{lo?"Salvando...":"Adicionar"}</button></div>
+</div></div>);}
+
+// ─── Edit Client Modal ───
+function EditModal({org,token,onSave,onClose}){
+  const[name,setName]=useState(org.name||"");const[legal,setLegal]=useState("");const[catId,setCatId]=useState("");const[sectorId,setSectorId]=useState("");const[grupo,setGrupo]=useState("");
+  const[lo,setLo]=useState(false);const[fetching,setFetching]=useState(false);const[msg,setMsg]=useState("");
+  const refresh=async()=>{if(!org.cnpj)return;setFetching(true);setMsg("");try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${org.cnpj.replace(/[.\-\/]/g,"")}`);if(!r.ok)throw new Error("Nao encontrado");const d=await r.json();setName(d.nome_fantasia||name);setLegal(d.razao_social||"");setMsg("Dados atualizados da Receita Federal");}catch(e){setMsg("Erro: "+e.message);}setFetching(false);};
+  const save=async()=>{setLo(true);setMsg("");try{const body={};if(name.trim())body.name=name.trim();if(legal.trim())body.legalName=legal.trim();if(catId)body.category=parseInt(catId);if(sectorId)body.sector=parseInt(sectorId);if(grupo)body.description=`Grupo: ${grupo}`;
+    await agF(`/organizations/${org.id}`,token,{method:"PUT",body:JSON.stringify(body)});
+    const updated={...org,name:name||org.name};if(catId)updated.cat=CAT_IDS.find(c=>c.id===parseInt(catId))?.n||org.cat;if(sectorId)updated.sector=SECTORS.find(s=>s.id===parseInt(sectorId))?.n||org.sector;
+    onSave(updated);
+  }catch(e){setMsg("Erro: "+e.message);}setLo(false);};
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:400}}>
+  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+    <p style={{fontWeight:600,fontSize:16,margin:0}}>Editar Cliente</p>
+    {org.cnpj&&<button onClick={refresh} disabled={fetching} style={{padding:"4px 10px",fontSize:11,background:S.acc+"22",border:`1px solid ${S.acc}`,color:S.acc,fontWeight:500}}>{fetching?"...":"🔄 Receita Federal"}</button>}
+  </div>
+  {org.cnpj&&<p style={{fontSize:11,color:S.td,margin:"0 0 8px"}}>CNPJ: {org.cnpj}</p>}
+  <LB t="NOME FANTASIA"><input value={name} onChange={e=>setName(e.target.value)} style={{width:"100%"}}/></LB>
+  <LB t="RAZÃO SOCIAL"><input value={legal} onChange={e=>setLegal(e.target.value)} placeholder="Preencher ou atualizar" style={{width:"100%"}}/></LB>
+  <LB t="CATEGORIA"><select value={catId} onChange={e=>setCatId(e.target.value)} style={{width:"100%",fontSize:12}}><option value="">Manter atual ({org.cat||"nenhuma"})</option>{CAT_IDS.map(c=><option key={c.id} value={c.id}>{c.n}</option>)}</select></LB>
+  <LB t="SETOR"><select value={sectorId} onChange={e=>setSectorId(e.target.value)} style={{width:"100%",fontSize:12}}><option value="">Manter atual ({org.sector||"nenhum"})</option>{SECTORS.map(s=><option key={s.id} value={s.id}>{s.n}</option>)}</select></LB>
+  <LB t="GRUPO"><input value={grupo} onChange={e=>setGrupo(e.target.value)} placeholder="Nome do grupo" style={{width:"100%"}}/></LB>
+  {msg&&<p style={{fontSize:12,color:msg.startsWith("Erro")?S.dng:S.ok,margin:"0 0 6px"}}>{msg}</p>}
+  <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={onClose} style={{flex:1}}>Cancelar</button><button onClick={save} disabled={lo} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"Salvando...":"Salvar no Agendor"}</button></div>
 </div></div>);}
 
 // ─── Divergent Location Modal ───
@@ -256,7 +266,7 @@ export default function App(){
   const[catFilter,setCatFilter]=useState("Todos");const[cityFilter,setCityFilter]=useState("Todas");const[stateFilter,setStateFilter]=useState("Todos");const[segFilter,setSegFilter]=useState("Todos");const[prodFilter,setProdFilter]=useState("Todos");
   const[syncing,setSyncing]=useState(false);const[syncMsg,setSyncMsg]=useState("");
   const[ldId,setLdId]=useState(null);const[geoErr,setGeoErr]=useState("");
-  const[coTarget,setCoTarget]=useState(null);const[personTarget,setPersonTarget]=useState(null);const[newClient,setNewClient]=useState(false);const[divTarget,setDivTarget]=useState(null);
+  const[coTarget,setCoTarget]=useState(null);const[personTarget,setPersonTarget]=useState(null);const[newClient,setNewClient]=useState(false);const[divTarget,setDivTarget]=useState(null);const[editTarget,setEditTarget]=useState(null);
   const[plocs,setPlocs]=useState(()=>sL("jc:pdvLocs",{}));
   const[dayBases,setDayBases]=useState(()=>sL("jc:dayBases",{}));
   const[showDB,setShowDB]=useState(false);const[vc,setVc]=useState(PG);
@@ -354,7 +364,7 @@ export default function App(){
         {!syncing&&!orgs.length&&<div style={{textAlign:"center",padding:"2rem 0"}}><button onClick={()=>doSync()} style={{width:"100%",padding:16,fontSize:16,fontWeight:600,background:S.pri,border:"none",borderRadius:12}}>Sincronizar Clientes</button></div>}
         {orgs.length>0&&<>
           <p style={{fontSize:11,color:S.td,margin:"0 0 6px"}}>{fo.length} de {orgs.length} {syncing&&<span style={{color:S.pri}}>({syncMsg})</span>}</p>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={checkin} onOut={o2=>setCoTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} ldId={ldId} plocs={plocs}/>)}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={checkin} onOut={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} ldId={ldId} plocs={plocs}/>)}</div>
           {vc<fo.length&&<button onClick={()=>setVc(p=>p+PG)} style={{width:"100%",marginTop:12,padding:14,fontSize:14,fontWeight:500}}>Ver mais ({fo.length-vc})</button>}
           {search.replace(/[.\-\/]/g,"").length>=11&&fo.length===0&&<button onClick={searchCNPJ} style={{width:"100%",marginTop:8,padding:14,background:S.acc,border:"none",fontWeight:500}}>Buscar CNPJ no Agendor</button>}
         </>}
@@ -378,5 +388,6 @@ export default function App(){
     {newClient&&<NewClientModal token={token} onSave={org=>{setOrgs(p=>[org,...p]);setNewClient(false);}} onCancel={()=>setNewClient(false)}/>}
     {personTarget&&<PersonModal org={personTarget} token={token} onClose={()=>setPersonTarget(null)}/>}
     {divTarget&&<DivergentModal org={divTarget.org} dist={divTarget.dist} onAction={handleDivAction} onCancel={()=>setDivTarget(null)}/>}
+    {editTarget&&<EditModal org={editTarget} token={token} onSave={updated=>{setOrgs(p=>p.map(o=>o.id===updated.id?updated:o));setEditTarget(null);}} onClose={()=>setEditTarget(null)}/>}
   </div>);
 }
