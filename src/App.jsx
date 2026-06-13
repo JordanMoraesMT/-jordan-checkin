@@ -17,7 +17,9 @@ const hrsMin=(m)=>m>=60?`${Math.floor(m/60)}h${(m%60).toString().padStart(2,"0")
 const hourDec=(d)=>{const dt=new Date(d);return dt.getHours()+dt.getMinutes()/60;};
 const hav=(a,b,c,d)=>{const R=6371,x=((c-a)*Math.PI)/180,y=((d-b)*Math.PI)/180;const z=Math.sin(x/2)**2+Math.cos((a*Math.PI)/180)*Math.cos((c*Math.PI)/180)*Math.sin(y/2)**2;return R*2*Math.atan2(Math.sqrt(z),Math.sqrt(1-z));};
 function ld(k,f){try{const v=localStorage.getItem(k);return v?JSON.parse(v):f;}catch{return f;}}
-function sv(k,v){localStorage.setItem(k,JSON.stringify(v));}
+function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("Storage full, clearing old data:",e);try{localStorage.removeItem(k);localStorage.setItem(k,JSON.stringify(v));}catch{}}}
+function stripOrg(o){return{id:o.id,name:o.name,nickname:o.nickname,cnpj:o.cnpj,category:o.category,address:o.address?{street:o.address.street,district:o.address.district||o.address.neighborhood,city:o.address.city,city_name:o.address.city_name,state:o.address.state,postal_code:o.address.postal_code}:null};}
+
 async function roadKm(a,b,c,d){try{const r=await fetch(`${OSRM}/${b},${a};${d},${c}?overview=false`);const j=await r.json();if(j.code==="Ok"&&j.routes?.[0])return{km:j.routes[0].distance/1000,dur:Math.round(j.routes[0].duration/60)};}catch{}return{km:hav(a,b,c,d)*1.3,dur:0,est:true};}
 async function agF(path,token,opts={}){const p=path.startsWith("/")?path.slice(1):path;const r=await fetch(`${API}?path=${encodeURIComponent(p)}`,{...opts,headers:{Authorization:`Token ${token}`,"Content-Type":"application/json",...(opts.headers||{})}});if(!r.ok)throw new Error(`${r.status}`);return r.json();}
 async function getOrgs(token){let pg=1,all=[];while(true){const d=await agF(`/organizations?page=${pg}&per_page=100`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}return all;}
@@ -185,7 +187,7 @@ export default function App(){
   const login=(t,u)=>{setToken(t);setUser(u);sv("jc:token",t);sv("jc:user",u);sync(t);};
   const logout=()=>{setToken("");setUser(null);sv("jc:token","");sv("jc:user",null);};
   const[syncMsg,setSyncMsg]=useState("");
-  const sync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`Carregando... ${all.length} clientes`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}setOrgs(all);const now=new Date().toISOString();setLastSync(now);localStorage.setItem("jc:lastSync",now);setSyncMsg(`${all.length} clientes sincronizados`);}catch(e){setSyncMsg("Erro ao sincronizar. Tente novamente.");console.error(e);}setSyncing(false);};
+  const sync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`Carregando... ${all.length} clientes`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data.map(stripOrg));if(d.data.length<100)break;pg++;}setOrgs(all);const now=new Date().toISOString();setLastSync(now);localStorage.setItem("jc:lastSync",now);setSyncMsg(`${all.length} clientes sincronizados`);}catch(e){setSyncMsg("Erro ao sincronizar. Tente novamente.");console.error(e);}setSyncing(false);};
 
   const checkin=async(org)=>{
     setLdId(org.id);setGeoErr("");
