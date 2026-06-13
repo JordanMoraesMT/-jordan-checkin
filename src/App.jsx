@@ -148,7 +148,7 @@ export default function App(){
   const[orgs,setOrgs]=useState([]);
   const[visits,setVisits]=useState(()=>sLoad("jc:visits",[]));
   const[active,setActive]=useState(()=>sLoad("jc:active",null));
-  const[tab,setTab]=useState("pdvs");const[search,setSearch]=useState("");const[catFilter,setCatFilter]=useState("Todos");
+  const[tab,setTab]=useState("pdvs");const[search,setSearch]=useState("");const[catFilter,setCatFilter]=useState("Todos");const[cityFilter,setCityFilter]=useState("Todas");
   const[syncing,setSyncing]=useState(false);const[syncMsg,setSyncMsg]=useState("");
   const[ldId,setLdId]=useState(null);const[geoErr,setGeoErr]=useState("");
   const[coTarget,setCoTarget]=useState(null);
@@ -188,6 +188,10 @@ export default function App(){
 
   const checkin=async(org)=>{
     ensureBase();
+    // Alert for Online/B2B clients
+    if(org.cat==="Online - B2B"&&!confirm(`${org.name} e um cliente Online/B2B.\n\nDeseja registrar visita presencial?`)){return;}
+    // Alert for Inativo clients
+    if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\n\nDeseja continuar com a visita?`)){return;}
     setLdId(org.id);setGeoErr("");
     try{const g=await gps();const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||org.addr?.city||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",synced:true};
       if(!plocs[org.id])setPlocs(p=>({...p,[org.id]:{lat:g.lat,lng:g.lng}}));
@@ -205,10 +209,14 @@ export default function App(){
     setVisits(p=>[done,...p]);setActive(null);setCoTarget(null);setLdId(null);
   };
 
-  // Search: CNPJ, name, city, sector, category, products
+  // Extract unique cities
+  const cities=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const c=o.addr?.city_name||o.addr?.city;if(c)s.add(c);});return["Todas",...[...s].sort()];},[orgs]);
+
+  // Search: CNPJ, name, city, sector, category, products + owner isolation
   const fo=useMemo(()=>{
     let list=orgs;
     if(catFilter!=="Todos")list=list.filter(o=>o.cat===catFilter);
+    if(cityFilter!=="Todas")list=list.filter(o=>(o.addr?.city_name||o.addr?.city)===cityFilter);
     if(search.trim()){
       const q=search.toLowerCase().replace(/[.\-\/]/g,"");
       list=list.filter(o=>{
@@ -217,7 +225,7 @@ export default function App(){
       });
     }
     return list.sort((a,b)=>(a.name||"").localeCompare(b.name||""));
-  },[orgs,search,catFilter]);
+  },[orgs,search,catFilter,cityFilter,user]);
 
   // CNPJ online search
   const[cnpjSearch,setCnpjSearch]=useState(false);
@@ -249,9 +257,13 @@ export default function App(){
       {tab==="pdvs"&&<div>
         <input value={search} onChange={e=>{setSearch(e.target.value);setVc(PG);}} placeholder="Nome, CNPJ, cidade, segmento, produto..." style={{width:"100%",marginBottom:8}}/>
         
-        <div style={{display:"flex",gap:4,marginBottom:10,overflowX:"auto",paddingBottom:4}}>
+        <div style={{display:"flex",gap:4,marginBottom:6,overflowX:"auto",paddingBottom:4}}>
           {["Todos",...CATS].map(c=><button key={c} onClick={()=>{setCatFilter(c);setVc(PG);}} style={{padding:"4px 10px",fontSize:10,whiteSpace:"nowrap",border:catFilter===c?`1px solid ${S.pri}`:`1px solid ${S.brd}`,background:catFilter===c?S.pri:"transparent",color:catFilter===c?"#fff":S.ts,fontWeight:catFilter===c?600:400,borderRadius:20}}>{c}</button>)}
         </div>
+
+        <select value={cityFilter} onChange={e=>{setCityFilter(e.target.value);setVc(PG);}} style={{width:"100%",marginBottom:10,fontSize:12,padding:"8px 10px"}}>
+          {cities.map(c=><option key={c} value={c}>{c==="Todas"?"Todas as cidades":c}</option>)}
+        </select>
 
         {geoErr&&<p style={{fontSize:12,color:S.dng,margin:"0 0 8px"}}>{geoErr}</p>}
 
