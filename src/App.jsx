@@ -300,18 +300,18 @@ export default function App(){
       // Save PDV location on first visit
       if(!pdvLocs[org.id]){setPdvLocs(prev=>({...prev,[org.id]:{lat:geo.lat,lng:geo.lng,date:new Date().toISOString()}}));}
       else{const saved=pdvLocs[org.id];const dist=haversine(saved.lat,saved.lng,geo.lat,geo.lng)*1000;if(dist>500){v.distFromSaved=Math.round(dist);}}
-      try{const now=new Date();await postAct(token,org.id,`📍 CHECK-IN — ${fD(now)} ${fT(now)}\nLocal: ${v.orgName}\nGPS: ${geo.lat.toFixed(6)}, ${geo.lng.toFixed(6)}\nPrecisão: ${geo.acc}m${v.distFromSaved?`\n⚠️ ${v.distFromSaved}m do local cadastrado`:""}`);v.synced=true;}catch{}
+      try{const now=new Date();v.synced=true;}catch{}
       setActive(v);
     }catch{setGeoErr("GPS indisponível. Verifique permissões.");}
     setLdId(null);
   };
 
   const handleCheckout=async(note)=>{
-    if(!active)return;setLdId(active.orgId);
+    if(!active||ldId)return;setLdId(active.orgId);
     const now=new Date();let geo=null;try{geo=await getGPS();}catch{}
     const duration=mins(active.checkinTime,now);
     const done={...active,checkoutTime:now.toISOString(),checkoutLat:geo?.lat,checkoutLng:geo?.lng,note:note||""};
-    try{const lines=[`🏁 CHECK-OUT — ${fD(now)} ${fT(now)}`,`Local: ${active.orgName}`,`Duração: ${duration} min`,`In: ${fT(active.checkinTime)} | Out: ${fT(now)}`];if(geo)lines.push(`GPS saída: ${geo.lat.toFixed(6)}, ${geo.lng.toFixed(6)}`);if(note)lines.push(`Obs: ${note}`);await postAct(token,active.orgId,lines.join("\n"));done.synced=true;}catch{}
+    try{await postAct(token,active.orgId,note);done.synced=true;}catch{}
     setVisits(prev=>[done,...prev]);setActive(null);setCoTarget(null);setLdId(null);
   };
 
