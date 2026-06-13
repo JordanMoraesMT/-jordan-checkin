@@ -23,7 +23,7 @@ async function postTask(token,oid,text,type="VISITA",done=true,due=null){const b
 function gps(){return new Promise((r,j)=>{if(!navigator.geolocation)return j(new Error("GPS"));navigator.geolocation.getCurrentPosition(p=>r({lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)}),j,{enableHighAccuracy:true,timeout:15000,maximumAge:0});});}
 async function roadKm(a,b,c,d){try{const r=await fetch(`${OSRM}/${b},${a};${d},${c}?overview=false`);const j=await r.json();if(j.code==="Ok"&&j.routes?.[0])return{km:j.routes[0].distance/1000,dur:Math.round(j.routes[0].duration/60)};}catch{}return{km:hav(a,b,c,d)*1.3,dur:0};}
 function csv(rows,fn){const b="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");Object.assign(document.createElement("a"),{href:URL.createObjectURL(new Blob([b],{type:"text/csv;charset=utf-8"})),download:fn}).click();}
-function strip(o){return{id:o.id,name:o.name||"",nickname:o.nickname||"",cnpj:o.cnpj||"",cat:o.category?.name||"",sector:o.sector?.name||"",products:(o.products||[]).map(p=>p.name).join(", "),owner:o.ownerUser?.name||"",addr:o.address||{},people:(o.people||[]).map(p=>p.name).join(", ")};}
+function strip(o){const a=o.address||{};return{id:o.id,name:o.name||"",nickname:o.nickname||"",cnpj:o.cnpj||"",cat:o.category?.name||"",sector:o.sector?.name||"",products:(o.products||[]).map(p=>p.name).join(", "),owner:o.ownerUser?.name||"",addr:{street:a.streetName||a.street||"",number:a.streetNumber||a.number||"",complement:a.additionalInfo||a.complement||"",district:a.district||a.neighborhood||"",city:a.city||"",city_name:a.city_name||a.city||"",state:a.state||"",postal_code:a.postal_code||a.postalCode||""},people:(o.people||[]).map(p=>p.name).join(", ")};}
 
 // ─── Login ───
 function Login({onLogin}){
@@ -35,14 +35,16 @@ function Login({onLogin}){
 // ─── OrgCard ───
 function OrgCard({org,active,onIn,onOut,onPerson,ldId,plocs}){
   const isA=active?.orgId===org.id;const a=org.addr||{};
-  const info=[a.district||a.neighborhood,a.city_name||a.city,a.state].filter(Boolean).join(" · ");
+  const addr=[a.street,a.number].filter(Boolean).join(", ");
+  const loc=[a.district||a.neighborhood,a.city_name||a.city,a.state].filter(Boolean).join(" · ");
   const cc=org.cat==="Ativo"?S.ok:org.cat==="Inativo"?S.dng:org.cat==="Online - B2B"?S.gold:S.acc;
   return(<div style={{background:isA?S.cl:S.card,border:`${isA?2:1}px solid ${isA?S.pri:S.brd}`,borderRadius:12,padding:"12px 14px"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
       <div style={{flex:1,minWidth:0}} onClick={()=>onPerson&&onPerson(org)}>
         <p style={{fontWeight:500,fontSize:14,margin:"0 0 2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{plocs[org.id]?<span style={{color:S.ok,fontSize:10,marginRight:4}}>●</span>:null}{org.name||org.nickname}</p>
         {org.cnpj&&<p style={{fontSize:11,color:S.td,margin:"0 0 1px"}}>{org.cnpj}</p>}
-        {info&&<p style={{fontSize:11,color:S.ts,margin:"0 0 2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{info}</p>}
+        {addr&&<p style={{fontSize:11,color:S.ts,margin:"0 0 1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{addr}</p>}
+        {loc&&<p style={{fontSize:11,color:S.ts,margin:"0 0 2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{loc}</p>}
         <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:2}}>
           {org.cat&&<span style={{fontSize:9,color:cc,background:cc+"18",padding:"1px 6px",borderRadius:4}}>{org.cat}</span>}
           {org.sector&&<span style={{fontSize:9,color:S.ts,background:S.bg,padding:"1px 6px",borderRadius:4}}>{org.sector}</span>}
@@ -90,7 +92,7 @@ function NoteModal({org,onSave,onCancel,token}){
 
 // ─── New Client Modal (with CNPJ auto-fill) ───
 function NewClientModal({token,onSave,onCancel}){
-  const[name,setName]=useState("");const[cnpj,setCnpj]=useState("");const[city,setCity]=useState("");const[state,setState]=useState("MT");const[district,setDistrict]=useState("");const[street,setStreet]=useState("");const[phone,setPhone]=useState("");const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[fetching,setFetching]=useState(false);
+  const[name,setName]=useState("");const[cnpj,setCnpj]=useState("");const[city,setCity]=useState("");const[state,setState]=useState("MT");const[district,setDistrict]=useState("");const[street,setStreet]=useState("");const[num,setNum]=useState("");const[comp,setComp]=useState("");const[cep,setCep]=useState("");const[phone,setPhone]=useState("");const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[fetching,setFetching]=useState(false);
   const buscarCNPJ=async()=>{
     const clean=cnpj.replace(/[.\-\/]/g,"");if(clean.length!==14){setEr("CNPJ deve ter 14 digitos");return;}
     setFetching(true);setEr("");
@@ -99,30 +101,36 @@ function NewClientModal({token,onSave,onCancel}){
       if(!r.ok)throw new Error("CNPJ nao encontrado");
       const d=await r.json();
       setName(d.nome_fantasia||d.razao_social||"");
-      setStreet(d.logradouro||"");
+      setStreet([d.descricao_tipo_de_logradouro,d.logradouro].filter(Boolean).join(" ")||"");
+      setNum(d.numero||"");
+      setComp(d.complemento||"");
       setDistrict(d.bairro||"");
       setCity(d.municipio||"");
       setState(d.uf||"MT");
+      setCep(d.cep||"");
       if(d.ddd_telefone_1)setPhone(d.ddd_telefone_1.replace(/[^\d]/g,""));
     }catch(e){setEr(e.message);}
     setFetching(false);
   };
   const go=async()=>{if(!name.trim())return;setLo(true);setEr("");
-    try{const body={name:name.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");if(city||state||district||street)body.address={city,state,district,streetName:street};if(phone)body.contact={work:phone};
+    try{const body={name:name.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");
+      const addr={};if(street)addr.streetName=street;if(num)addr.streetNumber=num;if(comp)addr.additionalInfo=comp;if(district)addr.district=district;if(city)addr.city=city;if(state)addr.state=state;if(cep)addr.postal_code=cep;
+      if(Object.keys(addr).length)body.address=addr;if(phone)body.contact={work:phone};
       const d=await agF("/organizations",token,{method:"POST",body:JSON.stringify(body)});
       if(d.data)onSave(strip(d));else setEr("Erro ao criar");
     }catch(e){setEr("Erro: "+e.message);}setLo(false);};
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"85vh",overflowY:"auto"}}>
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
   <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Novo Cliente</p>
   <div style={{display:"flex",gap:6,marginBottom:8}}>
     <input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="CNPJ" style={{flex:1}} onKeyDown={e=>e.key==="Enter"&&buscarCNPJ()}/>
     <button onClick={buscarCNPJ} disabled={fetching} style={{padding:"8px 14px",background:S.acc,border:"none",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>{fetching?"...":"Buscar"}</button>
   </div>
   {fetching&&<p style={{fontSize:12,color:S.acc,margin:"0 0 8px"}}>Consultando Receita Federal...</p>}
-  <input value={name} onChange={e=>setName(e.target.value)} placeholder="Nome / Razao Social *" style={{width:"100%",marginBottom:8}}/>
-  <input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Endereco" style={{width:"100%",marginBottom:8}}/>
-  <input value={district} onChange={e=>setDistrict(e.target.value)} placeholder="Bairro" style={{width:"100%",marginBottom:8}}/>
-  <div style={{display:"flex",gap:6,marginBottom:8}}><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Cidade" style={{flex:1}}/><select value={state} onChange={e=>setState(e.target.value)} style={{width:70}}><option>MT</option><option>MS</option><option>PA</option><option>GO</option><option>RO</option><option>TO</option><option>AC</option></select></div>
+  <input value={name} onChange={e=>setName(e.target.value)} placeholder="Nome / Razao Social *" style={{width:"100%",marginBottom:6}}/>
+  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Endereco" style={{flex:1}}/><input value={num} onChange={e=>setNum(e.target.value)} placeholder="Nº" style={{width:60}}/></div>
+  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={comp} onChange={e=>setComp(e.target.value)} placeholder="Complemento" style={{flex:1}}/><input value={cep} onChange={e=>setCep(e.target.value)} placeholder="CEP" style={{width:90}}/></div>
+  <input value={district} onChange={e=>setDistrict(e.target.value)} placeholder="Bairro" style={{width:"100%",marginBottom:6}}/>
+  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Cidade" style={{flex:1}}/><select value={state} onChange={e=>setState(e.target.value)} style={{width:65}}><option>MT</option><option>MS</option><option>PA</option><option>GO</option><option>RO</option><option>TO</option><option>AC</option></select></div>
   <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone" style={{width:"100%",marginBottom:8}}/>
   {er&&<p style={{fontSize:12,color:S.dng,margin:"0 0 8px"}}>{er}</p>}
   <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={go} disabled={lo||!name.trim()} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"Salvando...":"Criar no Agendor"}</button></div>
@@ -218,7 +226,7 @@ export default function App(){
   const[visits,setVisits]=useState(()=>sL("jc:visits",[]));
   const[active,setActive]=useState(()=>sL("jc:active",null));
   const[tab,setTab]=useState("pdvs");const[search,setSearch]=useState("");
-  const[catFilter,setCatFilter]=useState("Todos");const[cityFilter,setCityFilter]=useState("Todas");const[stateFilter,setStateFilter]=useState("Todos");
+  const[catFilter,setCatFilter]=useState("Todos");const[cityFilter,setCityFilter]=useState("Todas");const[stateFilter,setStateFilter]=useState("Todos");const[segFilter,setSegFilter]=useState("Todos");const[prodFilter,setProdFilter]=useState("Todos");
   const[syncing,setSyncing]=useState(false);const[syncMsg,setSyncMsg]=useState("");
   const[ldId,setLdId]=useState(null);const[geoErr,setGeoErr]=useState("");
   const[coTarget,setCoTarget]=useState(null);const[personTarget,setPersonTarget]=useState(null);const[newClient,setNewClient]=useState(false);const[divTarget,setDivTarget]=useState(null);
@@ -237,14 +245,18 @@ export default function App(){
 
   const cities=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const c=o.addr?.city_name||o.addr?.city;if(c)s.add(c);});return["Todas",...[...s].sort()];},[orgs]);
   const states=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.addr?.state)s.add(o.addr.state);});return["Todos",...[...s].sort()];},[orgs]);
+  const segments=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.sector)s.add(o.sector);});return["Todos",...[...s].sort()];},[orgs]);
+  const products=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.products)(o.products.split(", ")).forEach(p=>{if(p&&!p.startsWith("P_"))s.add(p);});});return["Todos",...[...s].sort()];},[orgs]);
 
   const fo=useMemo(()=>{let list=orgs;
     if(catFilter!=="Todos")list=list.filter(o=>o.cat===catFilter);
     if(stateFilter!=="Todos")list=list.filter(o=>o.addr?.state===stateFilter);
     if(cityFilter!=="Todas")list=list.filter(o=>(o.addr?.city_name||o.addr?.city)===cityFilter);
-    if(search.trim()){const q=search.toLowerCase().replace(/[.\-\/]/g,"");list=list.filter(o=>[o.name,o.nickname,o.cnpj?.replace(/[.\-\/]/g,""),o.addr?.city,o.addr?.city_name,o.addr?.district,o.addr?.state,o.cat,o.sector,o.products,o.people].filter(Boolean).join(" ").toLowerCase().includes(q));}
+    if(segFilter!=="Todos")list=list.filter(o=>o.sector===segFilter);
+    if(prodFilter!=="Todos")list=list.filter(o=>o.products?.includes(prodFilter));
+    if(search.trim()){const q=search.toLowerCase().replace(/[.\-\/]/g,"");list=list.filter(o=>[o.name,o.nickname,o.cnpj?.replace(/[.\-\/]/g,""),o.addr?.city,o.addr?.city_name,o.addr?.district,o.addr?.state,o.addr?.street,o.cat,o.sector,o.products,o.people].filter(Boolean).join(" ").toLowerCase().includes(q));}
     return list.sort((a,b)=>(a.name||"").localeCompare(b.name||""));
-  },[orgs,search,catFilter,cityFilter,stateFilter]);
+  },[orgs,search,catFilter,cityFilter,stateFilter,segFilter,prodFilter]);
 
   const searchCNPJ=async()=>{const q=search.replace(/[.\-\/]/g,"");if(q.length<11)return;try{const d=await agF(`/organizations?cnpj=${q}`,token);if(d.data?.length){const found=d.data.map(strip);setOrgs(prev=>{const ids=new Set(prev.map(o=>o.id));return[...found.filter(f=>!ids.has(f.id)),...prev];});}}catch{}};
 
@@ -296,9 +308,13 @@ export default function App(){
       {tab==="pdvs"&&<div>
         <input value={search} onChange={e=>{setSearch(e.target.value);setVc(PG);}} placeholder="Nome, CNPJ, cidade, segmento, produto..." style={{width:"100%",marginBottom:6}}/>
         <div style={{display:"flex",gap:4,marginBottom:6,overflowX:"auto",paddingBottom:2}}>{["Todos",...CATS].map(c=><button key={c} onClick={()=>{setCatFilter(c);setVc(PG);}} style={{padding:"3px 8px",fontSize:10,whiteSpace:"nowrap",border:catFilter===c?`1px solid ${S.pri}`:`1px solid ${S.brd}`,background:catFilter===c?S.pri:"transparent",color:catFilter===c?"#fff":S.ts,borderRadius:20}}>{c}</button>)}</div>
+        <div style={{display:"flex",gap:6,marginBottom:6}}>
+          <select value={stateFilter} onChange={e=>{setStateFilter(e.target.value);setCityFilter("Todas");setVc(PG);}} style={{width:65,fontSize:11,padding:"5px 4px"}}>{states.map(s=><option key={s} value={s}>{s==="Todos"?"UF":s}</option>)}</select>
+          <select value={cityFilter} onChange={e=>{setCityFilter(e.target.value);setVc(PG);}} style={{flex:1,fontSize:11,padding:"5px 4px"}}>{cities.filter(c=>c==="Todas"||stateFilter==="Todos"||orgs.some(o=>(o.addr?.city_name||o.addr?.city)===c&&o.addr?.state===stateFilter)).map(c=><option key={c} value={c}>{c==="Todas"?"Cidade":c}</option>)}</select>
+        </div>
         <div style={{display:"flex",gap:6,marginBottom:10}}>
-          <select value={stateFilter} onChange={e=>{setStateFilter(e.target.value);setCityFilter("Todas");setVc(PG);}} style={{flex:1,fontSize:12,padding:"6px 8px"}}>{states.map(s=><option key={s} value={s}>{s==="Todos"?"UF":s}</option>)}</select>
-          <select value={cityFilter} onChange={e=>{setCityFilter(e.target.value);setVc(PG);}} style={{flex:2,fontSize:12,padding:"6px 8px"}}>{cities.filter(c=>c==="Todas"||stateFilter==="Todos"||orgs.some(o=>(o.addr?.city_name||o.addr?.city)===c&&o.addr?.state===stateFilter)).map(c=><option key={c} value={c}>{c==="Todas"?"Todas as cidades":c}</option>)}</select>
+          <select value={segFilter} onChange={e=>{setSegFilter(e.target.value);setVc(PG);}} style={{flex:1,fontSize:11,padding:"5px 4px"}}>{segments.map(s=><option key={s} value={s}>{s==="Todos"?"Segmento":s}</option>)}</select>
+          <select value={prodFilter} onChange={e=>{setProdFilter(e.target.value);setVc(PG);}} style={{flex:1,fontSize:11,padding:"5px 4px"}}>{products.map(p=><option key={p} value={p}>{p==="Todos"?"Marca/Produto":p}</option>)}</select>
         </div>
         {geoErr&&<p style={{fontSize:12,color:S.dng,margin:"0 0 8px"}}>{geoErr}</p>}
         {syncing&&!orgs.length&&<div style={{textAlign:"center",padding:"3rem 0"}}><div style={{width:36,height:36,border:`3px solid ${S.brd}`,borderTopColor:S.pri,borderRadius:"50%",margin:"0 auto 12px",animation:"spin 1s linear infinite"}}/><p style={{color:S.ts}}>{syncMsg}</p><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>}
