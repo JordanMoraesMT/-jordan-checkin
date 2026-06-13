@@ -27,9 +27,15 @@ body {
 }
 
 #root {
-  max-width: 480px;
+  max-width: 960px;
   margin: 0 auto;
   min-height: 100dvh;
+}
+
+@media (min-width: 600px) {
+  #root { padding: 0 24px; }
+  input, textarea, select { font-size: 15px; padding: 12px 14px; }
+  button { font-size: 15px; padding: 12px 18px; }
 }
 
 input, textarea, select {
