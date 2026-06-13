@@ -33,7 +33,7 @@ function Login({onLogin}){
 }
 
 // ─── OrgCard ───
-function OrgCard({org,active,onIn,onOut,onPerson,ldId,plocs}){
+function OrgCard({org,active,onIn,onOut,onPerson,onQuick,ldId,plocs}){
   const isA=active?.orgId===org.id;const a=org.addr||{};
   const addr=[a.street,a.number].filter(Boolean).join(", ");
   const loc=[a.district||a.neighborhood,a.city_name||a.city,a.state].filter(Boolean).join(" · ");
@@ -51,7 +51,11 @@ function OrgCard({org,active,onIn,onOut,onPerson,ldId,plocs}){
         </div>
       </div>
       {isA?<button onClick={()=>onOut(org)} disabled={ldId===org.id} style={{background:S.dng,border:"none",fontSize:12,fontWeight:500,padding:"8px 14px",whiteSpace:"nowrap"}}>{ldId===org.id?"...":"Check-out"}</button>
-      :<button onClick={()=>onIn(org)} disabled={!!active||ldId===org.id} style={{background:active?S.cl:S.acc,border:"none",fontSize:12,fontWeight:500,padding:"8px 14px",whiteSpace:"nowrap",opacity:active?0.4:1}}>{ldId===org.id?"...":"Check-in"}</button>}
+      :<div style={{display:"flex",gap:4,flexShrink:0}}>
+        <button onClick={()=>onIn(org)} disabled={!!active||ldId===org.id} style={{background:active?S.cl:S.acc,border:"none",fontSize:11,fontWeight:500,padding:"8px 10px",opacity:active?0.4:1}}>{ldId===org.id?"...":"Check-in"}</button>
+        <button onClick={()=>onQuick&&onQuick(org,"WHATSAPP")} title="WhatsApp" style={{background:S.ok+"22",border:`1px solid ${S.ok}44`,fontSize:14,padding:"6px 8px",lineHeight:1}}>💬</button>
+        <button onClick={()=>onQuick&&onQuick(org,"LIGACAO")} title="Ligação" style={{background:S.pri+"22",border:`1px solid ${S.pri}44`,fontSize:14,padding:"6px 8px",lineHeight:1}}>📞</button>
+      </div>}
     </div>
     {isA&&<p style={{fontSize:12,color:S.pl,margin:"8px 0 0",paddingTop:8,borderTop:`1px solid ${S.brd}`}}>Em visita desde {fT(active.checkinTime)}</p>}
   </div>);
@@ -90,50 +94,72 @@ function NoteModal({org,onSave,onCancel,token}){
   <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={()=>{if(!ok)return;onSave(n,tp,{nextType:nt,nextDate:nd,nextTime:nh,nextDesc:ndsc},sale?{brand,value:parseFloat(saleVal)||0}:null);}} disabled={!ok} style={{flex:1,background:ok?S.pri:S.cl,border:"none",fontWeight:600}}>Registrar</button></div>
 </div></div>);}
 
-// ─── New Client Modal (with CNPJ auto-fill) ───
+const SECTORS=[{id:4512997,n:"Açougues"},{id:4513651,n:"Agropecuarias"},{id:4513000,n:"Atacados"},{id:4512998,n:"Decoração"},{id:4513649,n:"Eletromoveis"},{id:4724740,n:"Embalagens"},{id:4513001,n:"Garden"},{id:4512999,n:"Mat. Construção"},{id:4513019,n:"Outros"},{id:4513020,n:"Papelaria"},{id:4513650,n:"Presenteiros"},{id:4512995,n:"Supermercados"},{id:4512996,n:"Variedades"}];
+const CAT_IDS=[{id:3186598,n:"Ativo"},{id:3186011,n:"Prospecção"},{id:3186601,n:"Somente Visita"},{id:3186600,n:"Inativo"},{id:4136717,n:"Online - B2B"}];
+const ORIGINS=[{id:1981672,n:"Carteira"},{id:1979723,n:"Indicação"},{id:1980476,n:"Prospecção"},{id:1979725,n:"Site"},{id:1980477,n:"Instagram"},{id:1980478,n:"Leads"}];
+
 function NewClientModal({token,onSave,onCancel}){
-  const[name,setName]=useState("");const[cnpj,setCnpj]=useState("");const[city,setCity]=useState("");const[state,setState]=useState("MT");const[district,setDistrict]=useState("");const[street,setStreet]=useState("");const[num,setNum]=useState("");const[comp,setComp]=useState("");const[cep,setCep]=useState("");const[phone,setPhone]=useState("");const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[fetching,setFetching]=useState(false);
+  const[step,setStep]=useState(1);const[orgId,setOrgId]=useState(null);const[orgName,setOrgName]=useState("");
+  const[name,setName]=useState("");const[legal,setLegal]=useState("");const[cnpj,setCnpj]=useState("");
+  const[city,setCity]=useState("");const[state,setState]=useState("MT");const[district,setDistrict]=useState("");const[street,setStreet]=useState("");const[num,setNum]=useState("");const[comp,setComp]=useState("");const[cep,setCep]=useState("");const[phone,setPhone]=useState("");
+  const[catId,setCatId]=useState(3186598);const[sectorId,setSectorId]=useState("");const[originId,setOriginId]=useState("");const[grupo,setGrupo]=useState("");
+  const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[fetching,setFetching]=useState(false);
+  // Person fields
+  const[pName,setPName]=useState("");const[pEmail,setPEmail]=useState("");const[pPhone,setPPhone]=useState("");const[pWhats,setPWhats]=useState("");const[pMsg,setPMsg]=useState("");
+
   const buscarCNPJ=async()=>{
     const clean=cnpj.replace(/[.\-\/]/g,"");if(clean.length!==14){setEr("CNPJ deve ter 14 digitos");return;}
     setFetching(true);setEr("");
-    try{
-      const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);
-      if(!r.ok)throw new Error("CNPJ nao encontrado");
-      const d=await r.json();
-      setName(d.nome_fantasia||d.razao_social||"");
-      setStreet([d.descricao_tipo_de_logradouro,d.logradouro].filter(Boolean).join(" ")||"");
-      setNum(d.numero||"");
-      setComp(d.complemento||"");
-      setDistrict(d.bairro||"");
-      setCity(d.municipio||"");
-      setState(d.uf||"MT");
-      setCep(d.cep||"");
+    try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);if(!r.ok)throw new Error("CNPJ nao encontrado");const d=await r.json();
+      setName(d.nome_fantasia||"");setLegal(d.razao_social||"");
+      setStreet([d.descricao_tipo_de_logradouro,d.logradouro].filter(Boolean).join(" ")||"");setNum(d.numero||"");setComp(d.complemento||"");
+      setDistrict(d.bairro||"");setCity(d.municipio||"");setState(d.uf||"MT");setCep(d.cep||"");
       if(d.ddd_telefone_1)setPhone(d.ddd_telefone_1.replace(/[^\d]/g,""));
-    }catch(e){setEr(e.message);}
-    setFetching(false);
-  };
-  const go=async()=>{if(!name.trim())return;setLo(true);setEr("");
-    try{const body={name:name.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");
+    }catch(e){setEr(e.message);}setFetching(false);};
+
+  const createOrg=async()=>{if(!name.trim()&&!legal.trim())return;setLo(true);setEr("");
+    try{const body={name:name.trim()||legal.trim(),legalName:legal.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");
       const addr={};if(street)addr.streetName=street;if(num)addr.streetNumber=num;if(comp)addr.additionalInfo=comp;if(district)addr.district=district;if(city)addr.city=city;if(state)addr.state=state;if(cep)addr.postal_code=cep;
       if(Object.keys(addr).length)body.address=addr;if(phone)body.contact={work:phone};
+      if(catId)body.category=catId;if(sectorId)body.sector=parseInt(sectorId);if(originId)body.leadOrigin=parseInt(originId);if(grupo)body.description=`Grupo: ${grupo}`;
       const d=await agF("/organizations",token,{method:"POST",body:JSON.stringify(body)});
-      if(d.data)onSave(strip(d.data));else setEr("Erro ao criar");
-    }catch(e){setEr(e.message==="400"?"Cliente ja existe na base de dados do Agendor":"Erro: "+e.message);}setLo(false);};
+      if(d.data){setOrgId(d.data.id);setOrgName(d.data.name||name);setStep(2);}else setEr("Erro ao criar");
+    }catch(e){setEr(e.message==="400"?"Cliente ja existe na base do Agendor":"Erro: "+e.message);}setLo(false);};
+
+  const createPerson=async()=>{if(!pName.trim()){onSave(strip({id:orgId,name:orgName||name,legalName:legal,cnpj,address:{city,state,district},category:{id:catId,name:CAT_IDS.find(c=>c.id===catId)?.n},sector:{id:parseInt(sectorId),name:SECTORS.find(s=>s.id===parseInt(sectorId))?.n}}));return;}
+    setLo(true);setPMsg("");
+    try{const body={name:pName.trim(),organization:orgId};if(pEmail)body.email=pEmail;const ct={};if(pPhone)ct.mobile=pPhone;if(pWhats)ct.whatsapp=pWhats;if(Object.keys(ct).length)body.contact=ct;
+      await agF("/people",token,{method:"POST",body:JSON.stringify(body)});
+      onSave(strip({id:orgId,name:orgName||name,legalName:legal,cnpj,address:{city,state,district},category:{id:catId,name:CAT_IDS.find(c=>c.id===catId)?.n},sector:{id:parseInt(sectorId),name:SECTORS.find(s=>s.id===parseInt(sectorId))?.n}}));
+    }catch(e){setPMsg("Erro: "+e.message);}setLo(false);};
+
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
-  <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Novo Cliente</p>
-  <div style={{display:"flex",gap:6,marginBottom:8}}>
-    <input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="CNPJ" style={{flex:1}} onKeyDown={e=>e.key==="Enter"&&buscarCNPJ()}/>
-    <button onClick={buscarCNPJ} disabled={fetching} style={{padding:"8px 14px",background:S.acc,border:"none",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>{fetching?"...":"Buscar"}</button>
-  </div>
-  {fetching&&<p style={{fontSize:12,color:S.acc,margin:"0 0 8px"}}>Consultando Receita Federal...</p>}
-  <input value={name} onChange={e=>setName(e.target.value)} placeholder="Nome / Razao Social *" style={{width:"100%",marginBottom:6}}/>
-  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Endereco" style={{flex:1}}/><input value={num} onChange={e=>setNum(e.target.value)} placeholder="Nº" style={{width:60}}/></div>
-  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={comp} onChange={e=>setComp(e.target.value)} placeholder="Complemento" style={{flex:1}}/><input value={cep} onChange={e=>setCep(e.target.value)} placeholder="CEP" style={{width:90}}/></div>
+  {step===1?<>
+  <p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Novo Cliente — Empresa</p>
+  <p style={{fontSize:11,color:S.ts,margin:"0 0 10px"}}>Etapa 1 de 2</p>
+  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="CNPJ" style={{flex:1}} onKeyDown={e=>e.key==="Enter"&&buscarCNPJ()}/><button onClick={buscarCNPJ} disabled={fetching} style={{padding:"8px 12px",background:S.acc,border:"none",fontWeight:600,fontSize:11}}>{fetching?"...":"Buscar"}</button></div>
+  {fetching&&<p style={{fontSize:11,color:S.acc,margin:"0 0 6px"}}>Consultando Receita Federal...</p>}
+  <input value={name} onChange={e=>setName(e.target.value)} placeholder="Nome Fantasia" style={{width:"100%",marginBottom:6}}/>
+  <input value={legal} onChange={e=>setLegal(e.target.value)} placeholder="Razao Social" style={{width:"100%",marginBottom:6}}/>
+  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Endereco" style={{flex:1}}/><input value={num} onChange={e=>setNum(e.target.value)} placeholder="No" style={{width:50}}/></div>
+  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={comp} onChange={e=>setComp(e.target.value)} placeholder="Complemento" style={{flex:1}}/><input value={cep} onChange={e=>setCep(e.target.value)} placeholder="CEP" style={{width:85}}/></div>
   <input value={district} onChange={e=>setDistrict(e.target.value)} placeholder="Bairro" style={{width:"100%",marginBottom:6}}/>
-  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Cidade" style={{flex:1}}/><select value={state} onChange={e=>setState(e.target.value)} style={{width:65}}><option>MT</option><option>MS</option><option>PA</option><option>GO</option><option>RO</option><option>TO</option><option>AC</option></select></div>
-  <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone" style={{width:"100%",marginBottom:8}}/>
-  {er&&<p style={{fontSize:12,color:S.dng,margin:"0 0 8px"}}>{er}</p>}
-  <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={go} disabled={lo||!name.trim()} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"Salvando...":"Criar no Agendor"}</button></div>
+  <div style={{display:"flex",gap:6,marginBottom:6}}><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Cidade" style={{flex:1}}/><select value={state} onChange={e=>setState(e.target.value)} style={{width:60}}><option>MT</option><option>MS</option><option>PA</option><option>GO</option><option>RO</option><option>TO</option></select></div>
+  <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone" style={{width:"100%",marginBottom:6}}/>
+  <div style={{display:"flex",gap:6,marginBottom:6}}><select value={catId} onChange={e=>setCatId(parseInt(e.target.value))} style={{flex:1,fontSize:11}}>{CAT_IDS.map(c=><option key={c.id} value={c.id}>{c.n}</option>)}</select><select value={originId} onChange={e=>setOriginId(e.target.value)} style={{flex:1,fontSize:11}}><option value="">Origem</option>{ORIGINS.map(o=><option key={o.id} value={o.id}>{o.n}</option>)}</select></div>
+  <div style={{display:"flex",gap:6,marginBottom:6}}><select value={sectorId} onChange={e=>setSectorId(e.target.value)} style={{flex:1,fontSize:11}}><option value="">Setor/Segmento</option>{SECTORS.map(s=><option key={s.id} value={s.id}>{s.n}</option>)}</select><input value={grupo} onChange={e=>setGrupo(e.target.value)} placeholder="Grupo" style={{flex:1}}/></div>
+  {er&&<p style={{fontSize:12,color:S.dng,margin:"0 0 6px"}}>{er}</p>}
+  <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={createOrg} disabled={lo||(!name.trim()&&!legal.trim())} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"Salvando...":"Proximo →"}</button></div>
+  </>:<>
+  <p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Contato — {orgName}</p>
+  <p style={{fontSize:11,color:S.ts,margin:"0 0 10px"}}>Etapa 2 de 2 — Pessoa responsavel</p>
+  <input value={pName} onChange={e=>setPName(e.target.value)} placeholder="Nome do responsavel" style={{width:"100%",marginBottom:6}}/>
+  <input value={pEmail} onChange={e=>setPEmail(e.target.value)} placeholder="E-mail" type="email" style={{width:"100%",marginBottom:6}}/>
+  <input value={pPhone} onChange={e=>setPPhone(e.target.value)} placeholder="Telefone" style={{width:"100%",marginBottom:6}}/>
+  <input value={pWhats} onChange={e=>setPWhats(e.target.value)} placeholder="WhatsApp" style={{width:"100%",marginBottom:6}}/>
+  {pMsg&&<p style={{fontSize:12,color:pMsg.startsWith("Erro")?S.dng:S.ok,margin:"0 0 6px"}}>{pMsg}</p>}
+  <div style={{display:"flex",gap:8}}><button onClick={()=>createPerson()} style={{flex:1,fontSize:12,color:S.ts}}>Pular</button><button onClick={createPerson} disabled={lo||!pName.trim()} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>{lo?"Salvando...":"Finalizar"}</button></div>
+  </>}
 </div></div>);}
 
 // ─── Add Person Modal ───
@@ -196,6 +222,7 @@ function RotasTab({visits,dayBases,user}){
       {dv.map((v,i)=>{const seg=routes.find(r=>r.tp!=="bs"&&r.tp!=="be"&&r.f===v.orgName);return(<div key={i}><div style={{padding:"10px 14px",display:"flex",gap:10}}><div style={{width:22,height:22,borderRadius:"50%",background:S.pri+"33",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:600,color:S.pl}}>{i+1}</span></div><div style={{flex:1,minWidth:0}}><p style={{fontSize:13,fontWeight:500,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.orgName}</p><p style={{fontSize:11,color:S.ts,margin:0}}>{fT(v.checkinTime)}→{fT(v.checkoutTime)} {mins(v.checkinTime,v.checkoutTime)}min</p></div></div>{seg&&<div style={{padding:"3px 14px 3px 46px",background:seg.tp==="lch"?S.gold+"15":S.bg}}><span style={{fontSize:11,color:seg.tp==="lch"?S.gold:S.td}}>{seg.tp==="lch"?"Almoco ":"↓ "}{seg.km.toFixed(1)}km</span></div>}</div>);})}
       {routes.find(r=>r.tp==="be")&&<div style={{padding:"8px 14px",background:S.pri+"18"}}><span style={{fontSize:12,color:S.pl}}>Ultimo → Casa: {routes.find(r=>r.tp==="be").km.toFixed(1)} km</span></div>}
       <div style={{padding:"10px 14px",borderTop:`1px solid ${S.brd}`,display:"flex",justifyContent:"space-between"}}><span style={{color:S.ts}}>Total</span><span style={{fontSize:15,fontWeight:600,color:S.pl}}>{totKm.toFixed(1)} km</span></div>
+      {base&&dv.length>0&&<a href={`https://www.google.com/maps/dir/${base.lat},${base.lng}/${dv.map(v=>`${v.lat},${v.lng}`).join("/")}/${base.lat},${base.lng}`} target="_blank" rel="noopener" style={{display:"block",padding:"10px 14px",background:S.acc+"22",textAlign:"center",textDecoration:"none",color:S.acc,fontWeight:500,fontSize:13,borderTop:`1px solid ${S.brd}`}}>Abrir rota no Google Maps</a>}
     </div>}
   </div>);
 }
@@ -280,6 +307,12 @@ export default function App(){
     setDivTarget(null);
   };
 
+  const quickAction=async(org,type)=>{
+    const note=prompt(`Registrar ${type==="WHATSAPP"?"WhatsApp":"Ligacao"} com ${org.name}:\n\nDescreva o contato:`);
+    if(!note?.trim())return;
+    try{await postTask(token,org.id,note,type,true);alert("Atividade registrada no Agendor!");}catch(e){alert("Erro: "+e.message);}
+  };
+
   const checkout=async(note,type="VISITA",next=null,sale=null)=>{
     if(!active||ldId)return;setLdId(active.orgId);
     let g=null;try{g=await gps();}catch{}
@@ -321,7 +354,7 @@ export default function App(){
         {!syncing&&!orgs.length&&<div style={{textAlign:"center",padding:"2rem 0"}}><button onClick={()=>doSync()} style={{width:"100%",padding:16,fontSize:16,fontWeight:600,background:S.pri,border:"none",borderRadius:12}}>Sincronizar Clientes</button></div>}
         {orgs.length>0&&<>
           <p style={{fontSize:11,color:S.td,margin:"0 0 6px"}}>{fo.length} de {orgs.length} {syncing&&<span style={{color:S.pri}}>({syncMsg})</span>}</p>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={checkin} onOut={o2=>setCoTarget(o2)} onPerson={o2=>setPersonTarget(o2)} ldId={ldId} plocs={plocs}/>)}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={checkin} onOut={o2=>setCoTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} ldId={ldId} plocs={plocs}/>)}</div>
           {vc<fo.length&&<button onClick={()=>setVc(p=>p+PG)} style={{width:"100%",marginTop:12,padding:14,fontSize:14,fontWeight:500}}>Ver mais ({fo.length-vc})</button>}
           {search.replace(/[.\-\/]/g,"").length>=11&&fo.length===0&&<button onClick={searchCNPJ} style={{width:"100%",marginTop:8,padding:14,background:S.acc,border:"none",fontWeight:500}}>Buscar CNPJ no Agendor</button>}
         </>}
