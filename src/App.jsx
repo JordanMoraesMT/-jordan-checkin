@@ -117,8 +117,8 @@ function NewClientModal({token,onSave,onCancel}){
       const addr={};if(street)addr.streetName=street;if(num)addr.streetNumber=num;if(comp)addr.additionalInfo=comp;if(district)addr.district=district;if(city)addr.city=city;if(state)addr.state=state;if(cep)addr.postal_code=cep;
       if(Object.keys(addr).length)body.address=addr;if(phone)body.contact={work:phone};
       const d=await agF("/organizations",token,{method:"POST",body:JSON.stringify(body)});
-      if(d.data)onSave(strip(d));else setEr("Erro ao criar");
-    }catch(e){setEr("Erro: "+e.message);}setLo(false);};
+      if(d.data)onSave(strip(d.data));else setEr("Erro ao criar");
+    }catch(e){setEr(e.message==="400"?"Cliente ja existe na base de dados do Agendor":"Erro: "+e.message);}setLo(false);};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
   <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Novo Cliente</p>
   <div style={{display:"flex",gap:6,marginBottom:8}}>
