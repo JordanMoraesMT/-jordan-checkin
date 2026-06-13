@@ -88,21 +88,42 @@ function NoteModal({org,onSave,onCancel,token}){
   <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={()=>{if(!ok)return;onSave(n,tp,{nextType:nt,nextDate:nd,nextTime:nh,nextDesc:ndsc},sale?{brand,value:parseFloat(saleVal)||0}:null);}} disabled={!ok} style={{flex:1,background:ok?S.pri:S.cl,border:"none",fontWeight:600}}>Registrar</button></div>
 </div></div>);}
 
-// ─── New Client Modal ───
+// ─── New Client Modal (with CNPJ auto-fill) ───
 function NewClientModal({token,onSave,onCancel}){
-  const[name,setName]=useState("");const[cnpj,setCnpj]=useState("");const[city,setCity]=useState("");const[state,setState]=useState("MT");const[district,setDistrict]=useState("");const[street,setStreet]=useState("");const[lo,setLo]=useState(false);const[er,setEr]=useState("");
+  const[name,setName]=useState("");const[cnpj,setCnpj]=useState("");const[city,setCity]=useState("");const[state,setState]=useState("MT");const[district,setDistrict]=useState("");const[street,setStreet]=useState("");const[phone,setPhone]=useState("");const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[fetching,setFetching]=useState(false);
+  const buscarCNPJ=async()=>{
+    const clean=cnpj.replace(/[.\-\/]/g,"");if(clean.length!==14){setEr("CNPJ deve ter 14 digitos");return;}
+    setFetching(true);setEr("");
+    try{
+      const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);
+      if(!r.ok)throw new Error("CNPJ nao encontrado");
+      const d=await r.json();
+      setName(d.nome_fantasia||d.razao_social||"");
+      setStreet(d.logradouro||"");
+      setDistrict(d.bairro||"");
+      setCity(d.municipio||"");
+      setState(d.uf||"MT");
+      if(d.ddd_telefone_1)setPhone(d.ddd_telefone_1.replace(/[^\d]/g,""));
+    }catch(e){setEr(e.message);}
+    setFetching(false);
+  };
   const go=async()=>{if(!name.trim())return;setLo(true);setEr("");
-    try{const body={name:name.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");if(city||state||district||street)body.address={city,state,district,streetName:street};
+    try{const body={name:name.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");if(city||state||district||street)body.address={city,state,district,streetName:street};if(phone)body.contact={work:phone};
       const d=await agF("/organizations",token,{method:"POST",body:JSON.stringify(body)});
       if(d.data)onSave(strip(d));else setEr("Erro ao criar");
     }catch(e){setEr("Erro: "+e.message);}setLo(false);};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"85vh",overflowY:"auto"}}>
   <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Novo Cliente</p>
+  <div style={{display:"flex",gap:6,marginBottom:8}}>
+    <input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="CNPJ" style={{flex:1}} onKeyDown={e=>e.key==="Enter"&&buscarCNPJ()}/>
+    <button onClick={buscarCNPJ} disabled={fetching} style={{padding:"8px 14px",background:S.acc,border:"none",fontWeight:600,fontSize:12,whiteSpace:"nowrap"}}>{fetching?"...":"Buscar"}</button>
+  </div>
+  {fetching&&<p style={{fontSize:12,color:S.acc,margin:"0 0 8px"}}>Consultando Receita Federal...</p>}
   <input value={name} onChange={e=>setName(e.target.value)} placeholder="Nome / Razao Social *" style={{width:"100%",marginBottom:8}}/>
-  <input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="CNPJ" style={{width:"100%",marginBottom:8}}/>
   <input value={street} onChange={e=>setStreet(e.target.value)} placeholder="Endereco" style={{width:"100%",marginBottom:8}}/>
   <input value={district} onChange={e=>setDistrict(e.target.value)} placeholder="Bairro" style={{width:"100%",marginBottom:8}}/>
-  <div style={{display:"flex",gap:6,marginBottom:8}}><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Cidade" style={{flex:1}}/><select value={state} onChange={e=>setState(e.target.value)} style={{width:70}}><option>MT</option><option>MS</option><option>PA</option><option>GO</option><option>RO</option></select></div>
+  <div style={{display:"flex",gap:6,marginBottom:8}}><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Cidade" style={{flex:1}}/><select value={state} onChange={e=>setState(e.target.value)} style={{width:70}}><option>MT</option><option>MS</option><option>PA</option><option>GO</option><option>RO</option><option>TO</option><option>AC</option></select></div>
+  <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Telefone" style={{width:"100%",marginBottom:8}}/>
   {er&&<p style={{fontSize:12,color:S.dng,margin:"0 0 8px"}}>{er}</p>}
   <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={go} disabled={lo||!name.trim()} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"Salvando...":"Criar no Agendor"}</button></div>
 </div></div>);}
