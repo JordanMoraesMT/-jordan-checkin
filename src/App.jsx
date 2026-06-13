@@ -184,7 +184,8 @@ export default function App(){
   const loggedIn=!!(token&&user);
   const login=(t,u)=>{setToken(t);setUser(u);sv("jc:token",t);sv("jc:user",u);sync(t);};
   const logout=()=>{setToken("");setUser(null);sv("jc:token","");sv("jc:user",null);};
-  const sync=async(t)=>{setSyncing(true);try{const all=await getOrgs(t||token);setOrgs(all);const now=new Date().toISOString();setLastSync(now);localStorage.setItem("jc:lastSync",now);}catch(e){console.error(e);}setSyncing(false);};
+  const[syncMsg,setSyncMsg]=useState("");
+  const sync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`Carregando... ${all.length} clientes`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}setOrgs(all);const now=new Date().toISOString();setLastSync(now);localStorage.setItem("jc:lastSync",now);setSyncMsg(`${all.length} clientes sincronizados`);}catch(e){setSyncMsg("Erro ao sincronizar. Tente novamente.");console.error(e);}setSyncing(false);};
 
   const checkin=async(org)=>{
     setLdId(org.id);setGeoErr("");
@@ -217,7 +218,7 @@ export default function App(){
       </div>
       <div style={{display:"flex",gap:6}}>
         {!dayBases[new Date().toISOString().slice(0,10)]&&<button onClick={()=>setShowDB(true)} style={{padding:"4px 8px",fontSize:11,borderColor:S.gold,color:S.gold}}>Base</button>}
-        {tab==="pdvs"&&<button onClick={()=>sync()} disabled={syncing} style={{padding:"4px 8px"}}>🔄</button>}
+        {tab==="pdvs"&&<button onClick={()=>sync()} disabled={syncing} style={{padding:"6px 12px",fontSize:14,fontWeight:500}}>{syncing?"...":"🔄 Sinc"}</button>}
       </div>
     </div>
     <div style={{padding:"0 16px"}}>
@@ -228,13 +229,14 @@ export default function App(){
       <div style={{display:"flex",gap:3,marginBottom:14,background:S.cl,borderRadius:8,padding:3}}>{tabs.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setVc(PG);}} style={{flex:1,border:"none",background:tab===t.id?S.pri:"transparent",borderRadius:6,padding:"8px 4px",fontSize:11,fontWeight:tab===t.id?600:400,color:tab===t.id?"#fff":S.ts}}><span style={{fontSize:16,display:"block",marginBottom:2}}>{t.i}</span>{t.l}</button>)}</div>
 
       {tab==="pdvs"&&<div>
-        {syncing&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Sincronizando...</p>}
+        {syncing&&<div style={{textAlign:"center",padding:"3rem 0"}}><div style={{width:40,height:40,border:`3px solid ${S.brd}`,borderTopColor:S.pri,borderRadius:"50%",margin:"0 auto 16px",animation:"spin 1s linear infinite"}}/><p style={{fontSize:14,color:S.ts,margin:"0 0 8px"}}>{syncMsg}</p><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>}
+        {!syncing&&orgs.length===0&&<div style={{textAlign:"center",padding:"3rem 0"}}><p style={{fontSize:40,marginBottom:12}}>🏪</p><p style={{fontSize:16,marginBottom:4}}>Nenhum cliente carregado</p><p style={{fontSize:13,color:S.ts,margin:"0 0 20px"}}>{syncMsg||"Sincronize para carregar seus PDVs do Agendor"}</p><button onClick={()=>sync()} style={{width:"100%",padding:"16px",fontSize:16,fontWeight:600,background:S.pri,border:"none",borderRadius:12}}>🔄 Sincronizar Clientes do Agendor</button></div>}
         {!syncing&&orgs.length>0&&<>
           <input value={search} onChange={e=>{setSearch(e.target.value);setVc(PG);}} placeholder="Buscar cliente, CNPJ, cidade, bairro..." style={{width:"100%",marginBottom:10}}/>
           {geoErr&&<div style={{background:S.dng+"18",borderRadius:8,padding:"8px 12px",marginBottom:10}}><p style={{fontSize:12,color:S.dng,margin:0}}>{geoErr}</p></div>}
           <p style={{fontSize:11,color:S.td,margin:"0 0 8px"}}>{fo.length} PDVs{lastSync&&` — sinc. ${fT(lastSync)}`}</p>
           <div style={{display:"flex",flexDirection:"column",gap:8}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={checkin} onOut={o2=>setCoTarget(o2)} ldId={ldId} plocs={plocs}/>)}</div>
-          {vc<fo.length&&<button onClick={()=>setVc(p=>p+PG)} style={{width:"100%",marginTop:12,textAlign:"center"}}>Ver mais ({fo.length-vc} restantes)</button>}
+          {vc<fo.length&&<button onClick={()=>setVc(p=>p+PG)} style={{width:"100%",marginTop:12,padding:"14px",fontSize:14,fontWeight:500,textAlign:"center"}}>Ver mais ({fo.length-vc} restantes)</button>}
         </>}
       </div>}
       {tab==="rotas"&&<RotasTab visits={visits} dayBases={dayBases} user={user}/>}
@@ -243,7 +245,7 @@ export default function App(){
         <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:13,color:S.ts,margin:"0 0 2px"}}>Conectado como</p><p style={{fontSize:15,fontWeight:600,margin:0}}>{user?.name}</p>{HOMES[user?.id]&&<p style={{fontSize:12,color:S.ok,marginTop:4}}>Casa: {HOMES[user.id].label}</p>}</div>
         <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:13,color:S.ts,margin:"0 0 4px"}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>{lastSync&&<p style={{fontSize:12,color:S.td,margin:0}}>Sinc: {fD(lastSync)} {fT(lastSync)}</p>}</div>
         <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
-          <button onClick={()=>sync()} disabled={syncing}>{syncing?"Sincronizando...":"Sincronizar clientes"}</button>
+          <button onClick={()=>sync()} disabled={syncing} style={{width:"100%",padding:"14px",fontSize:14,fontWeight:500,background:syncing?S.cl:S.pri,border:"none"}}>{syncing?syncMsg:"🔄 Sincronizar Clientes"}</button>
           <button onClick={()=>setShowDB(true)}>Definir base do dia</button>
           {user?.id===743088&&<><button onClick={()=>confirm("Limpar visitas?")&&(setVisits([]),sv("jc:visits",[]))} style={{color:S.gold}}>Limpar visitas</button><button onClick={()=>confirm("Limpar GPS?")&&(setPlocs({}),sv("jc:pdvLocs",{}))} style={{color:S.gold}}>Limpar GPS PDVs</button></>}
           <button onClick={logout} style={{color:S.dng}}>Desconectar</button>
