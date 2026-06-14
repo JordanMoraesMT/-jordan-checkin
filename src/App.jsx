@@ -249,9 +249,12 @@ export default function App(){
   const tabs=user?.id===743088?[...baseTabs.slice(0,3),{id:"equipe",i:"👥",l:"Equipe"},...baseTabs.slice(3)]:baseTabs;
 
   return(<div style={{minHeight:"100vh",paddingBottom:70}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 16px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:10}}><img src="/logo.png" alt="" style={{height:28}} onError={e=>{e.target.style.display="none"}}/><div><p style={{fontSize:14,fontWeight:600,margin:0}}>Check-in</p><p style={{fontSize:11,color:S.ts,margin:0}}>{user?.name} — {fD(new Date())}</p></div></div>
-      <div style={{display:"flex",gap:6}}><button onClick={()=>setNewClient(true)} style={{padding:"8px 12px",fontSize:16,background:S.acc,border:"none",fontWeight:700}}>+</button><button onClick={()=>doSync()} disabled={syncing} style={{padding:"8px 14px",fontSize:13,background:syncing?S.cl:S.pri,border:"none",fontWeight:500}}>{syncing?"...":"🔄"}</button></div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px",background:S.card,borderBottom:`1px solid ${S.brd}`,marginBottom:12}}>
+      <div style={{display:"flex",alignItems:"center",gap:14}}>
+        <img src="/logo.png" alt="" style={{height:56,width:"auto",objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
+        <div><p style={{fontSize:18,fontWeight:700,margin:0}}>Check-in</p><p style={{fontSize:13,color:S.ts,margin:0}}>{user?.name} — {fD(new Date())}</p></div>
+      </div>
+      <div style={{display:"flex",gap:6}}><button onClick={()=>setNewClient(true)} style={{padding:"10px 14px",fontSize:18,background:S.acc,border:"none",fontWeight:700}}>+</button><button onClick={()=>doSync()} disabled={syncing} style={{padding:"10px 16px",fontSize:15,background:syncing?S.cl:S.pri,border:"none",fontWeight:500}}>{syncing?"...":"🔄"}</button></div>
     </div>
     <div style={{padding:"0 16px"}}>
       {active&&tab!=="config"&&<Banner v={active} orgs={orgs} onClick={()=>{setTab("pdvs");setSearch(active.orgName);}}/>}
