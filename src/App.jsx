@@ -49,16 +49,16 @@ function OrgCard({org,active,onIn,onOut,onEdit,onPerson,onQuick,onInfo,ldId,ploc
         {lastVisit&&<p style={{fontSize:10,color:S.td,margin:"4px 0 0"}}>Ultima visita: {fD(lastVisit.time)} — {lastVisit.who}</p>}
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
-        {isA?<button onClick={()=>onOut(org)} disabled={ldId===org.id} style={{background:S.dng,border:"none",fontSize:12,fontWeight:600,padding:"10px 16px"}}>{ldId===org.id?"...":"Check-out"}</button>
-        :<div style={{display:"flex",gap:4}}>
-          <button onClick={()=>onIn(org)} disabled={!!active||ldId===org.id} style={{background:active?S.cl:S.acc,border:"none",fontSize:12,fontWeight:600,padding:"10px 14px",opacity:active?0.4:1}}>{ldId===org.id?"...":"Check-in"}</button>
-          <button onClick={()=>onQuick&&onQuick(org,"WHATSAPP")} style={{background:S.ok+"22",border:`1px solid ${S.ok}55`,fontSize:16,padding:"8px 10px",lineHeight:1}}>💬</button>
-          <button onClick={()=>onQuick&&onQuick(org,"LIGACAO")} style={{background:S.pri+"22",border:`1px solid ${S.pri}55`,fontSize:16,padding:"8px 10px",lineHeight:1}}>📞</button>
+        {isA?<button onClick={()=>onOut(org)} disabled={ldId===org.id} style={{background:S.dng,border:"none",fontSize:13,fontWeight:600,padding:"12px 18px"}}>{ldId===org.id?"...":"Check-out"}</button>
+        :<div style={{display:"flex",gap:5}}>
+          <button onClick={()=>onIn(org)} disabled={!!active||ldId===org.id} style={{background:active?S.cl:S.acc,border:"none",fontSize:13,fontWeight:600,padding:"12px 16px",opacity:active?0.4:1}}>{ldId===org.id?"...":"Check-in"}</button>
+          <button onClick={()=>onQuick&&onQuick(org,"WHATSAPP")} style={{background:S.ok+"22",border:`1px solid ${S.ok}55`,fontSize:18,padding:"10px 12px",lineHeight:1}}>💬</button>
+          <button onClick={()=>onQuick&&onQuick(org,"LIGACAO")} style={{background:S.pri+"22",border:`1px solid ${S.pri}55`,fontSize:18,padding:"10px 12px",lineHeight:1}}>📞</button>
         </div>}
-        <div style={{display:"flex",gap:3,justifyContent:"flex-end"}}>
-          <button onClick={()=>onInfo&&onInfo(org)} style={{fontSize:11,padding:"4px 10px",color:S.ts,background:"transparent",border:`1px solid ${S.brd}`}}>ℹ️</button>
-          <button onClick={()=>onEdit&&onEdit(org)} style={{fontSize:11,padding:"4px 10px",color:S.ts,background:"transparent",border:`1px solid ${S.brd}`}}>✏️</button>
-          <button onClick={()=>onPerson&&onPerson(org)} style={{fontSize:11,padding:"4px 10px",color:S.ts,background:"transparent",border:`1px solid ${S.brd}`}}>👤+</button>
+        <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
+          <button onClick={()=>onInfo&&onInfo(org)} style={{fontSize:13,padding:"6px 12px",color:S.ts,background:"transparent",border:`1px solid ${S.brd}`}}>ℹ️</button>
+          <button onClick={()=>onEdit&&onEdit(org)} style={{fontSize:13,padding:"6px 12px",color:S.ts,background:"transparent",border:`1px solid ${S.brd}`}}>✏️</button>
+          <button onClick={()=>onPerson&&onPerson(org)} style={{fontSize:13,padding:"6px 12px",color:S.ts,background:"transparent",border:`1px solid ${S.brd}`}}>👤+</button>
         </div>
       </div>
     </div>
