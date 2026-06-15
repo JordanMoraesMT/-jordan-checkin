@@ -239,6 +239,7 @@ export default function App(){
   const syncClear=async()=>{try{await fetch(`${API}?sync=${user.id}`,{method:"DELETE"});}catch{}};
   const syncPlocs=async(locs)=>{try{await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:locs})});}catch{}};
   const[teamActive,setTeamActive]=useState(null);
+  const[syncStatus,setSyncStatus]=useState("");
   const syncPull=async()=>{try{
     const r=await fetch(`${API}?sync=${user.id}`);const d=await r.json();
     setActive(prev=>{if(d.active&&(!prev||prev.fromSync))return{...d.active,fromSync:true};if(!d.active&&prev?.fromSync)return null;return prev;});
@@ -247,7 +248,8 @@ export default function App(){
     setTeamActive(d2.active||null);
     const r3=await fetch(`${API}?sync=plocs`);const d3=await r3.json();
     if(d3.active){setPlocs(prev=>{const m={...d3.active,...prev};sS("jc:pdvLocs",m);return m;});}
-  }catch{}};
+    setSyncStatus(`OK ${fT(new Date())} | eu:${d.active?"ativo":"--"} | equipe:${d2.active?d2.active.orgName:"--"}`);
+  }catch(e){setSyncStatus("Erro: "+e.message);}};
   useEffect(()=>{if(!token||!user)return;syncPull();const iv=setInterval(syncPull,15000);return()=>clearInterval(iv);},[token,user]);
 
   // Alert: 8AM no activity
@@ -380,10 +382,11 @@ export default function App(){
 
       {tab==="config"&&<div>
         <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:15,fontWeight:600,margin:"0 0 4px"}}>{user?.name}</p>{HOMES[user?.id]&&<p style={{fontSize:12,color:S.ok}}>Casa: {HOMES[user.id].label}</p>}</div>
-        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p></div>
+        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p><p style={{fontSize:11,color:syncStatus.startsWith("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p><p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s</p></div>
         <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
           <button onClick={()=>doSync()} disabled={syncing} style={{padding:14,fontSize:14,fontWeight:500,background:S.pri,border:"none"}}>{syncing?syncMsg:"Sincronizar Clientes"}</button>
           <button onClick={loadHistory} style={{padding:12,fontSize:13,background:S.acc+"22",border:`1px solid ${S.acc}`,color:S.acc,fontWeight:500}}>Carregar historico do Agendor</button>
+          <button onClick={()=>{syncPull();setSyncStatus("Forçando sync...");}} style={{padding:12,fontSize:13,background:S.gold+"22",border:`1px solid ${S.gold}`,color:S.gold,fontWeight:500}}>Forçar sincronização</button>
           <button onClick={()=>setShowDB(true)} style={{padding:12}}>Definir base do dia</button>
           {user?.id===743088&&<>
             <button onClick={()=>{const dt=prompt("Data para limpar visitas (DD/MM/AAAA):");if(!dt)return;const[d,m,y]=dt.split("/");const target=`${y}-${m}-${d}`;const count=visits.filter(v=>v.checkinTime?.startsWith(target)).length;if(!count){alert("Nenhuma visita nessa data.");return;}if(confirm(`Excluir ${count} visitas de ${dt}?`))setVisits(prev=>prev.filter(v=>!v.checkinTime?.startsWith(target)));}} style={{color:S.gold}}>Limpar visitas (por data)</button>
