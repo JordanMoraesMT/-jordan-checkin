@@ -181,14 +181,14 @@ function RelatorioTab({visits,dayBases,user,token}){const[sd,setSd]=useState(()=
   </div>);}
 
 // ─── Equipe Tab (Jordan only - view Alisson's productivity) ───
-function EquipeTab({token,plocs}){
+function EquipeTab({token,plocs,orgs}){
   const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[sel,setSel]=useState(new Date().toISOString().slice(0,10));const[routeKm,setRouteKm]=useState(null);
-  const load=async()=>{setLo(true);setRouteKm(null);try{const dt=new Date(sel+"T00:00:00");const d=await agF(`/tasks?createdDateGt=${dt.toISOString()}&per_page=100`,token);const alisson=(d.data||[]).filter(t=>t.user?.id===743347).map(t=>({type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",time:t.createdAt,done:t.done}));setTasks(alisson);
-    // Calculate route km from shared GPS
-    if(alisson.length>1){const sorted=[...alisson].sort((a,b)=>a.time.localeCompare(b.time));let km=0;const home=HOMES[743347];const first=sorted[0],last=sorted[sorted.length-1];
-      if(home&&plocs[first.orgId])km+=hav(home.lat,home.lng,plocs[first.orgId].lat,plocs[first.orgId].lng)*1.3;
-      for(let i=0;i<sorted.length-1;i++){const a=plocs[sorted[i].orgId],b=plocs[sorted[i+1].orgId];if(a&&b)km+=hav(a.lat,a.lng,b.lat,b.lng)*1.3;}
-      if(home&&plocs[last.orgId])km+=hav(plocs[last.orgId].lat,plocs[last.orgId].lng,home.lat,home.lng)*1.3;
+  const getCoord=(oid)=>{if(plocs[oid])return[plocs[oid].lat,plocs[oid].lng];const o=orgs.find(x=>x.id===oid);if(o){const g=geoEstimate(o);if(g)return g;}return null;};
+  const load=async()=>{setLo(true);setRouteKm(null);try{const dt=new Date(sel+"T00:00:00");const d=await agF(`/tasks?createdDateGt=${dt.toISOString()}&per_page=200`,token);const alisson=(d.data||[]).filter(t=>t.user?.id===743347).map(t=>({type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",time:t.createdAt,done:t.done}));setTasks(alisson);
+    if(alisson.length>=1){const sorted=[...alisson].sort((a,b)=>a.time.localeCompare(b.time));let km=0;const home=HOMES[743347];const fc=getCoord(sorted[0].orgId),lc=getCoord(sorted[sorted.length-1].orgId);
+      if(home&&fc)km+=hav(home.lat,home.lng,fc[0],fc[1])*1.3;
+      for(let i=0;i<sorted.length-1;i++){const a=getCoord(sorted[i].orgId),b=getCoord(sorted[i+1].orgId);if(a&&b)km+=hav(a[0],a[1],b[0],b[1])*1.3;}
+      if(home&&lc)km+=hav(lc[0],lc[1],home.lat,home.lng)*1.3;
       setRouteKm(km);}
   }catch(e){console.error(e);}setLo(false);};
   useEffect(()=>{load();},[sel]);
@@ -196,13 +196,13 @@ function EquipeTab({token,plocs}){
   const firstTime=tasks.length?tasks.reduce((m,t)=>t.time<m?t.time:m,tasks[0].time):null;
   const lastTime=tasks.length?tasks.reduce((m,t)=>t.time>m?t.time:m,tasks[0].time):null;
   const workH=firstTime&&lastTime?mins(firstTime,lastTime):0;
-  const withGps=tasks.filter(t=>plocs[t.orgId]).length;
+  const withGps=tasks.filter(t=>plocs[t.orgId]).length;const withEst=tasks.filter(t=>getCoord(t.orgId)).length;
   return(<div>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Produtividade — Alisson Henrique</p>
     <LB t="DATA"><input type="date" value={sel} onChange={e=>setSel(e.target.value)} style={{width:"100%",marginBottom:8}}/></LB>
     <button onClick={load} disabled={lo} style={{width:"100%",marginBottom:14,padding:12,background:S.pri,border:"none",fontWeight:500}}>{lo?"Carregando...":"Atualizar"}</button>
     {tasks.length>0&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-      {[["Atividades",tasks.length],["Visitas",visitTasks.length],["Inicio",firstTime?fT(firstTime):"-"],["Jornada",hrsMin(workH)],["Km estimado",routeKm!=null?routeKm.toFixed(1):"-"],["GPS PDVs",`${withGps}/${tasks.length}`]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}
+      {[["Atividades",tasks.length],["Visitas",visitTasks.length],["Inicio",firstTime?fT(firstTime):"-"],["Jornada",hrsMin(workH)],["Km estimado",routeKm!=null?routeKm.toFixed(1):"-"],["Localização",`${withGps}📍 ${withEst-withGps}🏙️`]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}
     </div>}
     {tasks.length>0&&<button onClick={()=>{const rows=[["Data","Hora","Cliente","Tipo","Observação","GPS"]];tasks.forEach(t=>rows.push([fD(t.time),fT(t.time),t.org,t.type,t.text.slice(0,80),plocs[t.orgId]?"Sim":"Nao"]));rows.push([],["Km estimado",routeKm!=null?routeKm.toFixed(1):"-"],["Jornada",hrsMin(workH)],["Visitas",visitTasks.length]);csv(rows,`alisson-${sel}.csv`);}} style={{width:"100%",marginBottom:14,padding:10,fontSize:12,background:S.pri+"22",border:`1px solid ${S.pri}55`,color:S.pl}}>📊 Exportar relatório Alisson</button>}
     {!lo&&!tasks.length&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma atividade nesta data</p>}
@@ -241,15 +241,14 @@ export default function App(){
   const[teamActive,setTeamActive]=useState(null);
   const syncPull=async()=>{try{
     const r=await fetch(`${API}?sync=${user.id}`);const d=await r.json();
-    if(d.active&&!active)setActive({...d.active,fromSync:true});
-    else if(!d.active&&active?.fromSync)setActive(null);
+    setActive(prev=>{if(d.active&&(!prev||prev.fromSync))return{...d.active,fromSync:true};if(!d.active&&prev?.fromSync)return null;return prev;});
     const otherId=user.id===743088?743347:743088;
     const r2=await fetch(`${API}?sync=${otherId}`);const d2=await r2.json();
     setTeamActive(d2.active||null);
     const r3=await fetch(`${API}?sync=plocs`);const d3=await r3.json();
     if(d3.active){setPlocs(prev=>{const m={...d3.active,...prev};sS("jc:pdvLocs",m);return m;});}
   }catch{}};
-  useEffect(()=>{if(!token||!user)return;syncPull();const iv=setInterval(syncPull,30000);return()=>clearInterval(iv);},[token,user]);
+  useEffect(()=>{if(!token||!user)return;syncPull();const iv=setInterval(syncPull,15000);return()=>clearInterval(iv);},[token,user]);
 
   // Alert: 8AM no activity
   const[mAlert,setMAlert]=useState(false);
@@ -377,7 +376,7 @@ export default function App(){
       {tab==="rotas"&&<RotasTab visits={visits} dayBases={dayBases} user={user}/>}
       {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token}/>}
 
-      {tab==="equipe"&&user?.id===743088&&<EquipeTab token={token} plocs={plocs}/>}
+      {tab==="equipe"&&user?.id===743088&&<EquipeTab token={token} plocs={plocs} orgs={orgs}/>}
 
       {tab==="config"&&<div>
         <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:15,fontWeight:600,margin:"0 0 4px"}}>{user?.name}</p>{HOMES[user?.id]&&<p style={{fontSize:12,color:S.ok}}>Casa: {HOMES[user.id].label}</p>}</div>
