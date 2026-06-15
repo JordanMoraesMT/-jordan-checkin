@@ -167,8 +167,13 @@ function RotasTab({visits,dayBases,user}){const[sel,setSel]=useState(new Date().
       {base&&dv.length>0&&<a href={`https://www.google.com/maps/dir/${base.lat},${base.lng}/${dv.map(v=>`${v.lat},${v.lng}`).join("/")}/${base.lat},${base.lng}`} target="_blank" rel="noopener" style={{display:"block",padding:"10px",background:S.acc+"22",textAlign:"center",textDecoration:"none",color:S.acc,fontWeight:500,fontSize:13}}>Abrir no Google Maps</a>}
     </div>}</div>);}
 
-function RelatorioTab({visits,dayBases,user}){const[sd,setSd]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().slice(0,10);});const[ed,setEd]=useState(new Date().toISOString().slice(0,10));const home=HOMES[user?.id];const pv=useMemo(()=>visits.filter(v=>{if(!v.checkoutTime)return false;const d=new Date(v.checkinTime).toISOString().slice(0,10);return d>=sd&&d<=ed;}).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime)),[visits,sd,ed]);const bd=useMemo(()=>{const m={};pv.forEach(v=>{const k=new Date(v.checkinTime).toISOString().slice(0,10);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pv]);const totKm=useMemo(()=>{let km=0;bd.forEach(([dt,dvs])=>{const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const b2=dayBases[dt]||home;if(b2&&s[0]?.lat)km+=hav(b2.lat,b2.lng,s[0].lat,s[0].lng)*1.3;for(let i=1;i<s.length;i++)if(s[i].lat&&s[i-1].lat)km+=hav(s[i-1].checkoutLat||s[i-1].lat,s[i-1].checkoutLng||s[i-1].lng,s[i].lat,s[i].lng)*1.3;const l=s[s.length-1];if(b2&&l?.lat)km+=hav(l.checkoutLat||l.lat,l.checkoutLng||l.lng,b2.lat,b2.lng)*1.3;});return km;},[bd,dayBases,home]);const totMin=pv.reduce((s,v)=>s+mins(v.checkinTime,v.checkoutTime),0);const workH=bd.reduce((s,[,d])=>{const sr=[...d].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));return s+mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime);},0);const mx=Math.max(1,...bd.map(([,v])=>v.length));
-  return(<div><div style={{display:"flex",gap:6,marginBottom:12,alignItems:"center"}}><input type="date" value={sd} onChange={e=>setSd(e.target.value)} style={{flex:1,fontSize:12}}/><span style={{color:S.td}}>ate</span><input type="date" value={ed} onChange={e=>setEd(e.target.value)} style={{flex:1,fontSize:12}}/></div>
+function RelatorioTab({visits,dayBases,user,token}){const[sd,setSd]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().slice(0,10);});const[ed,setEd]=useState(new Date().toISOString().slice(0,10));const[selUser,setSelUser]=useState("me");const[remoteVisits,setRemoteVisits]=useState([]);const[rLo,setRLo]=useState(false);const home=HOMES[user?.id];
+  const loadRemote=async()=>{setRLo(true);try{const d=await agF(`/tasks?createdDateGt=${sd}T00:00:00Z&per_page=200`,token);const otherId=user.id===743088?743347:743088;const tasks=(d.data||[]).filter(t=>t.user?.id===otherId&&(t.type==="Visita"||t.type==="VISITA")).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",userName:t.user?.name||""}));setRemoteVisits(tasks);}catch{}setRLo(false);};
+  useEffect(()=>{if(selUser==="team")loadRemote();},[selUser,sd]);
+  const useVisits=selUser==="me"?visits:remoteVisits;const pv=useMemo(()=>useVisits.filter(v=>{if(!v.checkoutTime)return false;const d=new Date(v.checkinTime).toISOString().slice(0,10);return d>=sd&&d<=ed;}).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime)),[useVisits,sd,ed]);const bd=useMemo(()=>{const m={};pv.forEach(v=>{const k=new Date(v.checkinTime).toISOString().slice(0,10);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pv]);const totKm=useMemo(()=>{let km=0;bd.forEach(([dt,dvs])=>{const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const b2=dayBases[dt]||home;if(b2&&s[0]?.lat)km+=hav(b2.lat,b2.lng,s[0].lat,s[0].lng)*1.3;for(let i=1;i<s.length;i++)if(s[i].lat&&s[i-1].lat)km+=hav(s[i-1].checkoutLat||s[i-1].lat,s[i-1].checkoutLng||s[i-1].lng,s[i].lat,s[i].lng)*1.3;const l=s[s.length-1];if(b2&&l?.lat)km+=hav(l.checkoutLat||l.lat,l.checkoutLng||l.lng,b2.lat,b2.lng)*1.3;});return km;},[bd,dayBases,home]);const totMin=pv.reduce((s,v)=>s+mins(v.checkinTime,v.checkoutTime),0);const workH=bd.reduce((s,[,d])=>{const sr=[...d].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));return s+mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime);},0);const mx=Math.max(1,...bd.map(([,v])=>v.length));
+  return(<div>
+    {user?.id===743088&&<div style={{display:"flex",gap:4,marginBottom:8}}><button onClick={()=>setSelUser("me")} style={{flex:1,padding:8,fontSize:12,border:selUser==="me"?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:selUser==="me"?S.pri+"22":"transparent",color:selUser==="me"?S.pri:S.ts,fontWeight:selUser==="me"?600:400}}>Meus dados</button><button onClick={()=>setSelUser("team")} style={{flex:1,padding:8,fontSize:12,border:selUser==="team"?`2px solid ${S.acc}`:`1px solid ${S.brd}`,background:selUser==="team"?S.acc+"22":"transparent",color:selUser==="team"?S.acc:S.ts,fontWeight:selUser==="team"?600:400}}>{rLo?"Carregando...":"Alisson Henrique"}</button></div>}
+    <div style={{display:"flex",gap:6,marginBottom:12,alignItems:"center"}}><input type="date" value={sd} onChange={e=>setSd(e.target.value)} style={{flex:1,fontSize:12}}/><span style={{color:S.td}}>ate</span><input type="date" value={ed} onChange={e=>setEd(e.target.value)} style={{flex:1,fontSize:12}}/></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[["Km",totKm.toFixed(0)],["Visitas",pv.length],["Dias",bd.length],["Jornada",hrsMin(workH)]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}</div>
     <div style={{display:"flex",gap:6,marginBottom:12}}><button onClick={()=>{const rows=[["Data","Vendedor","Origem","Destino","Visitas","Km","Jornada","Clientes"]];bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const b2=dayBases[dt]||home;let dk=0;if(b2&&sr[0]?.lat)dk+=hav(b2.lat,b2.lng,sr[0].lat,sr[0].lng)*1.3;for(let i=1;i<sr.length;i++)if(sr[i].lat&&sr[i-1].lat)dk+=hav(sr[i-1].checkoutLat||sr[i-1].lat,sr[i-1].checkoutLng||sr[i-1].lng,sr[i].lat,sr[i].lng)*1.3;const l=sr[sr.length-1];if(b2&&l?.lat)dk+=hav(l.checkoutLat||l.lat,l.checkoutLng||l.lng,b2.lat,b2.lng)*1.3;rows.push([fD(dt+"T12:00"),user?.name,b2?.label||"",b2?.label||"",dvs.length,dk.toFixed(1),hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)),dvs.map(v=>v.orgName).join(", ")]);});rows.push([],["TOTAL","","","",pv.length,totKm.toFixed(1),hrsMin(workH),""]);csv(rows,`km-${user?.name}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Resumo</button>
       <button onClick={()=>{const rows=[["Data","In","Out","Min","Cliente","Cidade","Tipo","Obs","Venda"]];pv.forEach(v=>rows.push([fD(v.checkinTime),fT(v.checkinTime),fT(v.checkoutTime),mins(v.checkinTime,v.checkoutTime),v.orgName,v.city||"",v.taskType||"",v.note||"",v.sale?`${v.sale.brand} R$${v.sale.value}`:""]));csv(rows,`visitas-${user?.name}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Detalhado</button></div>
@@ -176,30 +181,42 @@ function RelatorioTab({visits,dayBases,user}){const[sd,setSd]=useState(()=>{cons
   </div>);}
 
 // ─── Equipe Tab (Jordan only - view Alisson's productivity) ───
-function EquipeTab({token}){
-  const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[sel,setSel]=useState(new Date().toISOString().slice(0,10));
-  const load=async()=>{setLo(true);try{const dt=new Date(sel+"T00:00:00");const d=await agF(`/tasks?createdDateGt=${dt.toISOString()}&per_page=100`,token);const alisson=(d.data||[]).filter(t=>t.user?.id===743347).map(t=>({type:t.type||"?",org:t.organization?.name||"?",text:t.text||"",time:t.createdAt,done:t.done}));setTasks(alisson);}catch(e){console.error(e);}setLo(false);};
+function EquipeTab({token,plocs}){
+  const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[sel,setSel]=useState(new Date().toISOString().slice(0,10));const[routeKm,setRouteKm]=useState(null);
+  const load=async()=>{setLo(true);setRouteKm(null);try{const dt=new Date(sel+"T00:00:00");const d=await agF(`/tasks?createdDateGt=${dt.toISOString()}&per_page=100`,token);const alisson=(d.data||[]).filter(t=>t.user?.id===743347).map(t=>({type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",time:t.createdAt,done:t.done}));setTasks(alisson);
+    // Calculate route km from shared GPS
+    if(alisson.length>1){const sorted=[...alisson].sort((a,b)=>a.time.localeCompare(b.time));let km=0;const home=HOMES[743347];const first=sorted[0],last=sorted[sorted.length-1];
+      if(home&&plocs[first.orgId])km+=hav(home.lat,home.lng,plocs[first.orgId].lat,plocs[first.orgId].lng)*1.3;
+      for(let i=0;i<sorted.length-1;i++){const a=plocs[sorted[i].orgId],b=plocs[sorted[i+1].orgId];if(a&&b)km+=hav(a.lat,a.lng,b.lat,b.lng)*1.3;}
+      if(home&&plocs[last.orgId])km+=hav(plocs[last.orgId].lat,plocs[last.orgId].lng,home.lat,home.lng)*1.3;
+      setRouteKm(km);}
+  }catch(e){console.error(e);}setLo(false);};
   useEffect(()=>{load();},[sel]);
   const visitTasks=tasks.filter(t=>t.type==="Visita"||t.type==="VISITA");
   const firstTime=tasks.length?tasks.reduce((m,t)=>t.time<m?t.time:m,tasks[0].time):null;
   const lastTime=tasks.length?tasks.reduce((m,t)=>t.time>m?t.time:m,tasks[0].time):null;
   const workH=firstTime&&lastTime?mins(firstTime,lastTime):0;
+  const withGps=tasks.filter(t=>plocs[t.orgId]).length;
   return(<div>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Produtividade — Alisson Henrique</p>
     <LB t="DATA"><input type="date" value={sel} onChange={e=>setSel(e.target.value)} style={{width:"100%",marginBottom:8}}/></LB>
     <button onClick={load} disabled={lo} style={{width:"100%",marginBottom:14,padding:12,background:S.pri,border:"none",fontWeight:500}}>{lo?"Carregando...":"Atualizar"}</button>
     {tasks.length>0&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-      {[["Atividades",tasks.length],["Visitas",visitTasks.length],["Inicio",firstTime?fT(firstTime):"-"],["Jornada",hrsMin(workH)]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}
+      {[["Atividades",tasks.length],["Visitas",visitTasks.length],["Inicio",firstTime?fT(firstTime):"-"],["Jornada",hrsMin(workH)],["Km estimado",routeKm!=null?routeKm.toFixed(1):"-"],["GPS PDVs",`${withGps}/${tasks.length}`]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}
     </div>}
+    {tasks.length>0&&<button onClick={()=>{const rows=[["Data","Hora","Cliente","Tipo","Observação","GPS"]];tasks.forEach(t=>rows.push([fD(t.time),fT(t.time),t.org,t.type,t.text.slice(0,80),plocs[t.orgId]?"Sim":"Nao"]));rows.push([],["Km estimado",routeKm!=null?routeKm.toFixed(1):"-"],["Jornada",hrsMin(workH)],["Visitas",visitTasks.length]);csv(rows,`alisson-${sel}.csv`);}} style={{width:"100%",marginBottom:14,padding:10,fontSize:12,background:S.pri+"22",border:`1px solid ${S.pri}55`,color:S.pl}}>📊 Exportar relatório Alisson</button>}
     {!lo&&!tasks.length&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma atividade nesta data</p>}
     {tasks.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,overflow:"hidden"}}>
-      <div style={{padding:"10px 14px",borderBottom:`1px solid ${S.brd}`}}><p style={{fontWeight:500,margin:0,fontSize:13}}>Atividades do dia</p></div>
-      {tasks.map((t,i)=><div key={i} style={{padding:"10px 14px",borderBottom:i<tasks.length-1?`1px solid ${S.brd}`:"none"}}>
+      <div style={{padding:"10px 14px",borderBottom:`1px solid ${S.brd}`}}><p style={{fontWeight:500,margin:0,fontSize:13}}>Rota do dia</p></div>
+      {tasks.sort((a,b)=>a.time.localeCompare(b.time)).map((t,i)=><div key={i} style={{padding:"10px 14px",borderBottom:i<tasks.length-1?`1px solid ${S.brd}`:"none"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <p style={{fontSize:13,fontWeight:500,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{t.org}</p>
+          <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+            <div style={{width:22,height:22,borderRadius:"50%",background:plocs[t.orgId]?S.acc+"33":S.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:600,color:plocs[t.orgId]?S.acc:S.td}}>{i+1}</span></div>
+            <p style={{fontSize:13,fontWeight:500,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.org}</p>
+          </div>
           <span style={{fontSize:11,color:S.ts,flexShrink:0,marginLeft:8}}>{fT(t.time)}</span>
         </div>
-        <p style={{fontSize:11,color:S.ts,margin:"2px 0 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.type} — {t.text.slice(0,60)}</p>
+        <p style={{fontSize:11,color:S.ts,margin:"2px 0 0 30px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.type} — {t.text.slice(0,60)}</p>
       </div>)}
     </div>}
   </div>);}
@@ -219,9 +236,19 @@ export default function App(){
 
   // ─── Cross-device sync ───
   const syncPush=async(data)=>{try{await fetch(`${API}?sync=${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:data})});}catch{}};
-  const syncPull=async()=>{try{const r=await fetch(`${API}?sync=${user.id}`);const d=await r.json();if(d.active&&!active){setActive(d.active);}else if(!d.active&&active?.fromSync){setActive(null);}}catch{}};
   const syncClear=async()=>{try{await fetch(`${API}?sync=${user.id}`,{method:"DELETE"});}catch{}};
-  // Poll every 30s for changes from other devices
+  const syncPlocs=async(locs)=>{try{await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:locs})});}catch{}};
+  const[teamActive,setTeamActive]=useState(null);
+  const syncPull=async()=>{try{
+    const r=await fetch(`${API}?sync=${user.id}`);const d=await r.json();
+    if(d.active&&!active)setActive({...d.active,fromSync:true});
+    else if(!d.active&&active?.fromSync)setActive(null);
+    const otherId=user.id===743088?743347:743088;
+    const r2=await fetch(`${API}?sync=${otherId}`);const d2=await r2.json();
+    setTeamActive(d2.active||null);
+    const r3=await fetch(`${API}?sync=plocs`);const d3=await r3.json();
+    if(d3.active){setPlocs(prev=>{const m={...d3.active,...prev};sS("jc:pdvLocs",m);return m;});}
+  }catch{}};
   useEffect(()=>{if(!token||!user)return;syncPull();const iv=setInterval(syncPull,30000);return()=>clearInterval(iv);},[token,user]);
 
   // Alert: 8AM no activity
@@ -287,7 +314,7 @@ export default function App(){
   const toggleCat=c=>{setCatFilters(prev=>prev.includes(c)?prev.filter(x=>x!==c):[...prev,c]);setVc(PG);};
   const quickAction=async(org,type)=>{const note=prompt(`Registrar ${type==="WHATSAPP"?"WhatsApp":"Ligacao"} com ${org.name}:`);if(!note?.trim())return;try{await postTask(token,org.id,note,type,true);alert("Registrado no Agendor!");}catch(e){alert("Erro: "+e.message);}};
 
-  const checkin=async(org)=>{ensureBase();if(org.cat==="Online - B2B"&&!confirm(`${org.name} e Online/B2B.\nRegistrar visita?`))return;if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\nContinuar?`))return;if(org.cat==="Excluido"&&!confirm(`${org.name} esta Excluido.\nContinuar?`))return;setLdId(org.id);setGeoErr("");try{const g=await gps();if(plocs[org.id]){const d=hav(plocs[org.id].lat,plocs[org.id].lng,g.lat,g.lng)*1000;if(d>500){setDivTarget({org,dist:Math.round(d),geo:g});setLdId(null);return;}}else setPlocs(p=>({...p,[org.id]:{lat:g.lat,lng:g.lng}}));const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}catch{setGeoErr("GPS indisponivel.");}setLdId(null);};
+  const checkin=async(org)=>{ensureBase();if(org.cat==="Online - B2B"&&!confirm(`${org.name} e Online/B2B.\nRegistrar visita?`))return;if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\nContinuar?`))return;if(org.cat==="Excluido"&&!confirm(`${org.name} esta Excluido.\nContinuar?`))return;setLdId(org.id);setGeoErr("");try{const g=await gps();if(plocs[org.id]){const d=hav(plocs[org.id].lat,plocs[org.id].lng,g.lat,g.lng)*1000;if(d>500){setDivTarget({org,dist:Math.round(d),geo:g});setLdId(null);return;}}else{const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);}const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}catch{setGeoErr("GPS indisponivel.");}setLdId(null);};
   const handleDivAction=(action,type)=>{if(!divTarget)return;const{org,geo}=divTarget;if(action==="checkin"){const v={orgId:org.id,orgName:org.name,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:geo.lat,lng:geo.lng,accuracy:geo.acc,checkoutTime:null,note:"",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}else if(action==="remote"&&type)setCoTarget({...org,remoteType:type});setDivTarget(null);};
   const checkout=async(note,type="VISITA",next=null,sale=null)=>{if(!active||ldId)return;setLdId(active.orgId);let g=null;try{g=await gps();}catch{}const done={...active,checkoutTime:new Date().toISOString(),checkoutLat:g?.lat,checkoutLng:g?.lng,note,taskType:type,sale};try{await postTask(token,active.orgId,note,type,true);done.synced=true;}catch{}if(next?.nextDate&&next?.nextDesc){try{await postTask(token,active.orgId,next.nextDesc,next.nextType||"VISITA",false,`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`);}catch{}}if(sale?.brand&&sale?.value){try{await agF(`/organizations/${active.orgId}/deals`,token,{method:"POST",body:JSON.stringify({title:`Venda ${sale.brand}`,value:sale.value})});}catch{}}setVisits(p=>[done,...p]);setActive(null);syncClear();setCoTarget(null);setLdId(null);};
 
@@ -308,6 +335,7 @@ export default function App(){
     </div>
     <div style={{padding:"0 16px"}}>
       {active&&tab!=="config"&&<Banner v={active} orgs={orgs} onClick={()=>{setTab("pdvs");setSearch(active.orgName);}}/>}
+      {teamActive&&tab!=="config"&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,borderRadius:"50%",background:S.gold,animation:"pulse 2s infinite"}}/><p style={{fontSize:13,color:S.gold,margin:0}}>{user.id===743088?"Alisson":"Jordan"} em atendimento: <b>{teamActive.orgName}</b></p></div><p style={{fontSize:11,color:S.ts,margin:"3px 0 0 16px"}}>Desde {fT(teamActive.checkinTime)} — {mins(teamActive.checkinTime,new Date())} min</p><style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style></div>}
 
       {mAlert&&!active&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.gold,margin:0}}>⏰ Bom dia! Atividades ainda nao iniciadas.</p></div>}
       {prevDay&&<div style={{background:S.dng+"18",border:`1px solid ${S.dng}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.dng,margin:"0 0 8px"}}>⚠️ Visita aberta de {fD(prevDay.checkinTime)} — {prevDay.orgName}</p><div style={{display:"flex",gap:8}}><button onClick={()=>{const c=new Date(prevDay.checkinTime);c.setHours(18);setVisits(p=>[{...prevDay,checkoutTime:c.toISOString(),note:"Auto 18h",synced:false},...p]);setActive(null);setPrevDay(null);}} style={{flex:1,fontSize:12,background:S.dng,border:"none"}}>Fechar 18h</button><button onClick={()=>setCoTarget({id:prevDay.orgId,name:prevDay.orgName})} style={{flex:1,fontSize:12}}>Com obs.</button></div></div>}
@@ -347,9 +375,9 @@ export default function App(){
         </>}
       </div>}
       {tab==="rotas"&&<RotasTab visits={visits} dayBases={dayBases} user={user}/>}
-      {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user}/>}
+      {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token}/>}
 
-      {tab==="equipe"&&user?.id===743088&&<EquipeTab token={token}/>}
+      {tab==="equipe"&&user?.id===743088&&<EquipeTab token={token} plocs={plocs}/>}
 
       {tab==="config"&&<div>
         <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:15,fontWeight:600,margin:"0 0 4px"}}>{user?.name}</p>{HOMES[user?.id]&&<p style={{fontSize:12,color:S.ok}}>Casa: {HOMES[user.id].label}</p>}</div>
