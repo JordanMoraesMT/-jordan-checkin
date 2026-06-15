@@ -168,7 +168,7 @@ function RotasTab({visits,dayBases,user}){const[sel,setSel]=useState(new Date().
     </div>}</div>);}
 
 function RelatorioTab({visits,dayBases,user,token}){const[sd,setSd]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().slice(0,10);});const[ed,setEd]=useState(new Date().toISOString().slice(0,10));const[selUser,setSelUser]=useState("me");const[remoteVisits,setRemoteVisits]=useState([]);const[rLo,setRLo]=useState(false);const home=HOMES[user?.id];
-  const loadRemote=async()=>{setRLo(true);try{const d=await agF(`/tasks?createdDateGt=${sd}T00:00:00Z&per_page=200`,token);const otherId=user.id===743088?743347:743088;const tasks=(d.data||[]).filter(t=>t.user?.id===otherId&&(t.type==="Visita"||t.type==="VISITA")).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",userName:t.user?.name||""}));setRemoteVisits(tasks);}catch{}setRLo(false);};
+  const loadRemote=async()=>{setRLo(true);try{const d=await agF(`/tasks?createdDateGt=${sd}T00:00:00Z&per_page=200`,token);const otherId=user.id===743088?743347:743088;const tasks=(d.data||[]).filter(t=>t.user?.id===otherId&&(t.type==="Visita"||t.type==="VISITA"||t.type==="WhatsApp")).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",userName:t.user?.name||""}));setRemoteVisits(tasks);}catch(e){alert("Erro Relatório: "+e.message);}setRLo(false);};
   useEffect(()=>{if(selUser==="team")loadRemote();},[selUser,sd]);
   const useVisits=selUser==="me"?visits:remoteVisits;const pv=useMemo(()=>useVisits.filter(v=>{if(!v.checkoutTime)return false;const d=new Date(v.checkinTime).toISOString().slice(0,10);return d>=sd&&d<=ed;}).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime)),[useVisits,sd,ed]);const bd=useMemo(()=>{const m={};pv.forEach(v=>{const k=new Date(v.checkinTime).toISOString().slice(0,10);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pv]);const totKm=useMemo(()=>{let km=0;bd.forEach(([dt,dvs])=>{const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const b2=dayBases[dt]||home;if(b2&&s[0]?.lat)km+=hav(b2.lat,b2.lng,s[0].lat,s[0].lng)*1.3;for(let i=1;i<s.length;i++)if(s[i].lat&&s[i-1].lat)km+=hav(s[i-1].checkoutLat||s[i-1].lat,s[i-1].checkoutLng||s[i-1].lng,s[i].lat,s[i].lng)*1.3;const l=s[s.length-1];if(b2&&l?.lat)km+=hav(l.checkoutLat||l.lat,l.checkoutLng||l.lng,b2.lat,b2.lng)*1.3;});return km;},[bd,dayBases,home]);const totMin=pv.reduce((s,v)=>s+mins(v.checkinTime,v.checkoutTime),0);const workH=bd.reduce((s,[,d])=>{const sr=[...d].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));return s+mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime);},0);const mx=Math.max(1,...bd.map(([,v])=>v.length));
   return(<div>
@@ -182,15 +182,15 @@ function RelatorioTab({visits,dayBases,user,token}){const[sd,setSd]=useState(()=
 
 // ─── Equipe Tab (Jordan only - view Alisson's productivity) ───
 function EquipeTab({token,plocs,orgs}){
-  const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[sel,setSel]=useState(new Date().toISOString().slice(0,10));const[routeKm,setRouteKm]=useState(null);
+  const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[sel,setSel]=useState(new Date().toISOString().slice(0,10));const[routeKm,setRouteKm]=useState(null);const[err,setErr]=useState("");
   const getCoord=(oid)=>{if(plocs[oid])return[plocs[oid].lat,plocs[oid].lng];const o=orgs.find(x=>x.id===oid);if(o){const g=geoEstimate(o);if(g)return g;}return null;};
-  const load=async()=>{setLo(true);setRouteKm(null);try{const dt=new Date(sel+"T00:00:00");const d=await agF(`/tasks?createdDateGt=${dt.toISOString()}&per_page=200`,token);const alisson=(d.data||[]).filter(t=>t.user?.id===743347).map(t=>({type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",time:t.createdAt,done:t.done}));setTasks(alisson);
+  const load=async()=>{setLo(true);setRouteKm(null);setErr("");try{const dt=sel+"T00:00:00Z";setErr("Buscando..."+dt);const d=await agF(`/tasks?createdDateGt=${dt}&per_page=200`,token);const all=d.data||[];setErr(`${all.length} tarefas totais`);const alisson=all.filter(t=>t.user?.id===743347).map(t=>({type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",time:t.createdAt,done:t.done}));setTasks(alisson);setErr(`${all.length} total, ${alisson.length} Alisson`);
     if(alisson.length>=1){const sorted=[...alisson].sort((a,b)=>a.time.localeCompare(b.time));let km=0;const home=HOMES[743347];const fc=getCoord(sorted[0].orgId),lc=getCoord(sorted[sorted.length-1].orgId);
       if(home&&fc)km+=hav(home.lat,home.lng,fc[0],fc[1])*1.3;
       for(let i=0;i<sorted.length-1;i++){const a=getCoord(sorted[i].orgId),b=getCoord(sorted[i+1].orgId);if(a&&b)km+=hav(a[0],a[1],b[0],b[1])*1.3;}
       if(home&&lc)km+=hav(lc[0],lc[1],home.lat,home.lng)*1.3;
       setRouteKm(km);}
-  }catch(e){console.error(e);}setLo(false);};
+  }catch(e){setErr("ERRO: "+e.message);}setLo(false);};
   useEffect(()=>{load();},[sel]);
   const visitTasks=tasks.filter(t=>t.type==="Visita"||t.type==="VISITA");
   const firstTime=tasks.length?tasks.reduce((m,t)=>t.time<m?t.time:m,tasks[0].time):null;
@@ -200,7 +200,8 @@ function EquipeTab({token,plocs,orgs}){
   return(<div>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Produtividade — Alisson Henrique</p>
     <LB t="DATA"><input type="date" value={sel} onChange={e=>setSel(e.target.value)} style={{width:"100%",marginBottom:8}}/></LB>
-    <button onClick={load} disabled={lo} style={{width:"100%",marginBottom:14,padding:12,background:S.pri,border:"none",fontWeight:500}}>{lo?"Carregando...":"Atualizar"}</button>
+    <button onClick={load} disabled={lo} style={{width:"100%",marginBottom:8,padding:12,background:S.pri,border:"none",fontWeight:500}}>{lo?"Carregando...":"Atualizar"}</button>
+    {err&&<p style={{fontSize:11,color:err.startsWith("ERRO")?S.dng:S.acc,margin:"0 0 12px",padding:"6px 10px",background:S.cl,borderRadius:6}}>{err}</p>}
     {tasks.length>0&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
       {[["Atividades",tasks.length],["Visitas",visitTasks.length],["Inicio",firstTime?fT(firstTime):"-"],["Jornada",hrsMin(workH)],["Km estimado",routeKm!=null?routeKm.toFixed(1):"-"],["Localização",`${withGps}📍 ${withEst-withGps}🏙️`]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}
     </div>}
