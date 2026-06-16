@@ -166,47 +166,63 @@ function EditModal({org,token,users,onSave,onClose}){const[name,setName]=useStat
   {msg&&<p style={{fontSize:12,color:msg.startsWith("Erro")?S.dng:S.ok,margin:"0 0 6px"}}>{msg}</p>}
   <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={onClose} style={{flex:1}}>Cancelar</button><button onClick={save} disabled={lo} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"...":"Salvar"}</button></div></div></div>);}
 
+// ─── HotelGeoInput: busca Google Maps + GPS + colar coordenadas ───
+function HotelGeoInput({name,onNameChange,lat,lng,onCoordsChange,label}){
+  const[gpsLo,setGpsLo]=useState(false);const[coordText,setCoordText]=useState(lat&&lng?`${lat},${lng}`:"");
+  const parseCoords=(txt)=>{const clean=txt.replace(/\s/g,"");const m=clean.match(/^(-?\d+\.?\d*),(-?\d+\.?\d*)$/);if(m)onCoordsChange(parseFloat(m[1]),parseFloat(m[2]));};
+  const captureGPS=async()=>{setGpsLo(true);try{const g=await gps();onCoordsChange(g.lat,g.lng);setCoordText(`${g.lat.toFixed(6)},${g.lng.toFixed(6)}`);}catch{alert("GPS indisponivel");}setGpsLo(false);};
+  const searchMaps=()=>{const q=encodeURIComponent(name||"hotel");window.open(`https://www.google.com/maps/search/${q}`,"_blank");};
+  const hasCoords=lat&&lng;
+  return(<div style={{display:"flex",flexDirection:"column",gap:4}}>
+    <input value={name} onChange={e=>onNameChange(e.target.value)} placeholder={label||"Nome do hotel / cidade"} style={{width:"100%",fontSize:12}}/>
+    <div style={{display:"flex",gap:4}}>
+      <button onClick={searchMaps} style={{flex:1,padding:6,fontSize:10,background:S.pri+"22",border:`1px solid ${S.pri}`,color:S.pri}}>🔍 Buscar no Maps</button>
+      <button onClick={captureGPS} disabled={gpsLo} style={{flex:1,padding:6,fontSize:10,background:hasCoords?S.ok+"22":S.gold+"22",border:`1px solid ${hasCoords?S.ok:S.gold}`,color:hasCoords?S.ok:S.gold}}>{gpsLo?"📍 GPS...":(hasCoords?"✅ GPS capturado":"📍 Meu GPS")}</button>
+    </div>
+    <div style={{display:"flex",gap:4,alignItems:"center"}}>
+      <input value={coordText} onChange={e=>{setCoordText(e.target.value);parseCoords(e.target.value);}} placeholder="Colar coordenadas: -11.8642,-55.5095" style={{flex:1,fontSize:10,fontFamily:"monospace",padding:"6px 8px"}}/>
+      {hasCoords&&<span style={{fontSize:9,color:S.ok,flexShrink:0}}>✅</span>}
+    </div>
+    {hasCoords&&<p style={{fontSize:9,color:S.ok,margin:0}}>📍 {lat.toFixed(5)}, {lng.toFixed(5)}</p>}
+  </div>);}
+
 // ─── JourneyModal: INÍCIO da jornada — origem E destino ───
 function JourneyModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[orig,setOrig]=useState("home");const[dest,setDest]=useState("home");const[lo,setLo]=useState(false);const[origName,setOrigName]=useState("");const[destName,setDestName]=useState("");
-  const[destGps,setDestGps]=useState(null);const[gpsLo2,setGpsLo2]=useState(false);
-  const captureDest=async()=>{setGpsLo2(true);try{const g=await gps();setDestGps(g);}catch{alert("GPS indisponivel");}setGpsLo2(false);};
+  const[origLat,setOrigLat]=useState(null);const[origLng,setOrigLng]=useState(null);
+  const[destLat,setDestLat]=useState(null);const[destLng,setDestLng]=useState(null);
   const go=async()=>{setLo(true);let startBase,endBase;
-    if(orig==="home"&&home){startBase={type:"home",...home};}else{try{const g=await gps();startBase={type:"hotel",lat:g.lat,lng:g.lng,label:origName||"Hotel"};}catch{alert("GPS indisponivel para origem.");setLo(false);return;}}
-    if(dest==="home"&&home){endBase={type:"home",...home};}else{endBase={type:"hotel",lat:destGps?.lat||null,lng:destGps?.lng||null,label:destName||"Hotel (GPS ao fechar)"};}
+    if(orig==="home"&&home){startBase={type:"home",...home};}
+    else if(origLat&&origLng){startBase={type:"hotel",lat:origLat,lng:origLng,label:origName||"Hotel"};}
+    else{try{const g=await gps();startBase={type:"hotel",lat:g.lat,lng:g.lng,label:origName||"Hotel"};}catch{alert("Defina a localização do hotel de origem.");setLo(false);return;}}
+    if(dest==="home"&&home){endBase={type:"home",...home};}
+    else if(destLat&&destLng){endBase={type:"hotel",lat:destLat,lng:destLng,label:destName||"Hotel"};}
+    else{endBase={type:"hotel",lat:null,lng:null,label:destName||"Hotel (GPS ao fechar)"};}
     onSave({start:startBase,end:endBase});setLo(false);};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Jornada de Trabalho</p>
     <p style={{fontSize:12,color:S.acc,fontWeight:600,margin:"0 0 6px"}}>DE ONDE ESTÁ SAINDO?</p>
     {["home","hotel"].map(t=><label key={"o"+t} style={{display:"flex",alignItems:"center",gap:10,padding:10,border:`${orig===t?2:1}px solid ${orig===t?S.pri:S.brd}`,borderRadius:10,marginBottom:6,cursor:"pointer",background:orig===t?S.cl:S.bg}}><input type="radio" checked={orig===t} onChange={()=>setOrig(t)}/><span style={{fontSize:13,fontWeight:500}}>{t==="home"?"🏠 Casa":"🏨 Hotel / Airbnb"}</span></label>)}
-    {orig==="hotel"&&<input value={origName} onChange={e=>setOrigName(e.target.value)} placeholder="Nome do hotel / cidade" style={{width:"100%",marginBottom:8,fontSize:12}}/>}
+    {orig==="hotel"&&<div style={{marginBottom:8}}><HotelGeoInput name={origName} onNameChange={setOrigName} lat={origLat} lng={origLng} onCoordsChange={(la,ln)=>{setOrigLat(la);setOrigLng(ln);}} label="Hotel de origem"/></div>}
     <div style={{borderTop:`1px solid ${S.brd}`,margin:"10px 0",paddingTop:10}}>
     <p style={{fontSize:12,color:S.gold,fontWeight:600,margin:"0 0 6px"}}>PARA ONDE VAI NO FINAL DO DIA?</p>
     {["home","hotel"].map(t=><label key={"d"+t} style={{display:"flex",alignItems:"center",gap:10,padding:10,border:`${dest===t?2:1}px solid ${dest===t?S.gold:S.brd}`,borderRadius:10,marginBottom:6,cursor:"pointer",background:dest===t?S.cl:S.bg}}><input type="radio" checked={dest===t} onChange={()=>setDest(t)}/><span style={{fontSize:13,fontWeight:500}}>{t==="home"?"🏠 Voltar para casa":"🏨 Hotel / Airbnb"}</span></label>)}
-    {dest==="hotel"&&<><input value={destName} onChange={e=>setDestName(e.target.value)} placeholder="Nome do hotel / cidade destino" style={{width:"100%",marginBottom:4,fontSize:12}}/>
-      <button onClick={captureDest} disabled={gpsLo2} style={{width:"100%",padding:8,fontSize:11,background:destGps?S.ok+"22":S.gold+"22",border:`1px solid ${destGps?S.ok:S.gold}`,color:destGps?S.ok:S.gold}}>
-        {gpsLo2?"📍 Capturando...":(destGps?`✅ GPS: ${destGps.lat.toFixed(4)}, ${destGps.lng.toFixed(4)}`:"📍 Já estou no hotel (capturar GPS)")}
-      </button></>}
+    {dest==="hotel"&&<div style={{marginBottom:8}}><HotelGeoInput name={destName} onNameChange={setDestName} lat={destLat} lng={destLng} onCoordsChange={(la,ln)=>{setDestLat(la);setDestLng(ln);}} label="Hotel de destino"/></div>}
     </div>
     <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={onCancel} style={{flex:1}}>Depois</button><button onClick={go} disabled={lo} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"📍 GPS...":"Iniciar Jornada"}</button></div>
   </div></div>);}
 
 // ─── DayEndModal: FECHAMENTO do roteiro — GPS ao chegar no hotel ───
-function DayEndModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[tp,setTp]=useState("home");const[lo,setLo]=useState(false);const[hn,setHn]=useState("");const[hotelGps,setHotelGps]=useState(null);
-  const captureHotelGps=async()=>{setLo(true);try{const g=await gps();setHotelGps(g);}catch{alert("GPS indisponivel. Ative a localização.");}setLo(false);};
+function DayEndModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[tp,setTp]=useState("home");const[hn,setHn]=useState("");
+  const[htLat,setHtLat]=useState(null);const[htLng,setHtLng]=useState(null);
   const go=()=>{if(tp==="home"&&home){onSave({type:"home",...home});return;}
-    if(!hotelGps){alert("Capture o GPS do hotel primeiro.");return;}
-    onSave({type:"hotel",lat:hotelGps.lat,lng:hotelGps.lng,label:hn||"Hotel/Airbnb"});};
+    if(!htLat||!htLng){alert("Defina a localização do hotel (GPS, busca ou coordenadas).");return;}
+    onSave({type:"hotel",lat:htLat,lng:htLng,label:hn||"Hotel/Airbnb"});};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:400}}>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Fechar roteiro do dia</p>
     <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Para onde esta indo agora?</p>
     {["home","hotel"].map(t=><label key={t} style={{display:"flex",alignItems:"center",gap:10,padding:12,border:`${tp===t?2:1}px solid ${tp===t?S.pri:S.brd}`,borderRadius:10,marginBottom:8,cursor:"pointer",background:tp===t?S.cl:S.bg}}><input type="radio" checked={tp===t} onChange={()=>setTp(t)}/><span style={{fontWeight:500}}>{t==="home"?"🏠 Voltando para casa":"🏨 Hotel / Airbnb"}</span></label>)}
-    {tp==="hotel"&&<>
-      <input value={hn} onChange={e=>setHn(e.target.value)} placeholder="Nome do hotel / cidade" style={{width:"100%",marginBottom:8}}/>
-      <button onClick={captureHotelGps} disabled={lo} style={{width:"100%",padding:10,marginBottom:8,fontSize:12,background:hotelGps?S.ok+"22":S.gold+"22",border:`1px solid ${hotelGps?S.ok:S.gold}`,color:hotelGps?S.ok:S.gold,fontWeight:500}}>
-        {lo?"📍 Capturando GPS...":(hotelGps?`✅ GPS capturado: ${hotelGps.lat.toFixed(4)}, ${hotelGps.lng.toFixed(4)}`:"📍 Capturar GPS do local de repouso")}
-      </button>
-    </>}
-    <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={go} disabled={tp==="hotel"&&!hotelGps} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Fechar Roteiro</button></div>
+    {tp==="hotel"&&<div style={{marginBottom:8}}><HotelGeoInput name={hn} onNameChange={setHn} lat={htLat} lng={htLng} onCoordsChange={(la,ln)=>{setHtLat(la);setHtLng(ln);}} label="Local de repouso"/></div>}
+    <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={go} disabled={tp==="hotel"&&(!htLat||!htLng)} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Fechar Roteiro</button></div>
   </div></div>);}
 
 function DivergentModal({org,dist,onAction,onCancel}){return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:400}}><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:S.gold}}>Local divergente</p><p style={{fontSize:13,color:S.ts,margin:"0 0 4px"}}>{org.name}</p><p style={{fontSize:12,color:S.gold,margin:"0 0 16px"}}>Voce esta a {dist}m do cadastrado</p><div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}><button onClick={()=>onAction("checkin")} style={{padding:12,textAlign:"left",fontWeight:500}}>📍 Visita presencial</button>{TYPES.filter(t=>t.id!=="VISITA").map(t=><button key={t.id} onClick={()=>onAction("remote",t.id)} style={{padding:12,textAlign:"left"}}>{t.l} (sem check-in)</button>)}<button onClick={()=>onAction("schedule")} style={{padding:12,textAlign:"left",color:S.acc}}>📅 Agendar futuro</button></div><button onClick={onCancel} style={{width:"100%",color:S.dng}}>Cancelar</button></div></div>);}
@@ -376,21 +392,21 @@ function BaseEditInline({day,dayBases,userId,plocs,lastVisitCoord,onSave,onCance
   const home=HOMES[userId];const cur=getBase(dayBases,day,userId);const curEnd=getEnd(dayBases,day,userId);
   const[origType,setOrigType]=useState(cur?.type||"home");const[destType,setDestType]=useState(curEnd?.type||"home");
   const[origName,setOrigName]=useState(cur?.type==="hotel"?cur.label:"");const[destName,setDestName]=useState(curEnd?.type==="hotel"?curEnd.label:"");
+  const[origLat,setOrigLat]=useState(cur?.type==="hotel"?cur.lat:null);const[origLng,setOrigLng]=useState(cur?.type==="hotel"?cur.lng:null);
   const[destLat,setDestLat]=useState(curEnd?.type==="hotel"?curEnd.lat:null);const[destLng,setDestLng]=useState(curEnd?.type==="hotel"?curEnd.lng:null);
-  const[gpsLo,setGpsLo]=useState(false);const[kmEst,setKmEst]=useState(null);
-  // Estimate km to hotel when coords available
+  const[kmEst,setKmEst]=useState(null);
   useEffect(()=>{if(destType==="hotel"&&destLat&&lastVisitCoord){setKmEst(hav(lastVisitCoord.lat,lastVisitCoord.lng,destLat,destLng)*1.3);}else if(destType==="home"&&home&&lastVisitCoord){setKmEst(hav(lastVisitCoord.lat,lastVisitCoord.lng,home.lat,home.lng)*1.3);}else{setKmEst(null);}},[destType,destLat,destLng,lastVisitCoord]);
-  const captureGPS=async()=>{setGpsLo(true);try{const g=await gps();setDestLat(g.lat);setDestLng(g.lng);}catch{alert("GPS indisponivel");}setGpsLo(false);};
   const save=()=>{
-    const start=origType==="home"&&home?{type:"home",...home}:{type:"hotel",lat:home?.lat||-15.6,lng:home?.lng||-56.1,label:origName||"Hotel"};
-    const end=destType==="home"&&home?{type:"home",...home}:{type:"hotel",lat:destLat||home?.lat||-15.6,lng:destLng||home?.lng||-56.1,label:destName||"Hotel"};
+    const start=origType==="home"&&home?{type:"home",...home}:{type:"hotel",lat:origLat||home?.lat,lng:origLng||home?.lng,label:origName||"Hotel"};
+    const end=destType==="home"&&home?{type:"home",...home}:{type:"hotel",lat:destLat||home?.lat,lng:destLng||home?.lng,label:destName||"Hotel"};
     onSave(day,start,end);};
   return(<div style={{background:S.cl,border:`1px solid ${S.acc}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
     <p style={{fontWeight:500,fontSize:13,margin:"0 0 8px"}}>Corrigir {fD(day+"T12:00")}</p>
-    <LB t="ORIGEM"><div style={{display:"flex",gap:6}}><button onClick={()=>setOrigType("home")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${origType==="home"?S.pri:S.brd}`,background:origType==="home"?S.pri+"22":"transparent",color:origType==="home"?S.pri:S.ts}}>🏠 Casa</button><button onClick={()=>setOrigType("hotel")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${origType==="hotel"?S.gold:S.brd}`,background:origType==="hotel"?S.gold+"22":"transparent",color:origType==="hotel"?S.gold:S.ts}}>🏨 Hotel</button></div>{origType==="hotel"&&<input value={origName} onChange={e=>setOrigName(e.target.value)} placeholder="Nome hotel/cidade" style={{width:"100%",marginTop:4,fontSize:11}}/>}</LB>
-    <LB t="DESTINO"><div style={{display:"flex",gap:6}}><button onClick={()=>setDestType("home")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${destType==="home"?S.pri:S.brd}`,background:destType==="home"?S.pri+"22":"transparent",color:destType==="home"?S.pri:S.ts}}>🏠 Casa</button><button onClick={()=>setDestType("hotel")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${destType==="hotel"?S.gold:S.brd}`,background:destType==="hotel"?S.gold+"22":"transparent",color:destType==="hotel"?S.gold:S.ts}}>🏨 Hotel</button></div>
-      {destType==="hotel"&&<><input value={destName} onChange={e=>setDestName(e.target.value)} placeholder="Nome hotel/cidade destino" style={{width:"100%",marginTop:4,fontSize:11}}/>
-        <button onClick={captureGPS} disabled={gpsLo} style={{width:"100%",marginTop:4,padding:6,fontSize:11,background:destLat?S.ok+"22":S.gold+"22",border:`1px solid ${destLat?S.ok:S.gold}`,color:destLat?S.ok:S.gold}}>{gpsLo?"📍 Capturando...":(destLat?`📍 GPS: ${destLat.toFixed(4)}, ${destLng.toFixed(4)}`:"📍 Capturar GPS do hotel")}</button></>}
+    <LB t="ORIGEM"><div style={{display:"flex",gap:6,marginBottom:4}}><button onClick={()=>setOrigType("home")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${origType==="home"?S.pri:S.brd}`,background:origType==="home"?S.pri+"22":"transparent",color:origType==="home"?S.pri:S.ts}}>🏠 Casa</button><button onClick={()=>setOrigType("hotel")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${origType==="hotel"?S.gold:S.brd}`,background:origType==="hotel"?S.gold+"22":"transparent",color:origType==="hotel"?S.gold:S.ts}}>🏨 Hotel</button></div>
+      {origType==="hotel"&&<HotelGeoInput name={origName} onNameChange={setOrigName} lat={origLat} lng={origLng} onCoordsChange={(la,ln)=>{setOrigLat(la);setOrigLng(ln);}} label="Hotel de origem"/>}
+    </LB>
+    <LB t="DESTINO"><div style={{display:"flex",gap:6,marginBottom:4}}><button onClick={()=>setDestType("home")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${destType==="home"?S.pri:S.brd}`,background:destType==="home"?S.pri+"22":"transparent",color:destType==="home"?S.pri:S.ts}}>🏠 Casa</button><button onClick={()=>setDestType("hotel")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${destType==="hotel"?S.gold:S.brd}`,background:destType==="hotel"?S.gold+"22":"transparent",color:destType==="hotel"?S.gold:S.ts}}>🏨 Hotel</button></div>
+      {destType==="hotel"&&<HotelGeoInput name={destName} onNameChange={setDestName} lat={destLat} lng={destLng} onCoordsChange={(la,ln)=>{setDestLat(la);setDestLng(ln);}} label="Hotel de destino"/>}
     </LB>
     {kmEst!=null&&<p style={{fontSize:11,color:S.acc,margin:"0 0 8px"}}>Km estimado último PDV → {destType==="hotel"?destName||"Hotel":"Casa"}: {kmEst.toFixed(1)} km</p>}
     <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1,fontSize:11}}>Cancelar</button><button onClick={save} style={{flex:1,fontSize:11,background:S.acc,border:"none",fontWeight:600}}>Salvar</button></div>
@@ -471,7 +487,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v8.1</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v8.2</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
