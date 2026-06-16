@@ -34,7 +34,7 @@ async function postTask(token,oid,text,type="VISITA",done=true,due=null){const b
 function gps(){return new Promise((r,j)=>{if(!navigator.geolocation)return j(new Error("GPS"));navigator.geolocation.getCurrentPosition(p=>r({lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)}),j,{enableHighAccuracy:true,timeout:15000,maximumAge:0});});}
 async function roadKm(a,b,c,d){try{const r=await fetch(`${OSRM}/${b},${a};${d},${c}?overview=false`);const j=await r.json();if(j.code==="Ok"&&j.routes?.[0])return{km:j.routes[0].distance/1000,dur:Math.round(j.routes[0].duration/60)};}catch{}return{km:hav(a,b,c,d)*1.3,dur:0};}
 function csv(rows,fn){const b="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");Object.assign(document.createElement("a"),{href:URL.createObjectURL(new Blob([b],{type:"text/csv;charset=utf-8"})),download:fn}).click();}
-function strip(o){const a=o.address||{};const desc=o.description||"";return{id:o.id,name:o.name||"",nickname:o.nickname||"",cnpj:o.cnpj||"",cat:o.category?.name||"",sector:o.sector?.name||"",products:(o.products||[]).map(p=>p.name).join(", "),owner:o.ownerUser?.name||"",ownerId:o.ownerUser?.id||null,grupo:desc.startsWith("Grupo:")?desc:"",addr:{street:a.streetName||a.street||"",number:a.streetNumber||a.number||"",district:a.district||a.neighborhood||"",city:a.city||"",city_name:a.city_name||a.city||"",state:a.state||""},people:(o.people||[]).map(p=>p.name).join(", ")};}
+function strip(o){const a=o.address||{};const desc=o.description||"";return{id:o.id,name:o.name||"",nickname:o.nickname||"",legalName:o.legalName||"",cnpj:o.cnpj||"",cat:o.category?.name||"",sector:o.sector?.name||"",products:(o.products||[]).map(p=>p.name).join(", "),owner:o.ownerUser?.name||"",ownerId:o.ownerUser?.id||null,grupo:desc.startsWith("Grupo:")?desc:"",addr:{street:a.streetName||a.street||"",number:a.streetNumber||a.number||"",district:a.district||a.neighborhood||"",city:a.city||"",city_name:a.city_name||a.city||"",state:a.state||""},people:(o.people||[]).map(p=>p.name).join(", ")};}
 async function fetchCNPJ(cnpj){const clean=cnpj.replace(/[.\-\/]/g,"");try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);if(r.ok)return r.json();}catch{}const r2=await fetch(`${API}?cnpj=${clean}`);if(!r2.ok)throw new Error("CNPJ nao encontrado");return r2.json();}
 // ─── Helper: get base for date (backward compatible) ───
 function getBase(dayBases,date,userId){const b=dayBases[date];if(!b)return HOMES[userId]||null;if(b.start)return b.start;return b;}
@@ -160,7 +160,7 @@ function NewClientModal({token,onSave,onCancel}){
   <button onClick={()=>onSave(orgData)} style={{width:"100%",padding:12,fontWeight:500}}>← Voltar ao app</button></>}
 </div></div>);}
 
-const CARGOS=["Proprietário","Comprador","Fiscal","Financeiro","Recebimento","Marketing","Gerente de Vendas","Vendedor","Repositor","Conferente"];
+const CARGOS=["Comprador","Conferente","Financeiro","Fiscal","Gerente de Vendas","Marketing","Proprietário","Recebimento","Repositor","Vendedor"];
 function PeopleModal({org,token,onClose}){
   const[people,setPeople]=useState([]);const[lo,setLo]=useState(true);const[mode,setMode]=useState("list");// list | add | edit
   const[editId,setEditId]=useState(null);
@@ -170,8 +170,10 @@ function PeopleModal({org,token,onClose}){
   const clear=()=>{setN("");setCargo("");setE("");setP("");setW("");setEditId(null);setMode("list");};
   const openAdd=()=>{clear();setMode("add");setMsg("");};
   const openEdit=(pe)=>{setEditId(pe.id);setN(pe.name||"");setCargo(pe.role||"");setE(pe.contact?.email||"");setP(pe.contact?.mobile?.replace(/\D/g,"")||"");setW(pe.contact?.whatsapp||"");setMode("edit");setMsg("");};
-  const save=async()=>{if(!n.trim())return;setSaving(true);setMsg("");
-    const body={name:n,role:cargo||"",contact:{...(e?{email:e}:{email:""}),...(p?{mobile:p}:{mobile:""}),...(w?{whatsapp:w}:{whatsapp:""})}};
+  const canSave=n.trim()&&e.trim()&&w.trim();
+  const save=async()=>{if(!canSave)return;setSaving(true);setMsg("");
+    const contact={};if(e.trim())contact.email=e.trim();if(p.trim())contact.mobile=p.trim();if(w.trim())contact.whatsapp=w.trim();
+    const body={name:n.trim()};if(cargo)body.role=cargo;if(Object.keys(contact).length)body.contact=contact;
     try{if(mode==="edit"&&editId){await agF(`/people/${editId}`,token,{method:"PUT",body:JSON.stringify(body)});setMsg("Atualizado!");}
     else{body.organization=org.id;await agF("/people",token,{method:"POST",body:JSON.stringify(body)});setMsg("Adicionado!");}
     await reload();clear();}catch(x){setMsg("Erro: "+x.message);}setSaving(false);};
@@ -202,12 +204,12 @@ function PeopleModal({org,token,onClose}){
     {mode==="list"&&<button onClick={openAdd} style={{width:"100%",padding:10,fontSize:12,background:S.acc,border:"none",fontWeight:600,marginTop:4}}>+ Adicionar Contato</button>}
     {(mode==="add"||mode==="edit")&&<div style={{background:S.cl,borderRadius:8,padding:10,marginTop:6}}>
       <p style={{fontSize:12,fontWeight:600,margin:"0 0 6px",color:mode==="edit"?S.pri:S.acc}}>{mode==="edit"?"✏️ Editar Contato":"+ Novo Contato"}</p>
-      <LB t="NOME *"><input value={n} onChange={x=>setN(x.target.value)} style={{width:"100%"}}/></LB>
+      <LB t="NOME *"><input value={n} onChange={x=>setN(x.target.value)} style={{width:"100%",border:`1px solid ${n.trim()?S.brd:S.dng}`}}/></LB>
       <LB t="CARGO"><select value={cargo} onChange={x=>setCargo(x.target.value)} style={{width:"100%",fontSize:12}}><option value="">Selecione...</option>{CARGOS.map(c=><option key={c} value={c}>{c}</option>)}</select></LB>
-      <LB t="E-MAIL"><input value={e} onChange={x=>setE(x.target.value)} type="email" style={{width:"100%"}}/></LB>
+      <LB t="E-MAIL *"><input value={e} onChange={x=>setE(x.target.value)} type="email" style={{width:"100%",border:`1px solid ${e.trim()?S.brd:S.dng}`}} placeholder="Obrigatório"/></LB>
       <LB t="TELEFONE"><input value={p} onChange={x=>setP(x.target.value)} style={{width:"100%"}}/></LB>
-      <LB t="WHATSAPP"><input value={w} onChange={x=>setW(x.target.value)} style={{width:"100%"}}/></LB>
-      <div style={{display:"flex",gap:8}}><button onClick={clear} style={{flex:1}}>Cancelar</button><button onClick={save} disabled={saving||!n.trim()} style={{flex:1,background:mode==="edit"?S.pri:S.acc,border:"none",fontWeight:600}}>{saving?"...":(mode==="edit"?"Atualizar no Agendor":"Salvar no Agendor")}</button></div>
+      <LB t="WHATSAPP *"><input value={w} onChange={x=>setW(x.target.value)} style={{width:"100%",border:`1px solid ${w.trim()?S.brd:S.dng}`}} placeholder="Obrigatório"/></LB>
+      <div style={{display:"flex",gap:8}}><button onClick={clear} style={{flex:1}}>Cancelar</button><button onClick={save} disabled={saving||!canSave} style={{flex:1,background:canSave?(mode==="edit"?S.pri:S.acc):S.cl,border:"none",fontWeight:600}}>{saving?"...":(mode==="edit"?"Atualizar no Agendor":"Salvar no Agendor")}</button></div>
     </div>}
     <button onClick={onClose} style={{width:"100%",marginTop:8}}>Fechar</button>
   </div></div>);}
@@ -349,7 +351,10 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const repUserId=selUser==="me"?user.id:otherId;
   const repUserName=selUser==="me"?user.name:(USERS.find(u=>u.id===otherId)?.n||"Alisson");
   const loadRemote=async()=>{setRLo(true);try{
-    let pg=1,allT=[];while(true){const d=await agF(`/tasks?createdDateGt=${sd}T00:00:00Z&per_page=100&page=${pg}`,token);if(!d.data?.length)break;allT.push(...d.data);if(d.data.length<100)break;pg++;}
+    // Use 30-day windows from sd to today (API max 31 days)
+    let allT=[];const start=new Date(sd+"T00:00:00Z");const end=new Date();
+    for(let d=new Date(start);d<end;){const win=new Date(d);win.setDate(win.getDate()+30);const to=win>end?end:win;
+      let pg=1;while(true){const r=await agF(`/tasks?createdDateGt=${d.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,token);if(!r.data?.length)break;allT.push(...r.data);if(r.data.length<100)break;pg++;}d=to;}
     const tasks=allT.filter(t=>t.user?.id===otherId&&(t.type==="Visita"||t.type==="VISITA"))
       .map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",userName:t.user?.name||"",taskType:"VISITA"}));
     setRemoteVisits(tasks);
@@ -538,14 +543,15 @@ function EquipeTab({token,plocs,orgs}){
 function AgendaTab({token,user}){
   const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(true);const[err,setErr]=useState("");const isAdmin=user?.id===743088;
   const load=async()=>{setLo(true);setErr("");try{
-    // Agendor exige createdDateGt — buscar últimos 180 dias
-    const since=new Date();since.setDate(since.getDate()-180);
-    let pg=1,all=[];while(true){setErr(`Buscando página ${pg}...`);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100&page=${pg}`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}
-    // Filter: pending only (done !== true), admin sees all users
-    const pending=all.filter(t=>!t.done).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt,userName:t.user?.name||"?",userId:t.user?.id}));
+    // Agendor limita createdDateGt a 31 dias — buscar em janelas de 30 dias (6 meses)
+    let allTasks=[];const now=new Date();
+    for(let w=0;w<6;w++){const from=new Date(now);from.setDate(from.getDate()-30*(w+1));const to=new Date(now);to.setDate(to.getDate()-30*w);
+      setErr(`Buscando ${w*30}-${(w+1)*30} dias...`);
+      let pg=1;while(true){const d=await agF(`/tasks?createdDateGt=${from.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,token);if(!d.data?.length)break;allTasks.push(...d.data);if(d.data.length<100)break;pg++;}}
+    const pending=allTasks.filter(t=>!t.done).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt,userName:t.user?.name||"?",userId:t.user?.id}));
     const filtered=isAdmin?pending:pending.filter(t=>t.userId===user.id);
     filtered.sort((a,b)=>(a.due||"9").localeCompare(b.due||"9"));
-    setTasks(filtered);setErr(`${filtered.length} pendentes de ${all.length} tasks`);
+    setTasks(filtered);setErr(`${filtered.length} pendentes de ${allTasks.length} tasks`);
   }catch(e){console.warn("agenda:",e);setErr("Erro: "+e.message);}setLo(false);};
   useEffect(()=>{load();},[]);
   const markDone=async(t)=>{if(!confirm(`Concluir "${t.text.slice(0,40)}..."?`))return;try{await agF(`/organizations/${t.orgId}/tasks/${t.id}`,token,{method:"PUT",body:JSON.stringify({done:true,text:t.text})});setTasks(prev=>prev.filter(x=>x.id!==t.id));setErr(`Concluída! ${tasks.length-1} restantes`);}catch(e){console.warn("markDone:",e);alert("Erro ao concluir: "+e.message);}};
@@ -607,7 +613,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v10.3</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v10.4</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -669,66 +675,48 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
 
 // ─── SearchOrAddModal: CNPJ first, then register if not found ───
 function SearchOrAddModal({token,allOrgs,onFound,onNewClient,onCancel}){
-  const[q,setQ]=useState("");const[lo,setLo]=useState(false);const[result,setResult]=useState(null);const[err,setErr]=useState("");const[step,setStep]=useState("search");
+  const[q,setQ]=useState("");const[lo,setLo]=useState(false);const[results,setResults]=useState([]);const[selected,setSelected]=useState(null);const[err,setErr]=useState("");const[step,setStep]=useState("search");
   const[people,setPeople]=useState([]);const[pLo,setPLo]=useState(false);const[showPeople,setShowPeople]=useState(false);
   const[addP,setAddP]=useState(false);const[pName,setPName]=useState("");const[pCargo,setPCargo]=useState("");const[pEmail,setPEmail]=useState("");const[pPhone,setPPhone]=useState("");const[pWhats,setPWhats]=useState("");
-  const search=async()=>{if(!q.trim()){setErr("Digite CNPJ ou nome");return;}setLo(true);setErr("");setResult(null);
+  const search=()=>{if(!q.trim()){setErr("Digite CNPJ, nome ou razão social");return;}setLo(true);setErr("");setResults([]);setSelected(null);
     const clean=q.replace(/[.\-\/]/g,"").toLowerCase();
-    const found=allOrgs.find(o=>o.cnpj?.replace(/[.\-\/]/g,"")===clean)||allOrgs.find(o=>(o.name||"").toLowerCase().includes(clean)||(o.nickname||"").toLowerCase().includes(clean));
-    if(found){setResult(found);setStep("found");setLo(false);return;}
-    if(clean.length===14){try{const rf=await fetchCNPJ(clean);setResult({rfData:rf,name:rf.nome_fantasia||rf.razao_social||"",cnpj:clean});setStep("notfound_rf");setLo(false);return;}catch(e){console.warn("sync:",e);}}
+    const matches=allOrgs.filter(o=>{if(o.cnpj?.replace(/[.\-\/]/g,"")===clean)return true;return[o.name,o.nickname,o.legalName].filter(Boolean).some(f=>f.toLowerCase().includes(clean));}).slice(0,30);
+    if(matches.length){setResults(matches);setStep("list");setLo(false);return;}
+    if(clean.length===14){setLo(true);fetchCNPJ(clean).then(rf=>{setSelected({rfData:rf,name:rf.nome_fantasia||rf.razao_social||"",cnpj:clean});setStep("notfound_rf");setLo(false);}).catch(()=>{setStep("notfound");setLo(false);});return;}
     setStep("notfound");setLo(false);};
-  const loadPeople=async(orgId)=>{setPLo(true);try{const d=await agF(`/organizations/${orgId}/people?per_page=50`,token);setPeople(d.data||[]);}catch{setPeople([]);}setPLo(false);setShowPeople(true);};
-  const addPerson=async()=>{if(!pName.trim()||!result?.id)return;setPLo(true);try{await agF("/people",token,{method:"POST",body:JSON.stringify({name:pName,organization:result.id,role:pCargo||undefined,contact:{...(pEmail?{email:pEmail}:{}),...(pPhone?{mobile:pPhone}:{}),...(pWhats?{whatsapp:pWhats}:{})}})});await loadPeople(result.id);setAddP(false);setPName("");setPCargo("");setPEmail("");setPPhone("");setPWhats("");}catch(e){alert("Erro: "+e.message);}setPLo(false);};
-  const catColor=CC[result?.cat]||S.ts;const isExcluido=result?.cat==="Excluido";
+  const selectClient=(org)=>{setSelected(org);setStep("found");};
+  const loadPeople=async(orgId)=>{setPLo(true);try{const d=await agF(`/organizations/${orgId}/people?per_page=50`,token);setPeople(d.data||[]);}catch(e){console.warn("people:",e);setPeople([]);}setPLo(false);setShowPeople(true);};
+  const pCanSave=pName.trim()&&pEmail.trim()&&pWhats.trim();
+  const addPerson=async()=>{if(!pCanSave||!selected?.id)return;setPLo(true);try{const ct={};if(pEmail.trim())ct.email=pEmail.trim();if(pPhone.trim())ct.mobile=pPhone.trim();if(pWhats.trim())ct.whatsapp=pWhats.trim();await agF("/people",token,{method:"POST",body:JSON.stringify({name:pName,organization:selected.id,...(pCargo?{role:pCargo}:{}),contact:ct})});await loadPeople(selected.id);setAddP(false);setPName("");setPCargo("");setPEmail("");setPPhone("");setPWhats("");}catch(e){alert("Erro: "+e.message);}setPLo(false);};
+  const catColor=CC[selected?.cat]||S.ts;const isExcluido=selected?.cat==="Excluido";
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
     {step==="search"&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Buscar / Cadastrar Cliente</p>
-      <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Digite CNPJ ou nome</p>
-      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="CNPJ ou nome do cliente" style={{width:"100%",marginBottom:8,fontSize:14}} onKeyDown={e=>e.key==="Enter"&&search()} autoFocus/>
+      <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>CNPJ, nome fantasia ou razão social</p>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Ex: Compacta, Tropical, Bom Jesus..." style={{width:"100%",marginBottom:8,fontSize:14}} onKeyDown={e=>e.key==="Enter"&&search()} autoFocus/>
       {err&&<p style={{fontSize:12,color:S.dng,margin:"0 0 6px"}}>{err}</p>}
-      <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={search} disabled={lo||!q.trim()} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"🔍 Buscando...":"Buscar"}</button></div></>}
-    {step==="found"&&result&&!showPeople&&<>
-      <p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:isExcluido?S.gold:S.ok}}>{isExcluido?"📋 Cadastro encontrado":"✅ Cliente encontrado!"}</p>
-      <div style={{background:S.cl,borderRadius:10,padding:12,margin:"8px 0 12px"}}>
-        <p style={{fontSize:14,fontWeight:600,margin:"0 0 2px"}}>{result.name||result.nickname}</p>
-        {result.cnpj&&<p style={{fontSize:11,color:S.ts,margin:"0 0 2px"}}>{result.cnpj}</p>}
-        <div style={{display:"flex",gap:4,alignItems:"center",marginTop:4}}><span style={{fontSize:10,color:"#fff",background:catColor,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{result.cat||"?"}</span><span style={{fontSize:11,color:S.ts}}>{result.addr?.city_name||result.addr?.city||""}</span></div>
-        {result.owner&&<p style={{fontSize:10,color:S.ts,margin:"4px 0 0"}}>Responsável: {result.owner}</p>}
-      </div>
+      <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={search} disabled={lo||!q.trim()} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"🔍...":"Buscar"}</button></div></>}
+    {step==="list"&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>{results.length} cliente(s) encontrado(s)</p>
+      <p style={{fontSize:12,color:S.ts,margin:"0 0 8px"}}>"{q}"</p>
+      <div style={{maxHeight:"55vh",overflowY:"auto",marginBottom:8}}>{results.map(o=><div key={o.id} onClick={()=>selectClient(o)} style={{background:S.cl,borderRadius:8,padding:"10px 12px",marginBottom:4,cursor:"pointer",border:`1px solid ${S.brd}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><p style={{fontSize:13,fontWeight:500,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{o.name||o.nickname}</p><span style={{fontSize:9,color:"#fff",background:CC[o.cat]||S.ts,padding:"2px 6px",borderRadius:4,flexShrink:0}}>{o.cat}</span></div>
+        {o.legalName&&o.legalName!==o.name&&<p style={{fontSize:10,color:S.ts,margin:"2px 0 0"}}>{o.legalName}</p>}
+        <p style={{fontSize:10,color:S.td,margin:"1px 0 0"}}>{o.cnpj||""}{o.addr?.city_name||o.addr?.city?` · ${o.addr.city_name||o.addr.city}`:""}{o.owner?` · ${o.owner}`:""}</p>
+      </div>)}</div>
+      <div style={{display:"flex",gap:8}}><button onClick={()=>{setStep("search");setResults([]);}} style={{flex:1}}>← Voltar</button><button onClick={onCancel} style={{flex:1}}>Fechar</button></div></>}
+    {step==="found"&&selected&&!showPeople&&<>
+      <p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:isExcluido?S.gold:S.ok}}>{isExcluido?"📋 Cadastro encontrado":"✅ Cliente selecionado"}</p>
+      <div style={{background:S.cl,borderRadius:10,padding:12,margin:"8px 0 12px"}}><p style={{fontSize:14,fontWeight:600,margin:"0 0 2px"}}>{selected.name||selected.nickname}</p>{selected.legalName&&selected.legalName!==selected.name&&<p style={{fontSize:11,color:S.ts,margin:"0 0 2px"}}>{selected.legalName}</p>}{selected.cnpj&&<p style={{fontSize:11,color:S.ts,margin:"0 0 2px"}}>{selected.cnpj}</p>}<div style={{display:"flex",gap:4,alignItems:"center",marginTop:4}}><span style={{fontSize:10,color:"#fff",background:catColor,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{selected.cat||"?"}</span><span style={{fontSize:11,color:S.ts}}>{selected.addr?.city_name||selected.addr?.city||""}</span></div>{selected.owner&&<p style={{fontSize:10,color:S.ts,margin:"4px 0 0"}}>Responsável: {selected.owner}</p>}</div>
       <p style={{fontSize:12,color:S.gold,fontWeight:500,margin:"0 0 8px"}}>Tipo de atendimento:</p>
-      <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:12}}>{TYPES.map(t=><button key={t.id} onClick={()=>{const note=prompt(`${t.l} com ${result.name}:`);if(note?.trim()){postTask(token,result.id,note,t.id,true).then(()=>alert("Registrado no Agendor!")).catch(e=>alert("Erro: "+e.message));onCancel();}}} style={{padding:10,textAlign:"left",fontSize:12,background:S.bg,border:`1px solid ${S.brd}`,borderRadius:8}}>{t.id==="VISITA"?"📍":t.id==="WHATSAPP"?"💬":t.id==="LIGACAO"?"📞":t.id==="EMAIL"?"📧":t.id==="REUNIAO"?"🤝":"📄"} {t.l}</button>)}</div>
-      <button onClick={()=>loadPeople(result.id)} style={{width:"100%",marginBottom:8,padding:10,fontSize:12,background:S.pri+"22",border:`1px solid ${S.pri}`,color:S.pri,fontWeight:500}}>{pLo?"Carregando...":"👤 Ver / Adicionar Contatos"}</button>
-      <div style={{display:"flex",gap:8}}><button onClick={()=>{setStep("search");setResult(null);setShowPeople(false);}} style={{flex:1}}>Voltar</button>{!isExcluido&&<button onClick={()=>{onFound(result);onCancel();}} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Ir ao cliente</button>}{isExcluido&&<button onClick={onCancel} style={{flex:1}}>Fechar</button>}</div></>}
-    {step==="found"&&showPeople&&<>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><p style={{fontWeight:600,fontSize:14,margin:0}}>👤 Contatos — {result?.name}</p><button onClick={()=>setShowPeople(false)} style={{fontSize:10,padding:"4px 10px"}}>← Voltar</button></div>
-      {people.length===0&&!pLo&&<p style={{fontSize:12,color:S.ts,padding:"1rem 0",textAlign:"center"}}>Nenhum contato cadastrado</p>}
-      {people.map(p=><div key={p.id} style={{background:S.cl,borderRadius:8,padding:10,marginBottom:6}}>
-        <p style={{fontSize:13,fontWeight:600,margin:"0 0 2px"}}>{p.name}</p>
-        {p.role&&<p style={{fontSize:10,color:S.acc,margin:"0 0 2px"}}>{p.role}</p>}
-        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:2}}>
-          {p.contact?.email&&<span style={{fontSize:10,color:S.ts}}>📧 {p.contact.email}</span>}
-          {p.contact?.mobile&&<span style={{fontSize:10,color:S.ts}}>📱 {p.contact.mobile}</span>}
-          {p.contact?.whatsapp&&<a href={`https://wa.me/55${p.contact.whatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{fontSize:10,color:S.ok,textDecoration:"none"}}>💬 WhatsApp</a>}
-        </div>
-      </div>)}
+      <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:12}}>{TYPES.map(t=><button key={t.id} onClick={()=>{const note=prompt(`${t.l} com ${selected.name}:`);if(note?.trim()){postTask(token,selected.id,note,t.id,true).then(()=>alert("Registrado!")).catch(e=>alert("Erro: "+e.message));onCancel();}}} style={{padding:10,textAlign:"left",fontSize:12,background:S.bg,border:`1px solid ${S.brd}`,borderRadius:8}}>{t.id==="VISITA"?"📍":t.id==="WHATSAPP"?"💬":t.id==="LIGACAO"?"📞":t.id==="EMAIL"?"📧":t.id==="REUNIAO"?"🤝":"📄"} {t.l}</button>)}</div>
+      <button onClick={()=>loadPeople(selected.id)} style={{width:"100%",marginBottom:8,padding:10,fontSize:12,background:S.pri+"22",border:`1px solid ${S.pri}`,color:S.pri,fontWeight:500}}>{pLo?"...":"👤 Ver / Adicionar Contatos"}</button>
+      <div style={{display:"flex",gap:8}}><button onClick={()=>{setStep("list");setSelected(null);setShowPeople(false);}} style={{flex:1}}>← Voltar</button>{!isExcluido&&<button onClick={()=>{onFound(selected);onCancel();}} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Ir ao cliente</button>}{isExcluido&&<button onClick={onCancel} style={{flex:1}}>Fechar</button>}</div></>}
+    {step==="found"&&showPeople&&<><div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><p style={{fontWeight:600,fontSize:14,margin:0}}>👤 Contatos</p><button onClick={()=>setShowPeople(false)} style={{fontSize:10,padding:"4px 10px"}}>← Voltar</button></div>
+      {people.length===0&&!pLo&&<p style={{fontSize:12,color:S.ts,textAlign:"center",padding:"1rem 0"}}>Nenhum contato</p>}
+      {people.map(p=><div key={p.id} style={{background:S.cl,borderRadius:8,padding:10,marginBottom:6}}><p style={{fontSize:13,fontWeight:600,margin:"0 0 2px"}}>{p.name}</p>{p.role&&<p style={{fontSize:10,color:S.acc,margin:"0 0 2px"}}>{p.role}</p>}<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{p.contact?.email&&<span style={{fontSize:10,color:S.ts}}>📧 {p.contact.email}</span>}{p.contact?.mobile&&<span style={{fontSize:10,color:S.ts}}>📱 {p.contact.mobile}</span>}{p.contact?.whatsapp&&<a href={`https://wa.me/55${p.contact.whatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{fontSize:10,color:S.ok,textDecoration:"none"}}>💬 {p.contact.whatsapp}</a>}</div></div>)}
       {!addP&&<button onClick={()=>setAddP(true)} style={{width:"100%",padding:10,fontSize:12,background:S.acc,border:"none",fontWeight:600,marginTop:4}}>+ Adicionar Contato</button>}
-      {addP&&<div style={{background:S.cl,borderRadius:8,padding:10,marginTop:6}}>
-        <p style={{fontSize:12,fontWeight:500,margin:"0 0 6px"}}>Novo Contato</p>
-        <input value={pName} onChange={e=>setPName(e.target.value)} placeholder="Nome *" style={{width:"100%",marginBottom:4,fontSize:12}}/>
-        <select value={pCargo} onChange={e=>setPCargo(e.target.value)} style={{width:"100%",marginBottom:4,fontSize:12}}><option value="">Cargo...</option>{CARGOS.map(c=><option key={c} value={c}>{c}</option>)}</select>
-        <input value={pEmail} onChange={e=>setPEmail(e.target.value)} placeholder="E-mail" type="email" style={{width:"100%",marginBottom:4,fontSize:12}}/>
-        <input value={pPhone} onChange={e=>setPPhone(e.target.value)} placeholder="Telefone" style={{width:"100%",marginBottom:4,fontSize:12}}/>
-        <input value={pWhats} onChange={e=>setPWhats(e.target.value)} placeholder="WhatsApp" style={{width:"100%",marginBottom:6,fontSize:12}}/>
-        <div style={{display:"flex",gap:6}}><button onClick={()=>setAddP(false)} style={{flex:1,fontSize:11}}>Cancelar</button><button onClick={addPerson} disabled={pLo||!pName.trim()} style={{flex:1,fontSize:11,background:S.acc,border:"none",fontWeight:600}}>{pLo?"...":"Salvar no Agendor"}</button></div>
-      </div>}</>}
-    {(step==="notfound"||step==="notfound_rf")&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:S.gold}}>Cliente não encontrado</p>
-      <p style={{fontSize:12,color:S.ts,margin:"0 0 8px"}}>{q} não esta cadastrado no Agendor</p>
-      {step==="notfound_rf"&&result?.rfData&&<div style={{background:S.cl,borderRadius:10,padding:10,margin:"0 0 8px"}}><p style={{fontSize:11,color:S.acc,margin:"0 0 2px"}}>Dados da Receita Federal:</p><p style={{fontSize:12,fontWeight:500,margin:"0 0 1px"}}>{result.rfData.nome_fantasia||"-"}</p><p style={{fontSize:11,color:S.ts,margin:0}}>{result.rfData.razao_social||""}</p><p style={{fontSize:10,color:S.ts,margin:0}}>{result.rfData.municipio||""}/{result.rfData.uf||""}</p></div>}
-      <div style={{display:"flex",gap:8}}><button onClick={()=>{setStep("search");setResult(null);}} style={{flex:1}}>Voltar</button><button onClick={()=>{onNewClient(q.replace(/[.\-\/]/g,""),result?.rfData||null);onCancel();}} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Cadastrar Novo</button></div></>}
+      {addP&&<div style={{background:S.cl,borderRadius:8,padding:10,marginTop:6}}><input value={pName} onChange={e=>setPName(e.target.value)} placeholder="Nome *" style={{width:"100%",marginBottom:4,fontSize:12,border:`1px solid ${pName.trim()?S.brd:S.dng}`}}/><select value={pCargo} onChange={e=>setPCargo(e.target.value)} style={{width:"100%",marginBottom:4,fontSize:12}}><option value="">Cargo...</option>{CARGOS.map(c=><option key={c} value={c}>{c}</option>)}</select><input value={pEmail} onChange={e=>setPEmail(e.target.value)} placeholder="E-mail *" type="email" style={{width:"100%",marginBottom:4,fontSize:12,border:`1px solid ${pEmail.trim()?S.brd:S.dng}`}}/><input value={pPhone} onChange={e=>setPPhone(e.target.value)} placeholder="Telefone" style={{width:"100%",marginBottom:4,fontSize:12}}/><input value={pWhats} onChange={e=>setPWhats(e.target.value)} placeholder="WhatsApp *" style={{width:"100%",marginBottom:6,fontSize:12,border:`1px solid ${pWhats.trim()?S.brd:S.dng}`}}/><div style={{display:"flex",gap:6}}><button onClick={()=>setAddP(false)} style={{flex:1,fontSize:11}}>Cancelar</button><button onClick={addPerson} disabled={pLo||!pCanSave} style={{flex:1,fontSize:11,background:pCanSave?S.acc:S.cl,border:"none",fontWeight:600}}>{pLo?"...":"Salvar"}</button></div></div>}</>}
+    {(step==="notfound"||step==="notfound_rf")&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:S.gold}}>Cliente não encontrado</p><p style={{fontSize:12,color:S.ts,margin:"0 0 8px"}}>{q} não cadastrado no Agendor</p>{step==="notfound_rf"&&selected?.rfData&&<div style={{background:S.cl,borderRadius:10,padding:10,margin:"0 0 8px"}}><p style={{fontSize:11,color:S.acc,margin:"0 0 2px"}}>Receita Federal:</p><p style={{fontSize:12,fontWeight:500,margin:"0 0 1px"}}>{selected.rfData.nome_fantasia||"-"}</p><p style={{fontSize:11,color:S.ts,margin:0}}>{selected.rfData.razao_social||""}</p><p style={{fontSize:10,color:S.ts,margin:0}}>{selected.rfData.municipio||""}/{selected.rfData.uf||""}</p></div>}<div style={{display:"flex",gap:8}}><button onClick={()=>{setStep("search");setSelected(null);}} style={{flex:1}}>Voltar</button><button onClick={()=>{onNewClient(q.replace(/[.\-\/]/g,""),selected?.rfData||null);onCancel();}} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Cadastrar Novo</button></div></>}
   </div></div>);}
-// ═══════════════════════════════════════════════════════════════
-// MAIN APP
-// ═══════════════════════════════════════════════════════════════
 export default function App(){
   const[token,setToken]=useState(()=>sL("jc:token",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);
   const[visits,setVisits]=useState(()=>{const raw=sL("jc:visits",[]);const cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);const cut=cutoff.toISOString();const purged=raw.filter(v=>!v.checkinTime||v.checkinTime>=cut);if(purged.length<raw.length)console.log(`Purged ${raw.length-purged.length} visits >90d`);return purged;});const[active,setActive]=useState(()=>sL("jc:active",null));
@@ -799,7 +787,11 @@ export default function App(){
 
   const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data.map(strip));if(d.data.length<100)break;pg++;}setAllOrgs(all);setOrgs(all);setSyncMsg(`${all.length}`);}catch(e){setSyncMsg("Erro");}setSyncing(false);};
 
-  const loadHistory=async()=>{setSyncMsg("Carregando historico...");try{const since=new Date();since.setDate(since.getDate()-90);let pg=1,allTasks=[];while(true){setSyncMsg(`${allTasks.length} atividades...`);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100&page=${pg}`,token);if(!d.data?.length)break;allTasks.push(...d.data);if(d.data.length<100)break;pg++;}const remote=allTasks.filter(t=>t.type==="Visita"&&t.done).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));const existing=new Set(visits.map(v=>v.orgId+"|"+v.userName+"|"+v.checkinTime?.slice(0,16)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+r.userName+"|"+r.checkinTime?.slice(0,16)));if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas (${allTasks.length} tasks)`);}else setSyncMsg(`Atualizado (${allTasks.length} tasks)`);}catch(e){setSyncMsg("Erro: "+e.message);}};
+  const loadHistory=async()=>{setSyncMsg("Carregando historico...");try{const now=new Date();let allTasks=[];
+    for(let w=0;w<3;w++){const from=new Date(now);from.setDate(from.getDate()-30*(w+1));const to=new Date(now);to.setDate(to.getDate()-30*w);
+      setSyncMsg(`${allTasks.length} atividades (${w*30}-${(w+1)*30}d)...`);
+      let pg=1;while(true){const d=await agF(`/tasks?createdDateGt=${from.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,token);if(!d.data?.length)break;allTasks.push(...d.data);if(d.data.length<100)break;pg++;}}
+    const remote=allTasks.filter(t=>t.type==="Visita"&&t.done).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));const existing=new Set(visits.map(v=>v.orgId+"|"+v.userName+"|"+v.checkinTime?.slice(0,16)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+r.userName+"|"+r.checkinTime?.slice(0,16)));if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas (${allTasks.length} tasks)`);}else setSyncMsg(`Atualizado (${allTasks.length} tasks)`);}catch(e){setSyncMsg("Erro: "+e.message);}};
 
   const ensureBase=()=>{const t=todayLocal();if(!dayBases[t]||(!dayBases[t].start&&!dayBases[t].lat))setShowDB(true);};
   const cities=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const c=o.addr?.city_name||o.addr?.city;if(c)s.add(c);});return["Todas",...[...s].sort()];},[orgs]);
