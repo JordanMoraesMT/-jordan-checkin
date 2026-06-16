@@ -555,7 +555,8 @@ function AgendaTab({token,user,allOrgs}){
       setErr(`${all.length} tasks (${w*30}d)...`);
       let pg=1;while(true){const d=await agF(`/tasks?createdDateGt=${from.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}}
     // ONLY tasks with due_date (tarefas agendadas), NOT activities (logs without schedule)
-    const mapped=all.filter(t=>t.due_date||t.dueDate).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt,done:!!t.done,finished:t.finishedAt||null,userName:t.user?.name||"?",userId:t.user?.id}));
+    // done field is ALWAYS null in Agendor API — use finishedAt to determine completion
+    const mapped=all.filter(t=>t.due_date||t.dueDate).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt,done:!!(t.finishedAt||t.done),finished:t.finishedAt||null,userName:t.user?.name||"?",userId:t.user?.id}));
     setTasks(mapped);setErr(`${mapped.length} tarefas de ${all.length} registros`);
   }catch(e){console.warn("agenda:",e);setErr("Erro: "+e.message);}setLo(false);};
   useEffect(()=>{load();},[]);
@@ -800,7 +801,7 @@ export default function App(){
     // Check pending tasks every 5 min
     const checkTasks=async()=>{if(!("Notification"in window)||Notification.permission!=="granted")return;
       try{const since=new Date();since.setDate(since.getDate()-30);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100`,token);const now=new Date();const soon=new Date(now.getTime()+15*60000);// 15 min ahead
-        (d.data||[]).filter(t=>!t.done&&t.user?.id===user.id&&t.due_date).forEach(t=>{
+        (d.data||[]).filter(t=>!t.finishedAt&&!t.done&&t.user?.id===user.id&&t.due_date).forEach(t=>{
           const due=new Date(t.due_date);const key=t.id+"|"+t.due_date;
           if(due>=now&&due<=soon&&!notifiedRef.has(key)){notifiedRef.add(key);
             new Notification("📅 Jordan Check-in",{body:`${t.type||"Tarefa"}: ${t.organization?.name||"?"}\n${t.text?.slice(0,60)||""}`,icon:"/logo.png",tag:key,requireInteraction:true});}
