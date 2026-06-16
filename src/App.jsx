@@ -162,9 +162,11 @@ function EditModal({org,token,users,onSave,onClose}){const[name,setName]=useStat
 
 // ─── JourneyModal: INÍCIO da jornada — origem E destino ───
 function JourneyModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[orig,setOrig]=useState("home");const[dest,setDest]=useState("home");const[lo,setLo]=useState(false);const[origName,setOrigName]=useState("");const[destName,setDestName]=useState("");
+  const[destGps,setDestGps]=useState(null);const[gpsLo2,setGpsLo2]=useState(false);
+  const captureDest=async()=>{setGpsLo2(true);try{const g=await gps();setDestGps(g);}catch{alert("GPS indisponivel");}setGpsLo2(false);};
   const go=async()=>{setLo(true);let startBase,endBase;
     if(orig==="home"&&home){startBase={type:"home",...home};}else{try{const g=await gps();startBase={type:"hotel",lat:g.lat,lng:g.lng,label:origName||"Hotel"};}catch{alert("GPS indisponivel para origem.");setLo(false);return;}}
-    if(dest==="home"&&home){endBase={type:"home",...home};}else{endBase={type:"hotel",lat:null,lng:null,label:destName||"Hotel (GPS ao fechar)"};}
+    if(dest==="home"&&home){endBase={type:"home",...home};}else{endBase={type:"hotel",lat:destGps?.lat||null,lng:destGps?.lng||null,label:destName||"Hotel (GPS ao fechar)"};}
     onSave({start:startBase,end:endBase});setLo(false);};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Jornada de Trabalho</p>
@@ -174,13 +176,32 @@ function JourneyModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[o
     <div style={{borderTop:`1px solid ${S.brd}`,margin:"10px 0",paddingTop:10}}>
     <p style={{fontSize:12,color:S.gold,fontWeight:600,margin:"0 0 6px"}}>PARA ONDE VAI NO FINAL DO DIA?</p>
     {["home","hotel"].map(t=><label key={"d"+t} style={{display:"flex",alignItems:"center",gap:10,padding:10,border:`${dest===t?2:1}px solid ${dest===t?S.gold:S.brd}`,borderRadius:10,marginBottom:6,cursor:"pointer",background:dest===t?S.cl:S.bg}}><input type="radio" checked={dest===t} onChange={()=>setDest(t)}/><span style={{fontSize:13,fontWeight:500}}>{t==="home"?"🏠 Voltar para casa":"🏨 Hotel / Airbnb"}</span></label>)}
-    {dest==="hotel"&&<input value={destName} onChange={e=>setDestName(e.target.value)} placeholder="Nome do hotel / cidade destino" style={{width:"100%",marginBottom:8,fontSize:12}}/>}
+    {dest==="hotel"&&<><input value={destName} onChange={e=>setDestName(e.target.value)} placeholder="Nome do hotel / cidade destino" style={{width:"100%",marginBottom:4,fontSize:12}}/>
+      <button onClick={captureDest} disabled={gpsLo2} style={{width:"100%",padding:8,fontSize:11,background:destGps?S.ok+"22":S.gold+"22",border:`1px solid ${destGps?S.ok:S.gold}`,color:destGps?S.ok:S.gold}}>
+        {gpsLo2?"📍 Capturando...":(destGps?`✅ GPS: ${destGps.lat.toFixed(4)}, ${destGps.lng.toFixed(4)}`:"📍 Já estou no hotel (capturar GPS)")}
+      </button></>}
     </div>
     <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={onCancel} style={{flex:1}}>Depois</button><button onClick={go} disabled={lo} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"📍 GPS...":"Iniciar Jornada"}</button></div>
   </div></div>);}
 
-// ─── DayEndModal: FECHAMENTO do roteiro (para onde vai) ───
-function DayEndModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[tp,setTp]=useState("home");const[lo,setLo]=useState(false);const[hn,setHn]=useState("");const go=async()=>{if(tp==="home"&&home){onSave({type:"home",...home});return;}setLo(true);try{const g=await gps();onSave({type:tp,lat:g.lat,lng:g.lng,label:hn||"Hotel/Airbnb"});}catch{alert("GPS indisponivel. Ative a localização.");}setLo(false);};return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:400}}><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Fechar roteiro do dia</p><p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Para onde esta indo agora?</p>{["home","hotel"].map(t=><label key={t} style={{display:"flex",alignItems:"center",gap:10,padding:12,border:`${tp===t?2:1}px solid ${tp===t?S.pri:S.brd}`,borderRadius:10,marginBottom:8,cursor:"pointer",background:tp===t?S.cl:S.bg}}><input type="radio" checked={tp===t} onChange={()=>setTp(t)}/><span style={{fontWeight:500}}>{t==="home"?"🏠 Voltando para casa":"🏨 Hotel / Airbnb"}</span></label>)}{tp==="hotel"&&<input value={hn} onChange={e=>setHn(e.target.value)} placeholder="Nome do hotel / cidade" style={{width:"100%",marginBottom:8}}/>}<div style={{display:"flex",gap:8,marginTop:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={go} disabled={lo} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>{lo?"📍 Capturando GPS...":"Fechar Roteiro"}</button></div></div></div>);}
+// ─── DayEndModal: FECHAMENTO do roteiro — GPS ao chegar no hotel ───
+function DayEndModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[tp,setTp]=useState("home");const[lo,setLo]=useState(false);const[hn,setHn]=useState("");const[hotelGps,setHotelGps]=useState(null);
+  const captureHotelGps=async()=>{setLo(true);try{const g=await gps();setHotelGps(g);}catch{alert("GPS indisponivel. Ative a localização.");}setLo(false);};
+  const go=()=>{if(tp==="home"&&home){onSave({type:"home",...home});return;}
+    if(!hotelGps){alert("Capture o GPS do hotel primeiro.");return;}
+    onSave({type:"hotel",lat:hotelGps.lat,lng:hotelGps.lng,label:hn||"Hotel/Airbnb"});};
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:400}}>
+    <p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Fechar roteiro do dia</p>
+    <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Para onde esta indo agora?</p>
+    {["home","hotel"].map(t=><label key={t} style={{display:"flex",alignItems:"center",gap:10,padding:12,border:`${tp===t?2:1}px solid ${tp===t?S.pri:S.brd}`,borderRadius:10,marginBottom:8,cursor:"pointer",background:tp===t?S.cl:S.bg}}><input type="radio" checked={tp===t} onChange={()=>setTp(t)}/><span style={{fontWeight:500}}>{t==="home"?"🏠 Voltando para casa":"🏨 Hotel / Airbnb"}</span></label>)}
+    {tp==="hotel"&&<>
+      <input value={hn} onChange={e=>setHn(e.target.value)} placeholder="Nome do hotel / cidade" style={{width:"100%",marginBottom:8}}/>
+      <button onClick={captureHotelGps} disabled={lo} style={{width:"100%",padding:10,marginBottom:8,fontSize:12,background:hotelGps?S.ok+"22":S.gold+"22",border:`1px solid ${hotelGps?S.ok:S.gold}`,color:hotelGps?S.ok:S.gold,fontWeight:500}}>
+        {lo?"📍 Capturando GPS...":(hotelGps?`✅ GPS capturado: ${hotelGps.lat.toFixed(4)}, ${hotelGps.lng.toFixed(4)}`:"📍 Capturar GPS do local de repouso")}
+      </button>
+    </>}
+    <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={go} disabled={tp==="hotel"&&!hotelGps} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Fechar Roteiro</button></div>
+  </div></div>);}
 
 function DivergentModal({org,dist,onAction,onCancel}){return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:400}}><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:S.gold}}>Local divergente</p><p style={{fontSize:13,color:S.ts,margin:"0 0 4px"}}>{org.name}</p><p style={{fontSize:12,color:S.gold,margin:"0 0 16px"}}>Voce esta a {dist}m do cadastrado</p><div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}><button onClick={()=>onAction("checkin")} style={{padding:12,textAlign:"left",fontWeight:500}}>📍 Visita presencial</button>{TYPES.filter(t=>t.id!=="VISITA").map(t=><button key={t.id} onClick={()=>onAction("remote",t.id)} style={{padding:12,textAlign:"left"}}>{t.l} (sem check-in)</button>)}<button onClick={()=>onAction("schedule")} style={{padding:12,textAlign:"left",color:S.acc}}>📅 Agendar futuro</button></div><button onClick={onCancel} style={{width:"100%",color:S.dng}}>Cancelar</button></div></div>);}
 
@@ -233,18 +254,19 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const[sd,setSd]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().slice(0,10);});
   const[ed,setEd]=useState(new Date().toISOString().slice(0,10));
   const[selUser,setSelUser]=useState("me");const[remoteVisits,setRemoteVisits]=useState([]);const[rLo,setRLo]=useState(false);
-  const[editDay,setEditDay]=useState(null);// day being edited for base correction
-  // FIX: only load VISITA type from Agendor (no WhatsApp/calls)
+  const[editDay,setEditDay]=useState(null);
+  // FIX: resolve correct userId and name based on who we're viewing
+  const otherId=user.id===743088?743347:743088;
+  const repUserId=selUser==="me"?user.id:otherId;
+  const repUserName=selUser==="me"?user.name:(USERS.find(u=>u.id===otherId)?.n||"Alisson");
   const loadRemote=async()=>{setRLo(true);try{
     const d=await agF(`/tasks?createdDateGt=${sd}T00:00:00Z&per_page=100`,token);
-    const otherId=user.id===743088?743347:743088;
     const tasks=(d.data||[]).filter(t=>t.user?.id===otherId&&(t.type==="Visita"||t.type==="VISITA"))
       .map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",userName:t.user?.name||"",taskType:"VISITA"}));
     setRemoteVisits(tasks);
   }catch(e){alert("Erro Relatório: "+e.message);}setRLo(false);};
   useEffect(()=>{if(selUser==="team")loadRemote();},[selUser,sd]);
   const useVisits=selUser==="me"?visits:remoteVisits;
-  // FIX: only real visits
   const pv=useMemo(()=>useVisits.filter(v=>{
     if(!v.checkoutTime)return false;
     if(selUser==="me"&&v.taskType&&v.taskType!=="VISITA")return false;
@@ -252,54 +274,80 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
     return d>=sd&&d<=ed;
   }).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime)),[useVisits,sd,ed,selUser]);
   const bd=useMemo(()=>{const m={};pv.forEach(v=>{const k=new Date(v.checkinTime).toISOString().slice(0,10);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pv]);
-  // FIX: Km using plocs fallback for GPS resolution
+  // FIX: use repUserId (correct user) for base resolution
   const calcDayKm=(dvs,dt)=>{let km=0;const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
-    const b2=getBase(dayBases,dt,user?.id);const eb=getEnd(dayBases,dt,user?.id);
+    const b2=getBase(dayBases,dt,repUserId);const eb=getEnd(dayBases,dt,repUserId);
     const fc=getVCoord(s[0],plocs);
     if(b2&&fc)km+=hav(b2.lat,b2.lng,fc.lat,fc.lng)*1.3;
     for(let i=1;i<s.length;i++){if(s[i].orgId===s[i-1].orgId)continue;const ca=getVEndCoord(s[i-1],plocs);const cb=getVCoord(s[i],plocs);if(ca&&cb)km+=hav(ca.lat,ca.lng,cb.lat,cb.lng)*1.3;}
     const l=s[s.length-1];const endB=eb||b2;const lc=getVEndCoord(l,plocs);
     if(endB&&lc)km+=hav(lc.lat,lc.lng,endB.lat,endB.lng)*1.3;
     return km;};
-  const totKm=useMemo(()=>bd.reduce((acc,[dt,dvs])=>acc+calcDayKm(dvs,dt),0),[bd,dayBases,plocs,user?.id]);
-  // FIX: Jornada = first checkin to last checkout per day
+  // FIX: calculate km segments for detailed export
+  const calcSegKm=(dvs,dt)=>{const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+    const b2=getBase(dayBases,dt,repUserId);const eb=getEnd(dayBases,dt,repUserId);
+    const segs=[];const fc=getVCoord(s[0],plocs);
+    segs.push(b2&&fc?hav(b2.lat,b2.lng,fc.lat,fc.lng)*1.3:0);// first: base→pdv
+    for(let i=1;i<s.length;i++){if(s[i].orgId===s[i-1].orgId){segs.push(0);continue;}
+      const ca=getVEndCoord(s[i-1],plocs);const cb=getVCoord(s[i],plocs);
+      segs.push(ca&&cb?hav(ca.lat,ca.lng,cb.lat,cb.lng)*1.3:0);}
+    return segs;};
+  const totKm=useMemo(()=>bd.reduce((acc,[dt,dvs])=>acc+calcDayKm(dvs,dt),0),[bd,dayBases,plocs,repUserId]);
   const workH=bd.reduce((s,[,d])=>{const sr=[...d].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));return s+mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime);},0);
   const mx=Math.max(1,...bd.map(([,v])=>v.length));
   return(<div>
     {user?.id===743088&&<div style={{display:"flex",gap:4,marginBottom:8}}><button onClick={()=>setSelUser("me")} style={{flex:1,padding:8,fontSize:12,border:selUser==="me"?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:selUser==="me"?S.pri+"22":"transparent",color:selUser==="me"?S.pri:S.ts,fontWeight:selUser==="me"?600:400}}>Meus dados</button><button onClick={()=>setSelUser("team")} style={{flex:1,padding:8,fontSize:12,border:selUser==="team"?`2px solid ${S.acc}`:`1px solid ${S.brd}`,background:selUser==="team"?S.acc+"22":"transparent",color:selUser==="team"?S.acc:S.ts,fontWeight:selUser==="team"?600:400}}>{rLo?"Carregando...":"Alisson Henrique"}</button></div>}
     <div style={{display:"flex",gap:6,marginBottom:12,alignItems:"center"}}><input type="date" value={sd} onChange={e=>setSd(e.target.value)} style={{flex:1,fontSize:12}}/><span style={{color:S.td}}>ate</span><input type="date" value={ed} onChange={e=>setEd(e.target.value)} style={{flex:1,fontSize:12}}/></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[["Km",totKm.toFixed(0)],["Visitas",pv.length],["Dias",bd.length],["Jornada",hrsMin(workH)]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}</div>
-    {/* Correção de Origem/Destino por dia */}
     {bd.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"10px 14px",marginBottom:12}}>
       <p style={{fontWeight:500,fontSize:12,margin:"0 0 8px",color:S.ts}}>Origem / Destino por dia (toque para corrigir)</p>
-      {bd.map(([dt])=>{const sb=getBase(dayBases,dt,user?.id);const eb=getEnd(dayBases,dt,user?.id);return(
+      {bd.map(([dt])=>{const sb=getBase(dayBases,dt,repUserId);const eb=getEnd(dayBases,dt,repUserId);return(
         <div key={dt} onClick={()=>setEditDay(editDay===dt?null:dt)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:`1px solid ${S.brd}`,cursor:"pointer"}}>
           <span style={{fontSize:11,color:S.ts}}>{fDS(dt+"T12:00")}</span>
           <span style={{fontSize:11,color:S.pl}}>{sb?.label||"Casa"} → {eb?.label||"Casa"}</span>
           <span style={{fontSize:10,color:S.acc}}>✏️</span>
         </div>);})}
     </div>}
-    {editDay&&<BaseEditInline day={editDay} dayBases={dayBases} userId={user?.id} onSave={(d,start,end)=>{onEditBase(d,start,end);setEditDay(null);}} onCancel={()=>setEditDay(null)}/>}
+    {editDay&&<BaseEditInline day={editDay} dayBases={dayBases} userId={repUserId} plocs={plocs} lastVisitCoord={bd.find(([d])=>d===editDay)?getVEndCoord([...bd.find(([d])=>d===editDay)[1]].sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime))[0],plocs):null} onSave={(d,start,end)=>{onEditBase(d,start,end);setEditDay(null);}} onCancel={()=>setEditDay(null)}/>}
     <div style={{display:"flex",gap:6,marginBottom:12}}>
-      <button onClick={()=>{const rows=[["Data","Vendedor","Origem","Destino","Visitas","Km","Jornada","Clientes"]];bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const b2=getBase(dayBases,dt,user?.id);const eb=getEnd(dayBases,dt,user?.id);const dk=calcDayKm(dvs,dt);rows.push([fD(dt+"T12:00"),user?.name,b2?.label||"Casa",eb?.label||"Casa",dvs.length,dk.toFixed(1),hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)),dvs.map(v=>v.orgName).join(", ")]);});rows.push([],["TOTAL","","","",pv.length,totKm.toFixed(1),hrsMin(workH),""]);csv(rows,`km-${user?.name}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Resumo</button>
-      <button onClick={()=>{const rows=[["Data","In","Out","Min","Cliente","Cidade","Tipo","Obs","Venda"]];pv.forEach(v=>rows.push([fD(v.checkinTime),fT(v.checkinTime),fT(v.checkoutTime),mins(v.checkinTime,v.checkoutTime),v.orgName,v.city||"",v.taskType||"VISITA",v.note||"",v.sale?`${v.sale.brand} R$${v.sale.value}`:""]));csv(rows,`visitas-${user?.name}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Detalhado</button>
+      {/* FIX: Export with correct user name and bases */}
+      <button onClick={()=>{const rows=[["Data","Vendedor","Origem","Destino","Visitas","Km","Jornada","Clientes"]];bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const b2=getBase(dayBases,dt,repUserId);const eb=getEnd(dayBases,dt,repUserId);const dk=calcDayKm(dvs,dt);rows.push([fD(dt+"T12:00"),repUserName,b2?.label||"Casa",eb?.label||"Casa",dvs.length,dk.toFixed(1),hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)),dvs.map(v=>v.orgName).join(", ")]);});rows.push([],["TOTAL","","","",pv.length,totKm.toFixed(1),hrsMin(workH),""]);csv(rows,`km-${repUserName}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Resumo</button>
+      {/* FIX: Detailed export with Km column */}
+      <button onClick={()=>{const rows=[["Data","In","Out","Min","Cliente","Cidade","Km Trecho","Tipo","Obs","Venda"]];
+        bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const segs=calcSegKm(sr,dt);const b2=getBase(dayBases,dt,repUserId);const eb=getEnd(dayBases,dt,repUserId);
+          sr.forEach((v,i)=>{const segKm=segs[i]||0;const label=i===0?(b2?.label||"Casa")+" →":sr[i].orgId===sr[i-1]?.orgId?"(mesmo PDV)":sr[i-1]?.orgName+" →";
+            rows.push([fD(v.checkinTime),fT(v.checkinTime),fT(v.checkoutTime),mins(v.checkinTime,v.checkoutTime),v.orgName,v.city||"",segKm>0?segKm.toFixed(1)+"km":"0",v.taskType||"VISITA",v.note||"",v.sale?`${v.sale.brand} R$${v.sale.value}`:""])});
+          // Add return leg
+          const last=sr[sr.length-1];const lc=getVEndCoord(last,plocs);const endB=eb||b2;
+          if(endB&&lc){const retKm=hav(lc.lat,lc.lng,endB.lat,endB.lng)*1.3;rows.push([fD(dt+"T12:00"),"","","","→ "+(endB?.label||"Casa"),"",retKm.toFixed(1)+"km","RETORNO","",""]);}
+        });
+        csv(rows,`visitas-${repUserName}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Detalhado</button>
     </div>
     {bd.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px"}}><p style={{fontWeight:500,marginBottom:8,fontSize:13}}>Visitas/dia</p>{bd.map(([dt,dvs])=><div key={dt} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><span style={{fontSize:10,color:S.ts,width:42,textAlign:"right"}}>{fDS(dt+"T12:00")}</span><div style={{flex:1,height:14,background:S.bg,borderRadius:3}}><div style={{height:"100%",width:`${(dvs.length/mx)*100}%`,background:S.pri,borderRadius:3,minWidth:3}}/></div><span style={{fontSize:11,fontWeight:600,width:16,textAlign:"right"}}>{dvs.length}</span></div>)}</div>}
   </div>);}
 
-// ─── Inline base editor for Relatório ───
-function BaseEditInline({day,dayBases,userId,onSave,onCancel}){
+// ─── Inline base editor for Relatório with GPS + km estimate ───
+function BaseEditInline({day,dayBases,userId,plocs,lastVisitCoord,onSave,onCancel}){
   const home=HOMES[userId];const cur=getBase(dayBases,day,userId);const curEnd=getEnd(dayBases,day,userId);
   const[origType,setOrigType]=useState(cur?.type||"home");const[destType,setDestType]=useState(curEnd?.type||"home");
   const[origName,setOrigName]=useState(cur?.type==="hotel"?cur.label:"");const[destName,setDestName]=useState(curEnd?.type==="hotel"?curEnd.label:"");
+  const[destLat,setDestLat]=useState(curEnd?.type==="hotel"?curEnd.lat:null);const[destLng,setDestLng]=useState(curEnd?.type==="hotel"?curEnd.lng:null);
+  const[gpsLo,setGpsLo]=useState(false);const[kmEst,setKmEst]=useState(null);
+  // Estimate km to hotel when coords available
+  useEffect(()=>{if(destType==="hotel"&&destLat&&lastVisitCoord){setKmEst(hav(lastVisitCoord.lat,lastVisitCoord.lng,destLat,destLng)*1.3);}else if(destType==="home"&&home&&lastVisitCoord){setKmEst(hav(lastVisitCoord.lat,lastVisitCoord.lng,home.lat,home.lng)*1.3);}else{setKmEst(null);}},[destType,destLat,destLng,lastVisitCoord]);
+  const captureGPS=async()=>{setGpsLo(true);try{const g=await gps();setDestLat(g.lat);setDestLng(g.lng);}catch{alert("GPS indisponivel");}setGpsLo(false);};
   const save=()=>{
     const start=origType==="home"&&home?{type:"home",...home}:{type:"hotel",lat:home?.lat||-15.6,lng:home?.lng||-56.1,label:origName||"Hotel"};
-    const end=destType==="home"&&home?{type:"home",...home}:{type:"hotel",lat:home?.lat||-15.6,lng:home?.lng||-56.1,label:destName||"Hotel"};
+    const end=destType==="home"&&home?{type:"home",...home}:{type:"hotel",lat:destLat||home?.lat||-15.6,lng:destLng||home?.lng||-56.1,label:destName||"Hotel"};
     onSave(day,start,end);};
   return(<div style={{background:S.cl,border:`1px solid ${S.acc}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
     <p style={{fontWeight:500,fontSize:13,margin:"0 0 8px"}}>Corrigir {fD(day+"T12:00")}</p>
     <LB t="ORIGEM"><div style={{display:"flex",gap:6}}><button onClick={()=>setOrigType("home")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${origType==="home"?S.pri:S.brd}`,background:origType==="home"?S.pri+"22":"transparent",color:origType==="home"?S.pri:S.ts}}>🏠 Casa</button><button onClick={()=>setOrigType("hotel")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${origType==="hotel"?S.gold:S.brd}`,background:origType==="hotel"?S.gold+"22":"transparent",color:origType==="hotel"?S.gold:S.ts}}>🏨 Hotel</button></div>{origType==="hotel"&&<input value={origName} onChange={e=>setOrigName(e.target.value)} placeholder="Nome hotel/cidade" style={{width:"100%",marginTop:4,fontSize:11}}/>}</LB>
-    <LB t="DESTINO"><div style={{display:"flex",gap:6}}><button onClick={()=>setDestType("home")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${destType==="home"?S.pri:S.brd}`,background:destType==="home"?S.pri+"22":"transparent",color:destType==="home"?S.pri:S.ts}}>🏠 Casa</button><button onClick={()=>setDestType("hotel")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${destType==="hotel"?S.gold:S.brd}`,background:destType==="hotel"?S.gold+"22":"transparent",color:destType==="hotel"?S.gold:S.ts}}>🏨 Hotel</button></div>{destType==="hotel"&&<input value={destName} onChange={e=>setDestName(e.target.value)} placeholder="Nome hotel/cidade destino" style={{width:"100%",marginTop:4,fontSize:11}}/>}</LB>
+    <LB t="DESTINO"><div style={{display:"flex",gap:6}}><button onClick={()=>setDestType("home")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${destType==="home"?S.pri:S.brd}`,background:destType==="home"?S.pri+"22":"transparent",color:destType==="home"?S.pri:S.ts}}>🏠 Casa</button><button onClick={()=>setDestType("hotel")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${destType==="hotel"?S.gold:S.brd}`,background:destType==="hotel"?S.gold+"22":"transparent",color:destType==="hotel"?S.gold:S.ts}}>🏨 Hotel</button></div>
+      {destType==="hotel"&&<><input value={destName} onChange={e=>setDestName(e.target.value)} placeholder="Nome hotel/cidade destino" style={{width:"100%",marginTop:4,fontSize:11}}/>
+        <button onClick={captureGPS} disabled={gpsLo} style={{width:"100%",marginTop:4,padding:6,fontSize:11,background:destLat?S.ok+"22":S.gold+"22",border:`1px solid ${destLat?S.ok:S.gold}`,color:destLat?S.ok:S.gold}}>{gpsLo?"📍 Capturando...":(destLat?`📍 GPS: ${destLat.toFixed(4)}, ${destLng.toFixed(4)}`:"📍 Capturar GPS do hotel")}</button></>}
+    </LB>
+    {kmEst!=null&&<p style={{fontSize:11,color:S.acc,margin:"0 0 8px"}}>Km estimado último PDV → {destType==="hotel"?destName||"Hotel":"Casa"}: {kmEst.toFixed(1)} km</p>}
     <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1,fontSize:11}}>Cancelar</button><button onClick={save} style={{flex:1,fontSize:11,background:S.acc,border:"none",fontWeight:600}}>Salvar</button></div>
   </div>);}
 
@@ -520,7 +568,7 @@ export default function App(){
 
       {tab==="config"&&<div>
         <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:15,fontWeight:600,margin:"0 0 4px"}}>{user?.name}</p>{HOMES[user?.id]&&<p style={{fontSize:12,color:S.ok}}>Casa: {HOMES[user.id].label}</p>}{getBase(dayBases,today,user?.id)&&<p style={{fontSize:11,color:S.ts,margin:"2px 0 0"}}>Base hoje: {getBase(dayBases,today,user?.id)?.label||"Casa"}{getEnd(dayBases,today,user?.id)!==getBase(dayBases,today,user?.id)?` → ${getEnd(dayBases,today,user?.id)?.label||"Casa"}`:""}</p>}</div>
-        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p><p style={{fontSize:11,color:syncStatus.startsWith("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p><p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | v7.1</p></div>
+        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p><p style={{fontSize:11,color:syncStatus.startsWith("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p><p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | v7.2</p></div>
         <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
           <button onClick={()=>doSync()} disabled={syncing} style={{padding:14,fontSize:14,fontWeight:500,background:S.pri,border:"none"}}>{syncing?syncMsg:"Sincronizar Clientes"}</button>
           <button onClick={loadHistory} style={{padding:12,fontSize:13,background:S.acc+"22",border:`1px solid ${S.acc}`,color:S.acc,fontWeight:500}}>Carregar historico do Agendor</button>
