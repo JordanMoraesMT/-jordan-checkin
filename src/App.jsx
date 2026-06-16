@@ -146,18 +146,26 @@ function NewClientModal({token,onSave,onCancel}){
 
 const CARGOS=["Proprietário","Comprador","Fiscal","Financeiro","Recebimento","Marketing","Gerente de Vendas","Vendedor","Repositor","Conferente"];
 function PeopleModal({org,token,onClose}){
-  const[people,setPeople]=useState([]);const[lo,setLo]=useState(true);const[addMode,setAddMode]=useState(false);
+  const[people,setPeople]=useState([]);const[lo,setLo]=useState(true);const[mode,setMode]=useState("list");// list | add | edit
+  const[editId,setEditId]=useState(null);
   const[n,setN]=useState("");const[cargo,setCargo]=useState("");const[e,setE]=useState("");const[p,setP]=useState("");const[w,setW]=useState("");const[msg,setMsg]=useState("");const[saving,setSaving]=useState(false);
   const reload=async()=>{try{const d=await agF(`/organizations/${org.id}/people?per_page=50`,token);setPeople(d.data||[]);}catch{}};
   useEffect(()=>{reload().then(()=>setLo(false));},[]);
-  const add=async()=>{if(!n.trim())return;setSaving(true);setMsg("");try{await agF("/people",token,{method:"POST",body:JSON.stringify({name:n,organization:org.id,role:cargo||undefined,contact:{...(e?{email:e}:{}),...(p?{mobile:p}:{}),...(w?{whatsapp:w}:{})}})});await reload();setAddMode(false);setN("");setCargo("");setE("");setP("");setW("");setMsg("Adicionado!");}catch(x){setMsg("Erro: "+x.message);}setSaving(false);};
+  const clear=()=>{setN("");setCargo("");setE("");setP("");setW("");setEditId(null);setMode("list");};
+  const openAdd=()=>{clear();setMode("add");setMsg("");};
+  const openEdit=(pe)=>{setEditId(pe.id);setN(pe.name||"");setCargo(pe.role||"");setE(pe.contact?.email||"");setP(pe.contact?.mobile?.replace(/\D/g,"")||"");setW(pe.contact?.whatsapp||"");setMode("edit");setMsg("");};
+  const save=async()=>{if(!n.trim())return;setSaving(true);setMsg("");
+    const body={name:n,role:cargo||"",contact:{...(e?{email:e}:{email:""}),...(p?{mobile:p}:{mobile:""}),...(w?{whatsapp:w}:{whatsapp:""})}};
+    try{if(mode==="edit"&&editId){await agF(`/people/${editId}`,token,{method:"PUT",body:JSON.stringify(body)});setMsg("Atualizado!");}
+    else{body.organization=org.id;await agF("/people",token,{method:"POST",body:JSON.stringify(body)});setMsg("Adicionado!");}
+    await reload();clear();}catch(x){setMsg("Erro: "+x.message);}setSaving(false);};
   const del=async(pe)=>{if(!confirm(`Excluir ${pe.name}?\nEssa ação remove o contato do Agendor.`))return;setSaving(true);try{await agF(`/people/${pe.id}`,token,{method:"DELETE"});await reload();setMsg("Excluído!");}catch(x){setMsg("Erro: "+x.message);}setSaving(false);};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 2px"}}>👤 Contatos</p>
     <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>{org.name}</p>
     {lo&&<p style={{color:S.ts,textAlign:"center",padding:"1rem 0"}}>Carregando...</p>}
-    {!lo&&people.length===0&&!addMode&&<p style={{fontSize:12,color:S.ts,padding:"1rem 0",textAlign:"center"}}>Nenhum contato cadastrado</p>}
-    {people.map(pe=><div key={pe.id} style={{background:S.cl,borderRadius:8,padding:10,marginBottom:6}}>
+    {!lo&&people.length===0&&mode==="list"&&<p style={{fontSize:12,color:S.ts,padding:"1rem 0",textAlign:"center"}}>Nenhum contato cadastrado</p>}
+    {mode==="list"&&people.map(pe=><div key={pe.id} style={{background:S.cl,borderRadius:8,padding:10,marginBottom:6}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div style={{flex:1}}>
           <p style={{fontSize:13,fontWeight:600,margin:"0 0 2px"}}>{pe.name}</p>
@@ -168,18 +176,22 @@ function PeopleModal({org,token,onClose}){
             {pe.contact?.whatsapp&&<a href={`https://wa.me/55${pe.contact.whatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{fontSize:10,color:S.ok,textDecoration:"none"}}>💬 {pe.contact.whatsapp}</a>}
           </div>
         </div>
-        <button onClick={()=>del(pe)} disabled={saving} style={{fontSize:10,padding:"4px 8px",color:S.dng,background:S.dng+"15",border:`1px solid ${S.dng}33`,borderRadius:6,flexShrink:0}}>🗑️</button>
+        <div style={{display:"flex",gap:4,flexShrink:0}}>
+          <button onClick={()=>openEdit(pe)} style={{fontSize:10,padding:"4px 8px",color:S.pri,background:S.pri+"15",border:`1px solid ${S.pri}33`,borderRadius:6}}>✏️</button>
+          <button onClick={()=>del(pe)} disabled={saving} style={{fontSize:10,padding:"4px 8px",color:S.dng,background:S.dng+"15",border:`1px solid ${S.dng}33`,borderRadius:6}}>🗑️</button>
+        </div>
       </div>
     </div>)}
     {msg&&<p style={{fontSize:11,color:msg.startsWith("Erro")?S.dng:S.ok,margin:"4px 0"}}>{msg}</p>}
-    {!addMode&&<button onClick={()=>{setAddMode(true);setMsg("");}} style={{width:"100%",padding:10,fontSize:12,background:S.acc,border:"none",fontWeight:600,marginTop:4}}>+ Adicionar Contato</button>}
-    {addMode&&<div style={{background:S.cl,borderRadius:8,padding:10,marginTop:6}}>
+    {mode==="list"&&<button onClick={openAdd} style={{width:"100%",padding:10,fontSize:12,background:S.acc,border:"none",fontWeight:600,marginTop:4}}>+ Adicionar Contato</button>}
+    {(mode==="add"||mode==="edit")&&<div style={{background:S.cl,borderRadius:8,padding:10,marginTop:6}}>
+      <p style={{fontSize:12,fontWeight:600,margin:"0 0 6px",color:mode==="edit"?S.pri:S.acc}}>{mode==="edit"?"✏️ Editar Contato":"+ Novo Contato"}</p>
       <LB t="NOME *"><input value={n} onChange={x=>setN(x.target.value)} style={{width:"100%"}}/></LB>
       <LB t="CARGO"><select value={cargo} onChange={x=>setCargo(x.target.value)} style={{width:"100%",fontSize:12}}><option value="">Selecione...</option>{CARGOS.map(c=><option key={c} value={c}>{c}</option>)}</select></LB>
       <LB t="E-MAIL"><input value={e} onChange={x=>setE(x.target.value)} type="email" style={{width:"100%"}}/></LB>
       <LB t="TELEFONE"><input value={p} onChange={x=>setP(x.target.value)} style={{width:"100%"}}/></LB>
       <LB t="WHATSAPP"><input value={w} onChange={x=>setW(x.target.value)} style={{width:"100%"}}/></LB>
-      <div style={{display:"flex",gap:8}}><button onClick={()=>setAddMode(false)} style={{flex:1}}>Cancelar</button><button onClick={add} disabled={saving||!n.trim()} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>{saving?"...":"Salvar no Agendor"}</button></div>
+      <div style={{display:"flex",gap:8}}><button onClick={clear} style={{flex:1}}>Cancelar</button><button onClick={save} disabled={saving||!n.trim()} style={{flex:1,background:mode==="edit"?S.pri:S.acc,border:"none",fontWeight:600}}>{saving?"...":(mode==="edit"?"Atualizar no Agendor":"Salvar no Agendor")}</button></div>
     </div>}
     <button onClick={onClose} style={{width:"100%",marginTop:8}}>Fechar</button>
   </div></div>);}
@@ -528,7 +540,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v8.9</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v9</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -694,7 +706,7 @@ export default function App(){
   const hasEndBase=dayBases[today]?.end!=null;
   const canCloseRoute=todayVisits.length>0&&!active&&!hasEndBase;
 
-  const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data.map(strip));if(d.data.length<100)break;pg++;}setAllOrgs(all);setOrgs(all.filter(o=>o.cat!=="Excluido"));setSyncMsg(`${all.length}`);}catch(e){setSyncMsg("Erro");}setSyncing(false);};
+  const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data.map(strip));if(d.data.length<100)break;pg++;}setAllOrgs(all);setOrgs(all);setSyncMsg(`${all.length}`);}catch(e){setSyncMsg("Erro");}setSyncing(false);};
 
   const loadHistory=async()=>{setSyncMsg("Carregando historico...");try{const since=new Date();since.setDate(since.getDate()-90);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100`,token);if(d.data?.length){const remote=d.data.filter(t=>t.type==="Visita"&&t.done).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));const existing=new Set(visits.map(v=>v.orgId+"|"+v.checkinTime?.slice(0,16)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+r.checkinTime?.slice(0,16)));if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas carregadas`);}else setSyncMsg("Historico ja esta atualizado");}else setSyncMsg("Nenhuma visita encontrada");}catch(e){setSyncMsg("Erro: "+e.message);}};
 
