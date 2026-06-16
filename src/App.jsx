@@ -534,6 +534,48 @@ function EquipeTab({token,plocs,orgs}){
     </div>}
   </div>);}
 
+// ─── AgendaTab: tarefas pendentes do Agendor ───
+function AgendaTab({token,user}){
+  const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(true);const[err,setErr]=useState("");
+  const load=async()=>{setLo(true);setErr("");try{
+    let pg=1,all=[];while(true){const d=await agF(`/tasks?done=false&per_page=100&page=${pg}`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}
+    const mine=all.filter(t=>t.user?.id===user.id).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt})).sort((a,b)=>(a.due||"9").localeCompare(b.due||"9"));
+    setTasks(mine);setErr(`${mine.length} tarefas pendentes`);
+  }catch(e){setErr("Erro: "+e.message);}setLo(false);};
+  useEffect(()=>{load();},[]);
+  const markDone=async(t)=>{if(!confirm(`Concluir "${t.text.slice(0,40)}..."?`))return;try{await agF(`/tasks/${t.id}`,token,{method:"PUT",body:JSON.stringify({done:true})});setTasks(prev=>prev.filter(x=>x.id!==t.id));setErr(`Concluída! ${tasks.length-1} restantes`);}catch(e){alert("Erro: "+e.message);}};
+  const today=todayLocal();const tomorrow=toLocalDate(new Date(Date.now()+86400000));
+  const overdue=tasks.filter(t=>t.due&&t.due.slice(0,10)<today);
+  const todayTasks=tasks.filter(t=>t.due&&t.due.slice(0,10)===today);
+  const tomorrowTasks=tasks.filter(t=>t.due&&t.due.slice(0,10)===tomorrow);
+  const futureTasks=tasks.filter(t=>t.due&&t.due.slice(0,10)>tomorrow);
+  const noDue=tasks.filter(t=>!t.due);
+  const renderGroup=(title,color,items)=>items.length>0&&<div style={{marginBottom:12}}>
+    <p style={{fontSize:12,fontWeight:600,color,margin:"0 0 6px"}}>{title} ({items.length})</p>
+    {items.map(t=><div key={t.id} style={{background:S.cl,borderRadius:8,padding:"10px 12px",marginBottom:4,display:"flex",gap:8,alignItems:"flex-start"}}>
+      <div style={{flex:1,minWidth:0}}>
+        <p style={{fontSize:12,fontWeight:500,margin:"0 0 2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.org}</p>
+        <p style={{fontSize:11,color:S.ts,margin:"0 0 2px"}}>{t.type} — {t.text.slice(0,80)}</p>
+        {t.due&&<p style={{fontSize:10,color:S.td,margin:0}}>{fD(t.due)} {fT(t.due)}</p>}
+      </div>
+      <button onClick={()=>markDone(t)} style={{padding:"6px 10px",fontSize:10,background:S.ok+"22",border:`1px solid ${S.ok}`,color:S.ok,borderRadius:6,flexShrink:0}}>✓</button>
+    </div>)}
+  </div>;
+  return(<div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+      <p style={{fontWeight:600,fontSize:16,margin:0}}>📅 Agenda</p>
+      <button onClick={load} disabled={lo} style={{padding:"6px 14px",fontSize:11,background:S.pri,border:"none",fontWeight:500}}>{lo?"...":"Atualizar"}</button>
+    </div>
+    {err&&<p style={{fontSize:11,color:err.startsWith("Erro")?S.dng:S.acc,margin:"0 0 12px",padding:"6px 10px",background:S.cl,borderRadius:6}}>{err}</p>}
+    {lo&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando tarefas...</p>}
+    {!lo&&!tasks.length&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma tarefa pendente</p>}
+    {renderGroup("⚠️ Atrasadas",S.dng,overdue)}
+    {renderGroup("📌 Hoje",S.gold,todayTasks)}
+    {renderGroup("📅 Amanhã",S.acc,tomorrowTasks)}
+    {renderGroup("🗓️ Próximos dias",S.pri,futureTasks)}
+    {renderGroup("📋 Sem data",S.td,noDue)}
+  </div>);}
+
 // ─── Progress Bar Component ───
 function ProgressBar({active,msg}){if(!active)return null;return(<div style={{width:"100%",marginBottom:8}}>
   <div style={{height:4,background:S.brd,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",background:S.pri,borderRadius:2,animation:"progFill 2s ease-in-out infinite",width:"60%"}}/>
@@ -556,7 +598,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v10</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v10.1</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -566,6 +608,9 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
       <button onClick={async()=>{if(!confirm("Compartilhar GPS com equipe?"))return;setShareLoading(true);await onShareGPS();setShareLoading(false);}} disabled={shareLoading} style={{padding:12,fontSize:13,background:S.ok+"22",border:`1px solid ${S.ok}`,color:S.ok,fontWeight:500}}>{shareLoading?"⏳ Enviando...":"📡 Compartilhar "+Object.keys(plocs).length+" GPS com equipe"}</button>
       <button onClick={onShowDB} style={{padding:12}}>🗺️ Definir jornada (origem e destino)</button>
       <button onClick={onShowEnd} style={{padding:12}}>🏨 Fechar roteiro do dia</button>
+      <button onClick={()=>{if(!("Notification"in window)){alert("Navegador nao suporta notificacoes");return;}Notification.requestPermission().then(p=>{if(p==="granted")alert("Notificacoes ativadas! Voce recebera lembretes de tarefas agendadas.");else alert("Notificacoes bloqueadas. Ative nas configuracoes do navegador.");});}} style={{padding:12,background:("Notification"in window&&Notification.permission==="granted")?S.ok+"22":S.gold+"22",border:`1px solid ${("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold}`,color:("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold}}>
+        {("Notification"in window&&Notification.permission==="granted")?"🔔 Notificações ativadas":"🔕 Ativar notificações"}
+      </button>
 
       {/* Admin area (Jordan only) */}
       {user?.id===743088&&<>
@@ -716,6 +761,27 @@ export default function App(){
   const[prevDay,setPrevDay]=useState(null);
   useEffect(()=>{if(!token||!user||!active)return setPrevDay(null);if(new Date(active.checkinTime).toDateString()!==new Date().toDateString())setPrevDay(active);else setPrevDay(null);},[token,user,active]);
 
+  // ─── PWA Notifications ───
+  const notifiedRef=useState(()=>new Set())[0];
+  useEffect(()=>{if(!token||!user)return;
+    // Request permission on mount
+    if("Notification"in window&&Notification.permission==="default")Notification.requestPermission();
+    // Check pending tasks every 5 min
+    const checkTasks=async()=>{if(!("Notification"in window)||Notification.permission!=="granted")return;
+      try{const d=await agF(`/tasks?done=false&per_page=100`,token);const now=new Date();const soon=new Date(now.getTime()+15*60000);// 15 min ahead
+        (d.data||[]).filter(t=>t.user?.id===user.id&&t.due_date).forEach(t=>{
+          const due=new Date(t.due_date);const key=t.id+"|"+t.due_date;
+          if(due>=now&&due<=soon&&!notifiedRef.has(key)){notifiedRef.add(key);
+            new Notification("📅 Jordan Check-in",{body:`${t.type||"Tarefa"}: ${t.organization?.name||"?"}\n${t.text?.slice(0,60)||""}`,icon:"/logo.png",tag:key,requireInteraction:true});}
+          // Morning alert: tasks due today
+          const h=now.getHours();if(h>=7&&h<8&&toLocalDate(due)===todayLocal()&&!notifiedRef.has("morning_"+key)){notifiedRef.add("morning_"+key);
+            new Notification("🌅 Agenda do dia",{body:`${t.type}: ${t.organization?.name}\n${fT(t.due_date)}`,icon:"/logo.png",tag:"morning_"+key});}
+        });
+      }catch(e){console.warn("notif:",e);}};
+    checkTasks();const iv=setInterval(checkTasks,300000);// 5 min
+    return()=>clearInterval(iv);
+  },[token,user]);
+
   // Check if day has visits but no active visit (can close route)
   const today=todayLocal();
   const todayVisits=useMemo(()=>visits.filter(v=>{const d=toLocalDate(v.checkinTime);return d===today&&isRealVisit(v);}),[visits,today]);
@@ -777,7 +843,7 @@ export default function App(){
   const checkout=async(note,type="VISITA",next=null,sale=null)=>{if(!active||ldId)return;setLdId(active.orgId);let g=null;try{g=await gps();}catch{}const done={...active,checkoutTime:new Date().toISOString(),checkoutLat:g?.lat,checkoutLng:g?.lng,note,taskType:type,sale};try{await postTask(token,active.orgId,note,type,true);done.synced=true;}catch(e){console.warn("task:",e);done.synced=false;}if(next?.nextDate&&next?.nextDesc){try{await postTask(token,active.orgId,next.nextDesc,next.nextType||"VISITA",false,`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`);alert("Proximo passo agendado!");}catch(e){console.warn("nextStep:",e);alert("Erro ao agendar proximo passo");}}if(sale?.brand&&sale?.value){try{await agF(`/organizations/${active.orgId}/deals`,token,{method:"POST",body:JSON.stringify({title:`Venda ${sale.brand}`,value:sale.value})});}catch(e){console.warn("deal:",e);}}setVisits(p=>[done,...p]);syncVisitSave(done);setActive(null);syncClear();setCoTarget(null);setLdId(null);};
 
   if(!token||!user)return <Login onLogin={(t,u)=>{setToken(t);setUser(u);sS("jc:token",t);sS("jc:user",u);}}/>;
-  const baseTabs=[{id:"pdvs",i:"🏪",l:"PDVs"},{id:"rotas",i:"🛣️",l:"Rotas"},{id:"relatorio",i:"📊",l:"Relatório"},{id:"config",i:"⚙️",l:"Config"}];
+  const baseTabs=[{id:"pdvs",i:"🏪",l:"PDVs"},{id:"rotas",i:"🛣️",l:"Rotas"},{id:"relatorio",i:"📊",l:"Relatório"},{id:"agenda",i:"📅",l:"Agenda"},{id:"config",i:"⚙️",l:"Config"}];
   const tabs=user?.id===743088?[...baseTabs.slice(0,3),{id:"equipe",i:"👥",l:"Equipe"},...baseTabs.slice(3)]:baseTabs;
 
   return(<div style={{minHeight:"100vh",paddingBottom:70}}>
@@ -850,6 +916,7 @@ export default function App(){
       {tab==="rotas"&&<RotasTab visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
       {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/>}
       {tab==="equipe"&&user?.id===743088&&<EquipeTab token={token} plocs={plocs} orgs={orgs}/>}
+      {tab==="agenda"&&<AgendaTab token={token} user={user}/>}
 
       {tab==="config"&&<ConfigTab user={user} orgs={orgs} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
         onSync={doSync} onLoadHistory={loadHistory} onSyncPull={()=>{syncPull();setSyncStatus("Forçando sync...");}}
