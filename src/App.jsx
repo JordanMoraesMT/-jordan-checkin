@@ -536,12 +536,17 @@ function EquipeTab({token,plocs,orgs}){
 
 // ─── AgendaTab: tarefas pendentes do Agendor ───
 function AgendaTab({token,user}){
-  const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(true);const[err,setErr]=useState("");
+  const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(true);const[err,setErr]=useState("");const isAdmin=user?.id===743088;
   const load=async()=>{setLo(true);setErr("");try{
-    let pg=1,all=[];while(true){const d=await agF(`/tasks?done=false&per_page=100&page=${pg}`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}
-    const mine=all.filter(t=>t.user?.id===user.id).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt})).sort((a,b)=>(a.due||"9").localeCompare(b.due||"9"));
-    setTasks(mine);setErr(`${mine.length} tarefas pendentes`);
-  }catch(e){setErr("Erro: "+e.message);}setLo(false);};
+    // Agendor exige createdDateGt — buscar últimos 180 dias
+    const since=new Date();since.setDate(since.getDate()-180);
+    let pg=1,all=[];while(true){setErr(`Buscando página ${pg}...`);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100&page=${pg}`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}
+    // Filter: pending only (done !== true), admin sees all users
+    const pending=all.filter(t=>!t.done).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt,userName:t.user?.name||"?",userId:t.user?.id}));
+    const filtered=isAdmin?pending:pending.filter(t=>t.userId===user.id);
+    filtered.sort((a,b)=>(a.due||"9").localeCompare(b.due||"9"));
+    setTasks(filtered);setErr(`${filtered.length} pendentes de ${all.length} tasks`);
+  }catch(e){console.warn("agenda:",e);setErr("Erro: "+e.message);}setLo(false);};
   useEffect(()=>{load();},[]);
   const markDone=async(t)=>{if(!confirm(`Concluir "${t.text.slice(0,40)}..."?`))return;try{await agF(`/tasks/${t.id}`,token,{method:"PUT",body:JSON.stringify({done:true})});setTasks(prev=>prev.filter(x=>x.id!==t.id));setErr(`Concluída! ${tasks.length-1} restantes`);}catch(e){alert("Erro: "+e.message);}};
   const today=todayLocal();const tomorrow=toLocalDate(new Date(Date.now()+86400000));
@@ -554,16 +559,20 @@ function AgendaTab({token,user}){
     <p style={{fontSize:12,fontWeight:600,color,margin:"0 0 6px"}}>{title} ({items.length})</p>
     {items.map(t=><div key={t.id} style={{background:S.cl,borderRadius:8,padding:"10px 12px",marginBottom:4,display:"flex",gap:8,alignItems:"flex-start"}}>
       <div style={{flex:1,minWidth:0}}>
-        <p style={{fontSize:12,fontWeight:500,margin:"0 0 2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.org}</p>
-        <p style={{fontSize:11,color:S.ts,margin:"0 0 2px"}}>{t.type} — {t.text.slice(0,80)}</p>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <p style={{fontSize:12,fontWeight:500,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{t.org}</p>
+          {isAdmin&&<span style={{fontSize:9,color:S.acc,flexShrink:0,background:S.acc+"18",padding:"1px 6px",borderRadius:4}}>{t.userName?.split(" ")[0]}</span>}
+        </div>
+        <p style={{fontSize:11,color:S.ts,margin:"2px 0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.type} — {t.text.slice(0,80)}</p>
         {t.due&&<p style={{fontSize:10,color:S.td,margin:0}}>{fD(t.due)} {fT(t.due)}</p>}
+        {!t.due&&<p style={{fontSize:10,color:S.td,margin:0}}>Criada: {fD(t.created)}</p>}
       </div>
       <button onClick={()=>markDone(t)} style={{padding:"6px 10px",fontSize:10,background:S.ok+"22",border:`1px solid ${S.ok}`,color:S.ok,borderRadius:6,flexShrink:0}}>✓</button>
     </div>)}
   </div>;
   return(<div>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-      <p style={{fontWeight:600,fontSize:16,margin:0}}>📅 Agenda</p>
+      <p style={{fontWeight:600,fontSize:16,margin:0}}>📅 Agenda{isAdmin?" (todos)":""}</p>
       <button onClick={load} disabled={lo} style={{padding:"6px 14px",fontSize:11,background:S.pri,border:"none",fontWeight:500}}>{lo?"...":"Atualizar"}</button>
     </div>
     {err&&<p style={{fontSize:11,color:err.startsWith("Erro")?S.dng:S.acc,margin:"0 0 12px",padding:"6px 10px",background:S.cl,borderRadius:6}}>{err}</p>}
@@ -598,7 +607,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v10.1</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v10.2</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -768,8 +777,8 @@ export default function App(){
     if("Notification"in window&&Notification.permission==="default")Notification.requestPermission();
     // Check pending tasks every 5 min
     const checkTasks=async()=>{if(!("Notification"in window)||Notification.permission!=="granted")return;
-      try{const d=await agF(`/tasks?done=false&per_page=100`,token);const now=new Date();const soon=new Date(now.getTime()+15*60000);// 15 min ahead
-        (d.data||[]).filter(t=>t.user?.id===user.id&&t.due_date).forEach(t=>{
+      try{const since=new Date();since.setDate(since.getDate()-30);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100`,token);const now=new Date();const soon=new Date(now.getTime()+15*60000);// 15 min ahead
+        (d.data||[]).filter(t=>!t.done&&t.user?.id===user.id&&t.due_date).forEach(t=>{
           const due=new Date(t.due_date);const key=t.id+"|"+t.due_date;
           if(due>=now&&due<=soon&&!notifiedRef.has(key)){notifiedRef.add(key);
             new Notification("📅 Jordan Check-in",{body:`${t.type||"Tarefa"}: ${t.organization?.name||"?"}\n${t.text?.slice(0,60)||""}`,icon:"/logo.png",tag:key,requireInteraction:true});}
