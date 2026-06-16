@@ -490,7 +490,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v8.6</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v8.7</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -548,70 +548,69 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
   </div>);}
 
 // ─── SearchOrAddModal: CNPJ first, then register if not found ───
-function SearchOrAddModal({token,orgs,onFound,onNewClient,onQuickAction,onCancel}){
-  const[cnpj,setCnpj]=useState("");const[lo,setLo]=useState(false);const[result,setResult]=useState(null);const[err,setErr]=useState("");const[step,setStep]=useState("search");
-  const search=async()=>{const clean=cnpj.replace(/[.\-\/]/g,"");if(clean.length<3){setErr("Digite CNPJ ou nome");return;}setLo(true);setErr("");setResult(null);
-    // Check local orgs (including any cached)
-    const local=orgs.find(o=>o.cnpj?.replace(/[.\-\/]/g,"")===clean);
-    if(local){setResult(local);setStep("found");setLo(false);return;}
-    // Search Agendor by CNPJ (don't filter Excluido — we want to find them)
-    if(clean.length>=11){try{const d=await agF(`/organizations?cnpj=${clean}`,token);if(d.data?.length){const o=strip(d.data[0]);setResult(o);setStep("found");setLo(false);return;}}catch{}}
-    // Search by name
-    try{const d=await agF(`/organizations?name=${encodeURIComponent(cnpj.trim())}`,token);if(d.data?.length){setResult(strip(d.data[0]));setStep("found");setLo(false);return;}}catch{}
-    // Not found — check Receita Federal
+function SearchOrAddModal({token,allOrgs,onFound,onNewClient,onCancel}){
+  const[q,setQ]=useState("");const[lo,setLo]=useState(false);const[result,setResult]=useState(null);const[err,setErr]=useState("");const[step,setStep]=useState("search");
+  const[people,setPeople]=useState([]);const[pLo,setPLo]=useState(false);const[showPeople,setShowPeople]=useState(false);
+  const[addP,setAddP]=useState(false);const[pName,setPName]=useState("");const[pCargo,setPCargo]=useState("");const[pEmail,setPEmail]=useState("");const[pPhone,setPPhone]=useState("");const[pWhats,setPWhats]=useState("");
+  const search=async()=>{if(!q.trim()){setErr("Digite CNPJ ou nome");return;}setLo(true);setErr("");setResult(null);
+    const clean=q.replace(/[.\-\/]/g,"").toLowerCase();
+    const found=allOrgs.find(o=>o.cnpj?.replace(/[.\-\/]/g,"")===clean)||allOrgs.find(o=>(o.name||"").toLowerCase().includes(clean)||(o.nickname||"").toLowerCase().includes(clean));
+    if(found){setResult(found);setStep("found");setLo(false);return;}
     if(clean.length===14){try{const rf=await fetchCNPJ(clean);setResult({rfData:rf,name:rf.nome_fantasia||rf.razao_social||"",cnpj:clean});setStep("notfound_rf");setLo(false);return;}catch{}}
     setStep("notfound");setLo(false);};
-  const isExcluido=result?.cat==="Excluido";
-  const catColor=CC[result?.cat]||S.ts;
+  const loadPeople=async(orgId)=>{setPLo(true);try{const d=await agF(`/organizations/${orgId}/people?per_page=50`,token);setPeople(d.data||[]);}catch{setPeople([]);}setPLo(false);setShowPeople(true);};
+  const addPerson=async()=>{if(!pName.trim()||!result?.id)return;setPLo(true);try{await agF("/people",token,{method:"POST",body:JSON.stringify({name:pName,organization:result.id,role:pCargo||undefined,contact:{...(pEmail?{email:pEmail}:{}),...(pPhone?{mobile:pPhone}:{}),...(pWhats?{whatsapp:pWhats}:{})}})});await loadPeople(result.id);setAddP(false);setPName("");setPCargo("");setPEmail("");setPPhone("");setPWhats("");}catch(e){alert("Erro: "+e.message);}setPLo(false);};
+  const catColor=CC[result?.cat]||S.ts;const isExcluido=result?.cat==="Excluido";
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
     {step==="search"&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Buscar / Cadastrar Cliente</p>
-      <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Digite o CNPJ ou nome para verificar</p>
-      <input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="CNPJ ou nome do cliente" style={{width:"100%",marginBottom:8,fontSize:14}} onKeyDown={e=>e.key==="Enter"&&search()} autoFocus/>
+      <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Digite CNPJ ou nome</p>
+      <input value={q} onChange={e=>setQ(e.target.value)} placeholder="CNPJ ou nome do cliente" style={{width:"100%",marginBottom:8,fontSize:14}} onKeyDown={e=>e.key==="Enter"&&search()} autoFocus/>
       {err&&<p style={{fontSize:12,color:S.dng,margin:"0 0 6px"}}>{err}</p>}
-      <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={search} disabled={lo||!cnpj.trim()} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"🔍 Buscando...":"Buscar"}</button></div></>}
-
-    {step==="found"&&result&&<>
+      <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={search} disabled={lo||!q.trim()} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"🔍 Buscando...":"Buscar"}</button></div></>}
+    {step==="found"&&result&&!showPeople&&<>
       <p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:isExcluido?S.gold:S.ok}}>{isExcluido?"📋 Cadastro encontrado":"✅ Cliente encontrado!"}</p>
       <div style={{background:S.cl,borderRadius:10,padding:12,margin:"8px 0 12px"}}>
         <p style={{fontSize:14,fontWeight:600,margin:"0 0 2px"}}>{result.name||result.nickname}</p>
         {result.cnpj&&<p style={{fontSize:11,color:S.ts,margin:"0 0 2px"}}>{result.cnpj}</p>}
-        <div style={{display:"flex",gap:4,alignItems:"center",marginTop:4}}>
-          <span style={{fontSize:10,color:"#fff",background:catColor,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{result.cat||"?"}</span>
-          <span style={{fontSize:11,color:S.ts}}>{result.addr?.city_name||result.addr?.city||""}</span>
-        </div>
+        <div style={{display:"flex",gap:4,alignItems:"center",marginTop:4}}><span style={{fontSize:10,color:"#fff",background:catColor,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{result.cat||"?"}</span><span style={{fontSize:11,color:S.ts}}>{result.addr?.city_name||result.addr?.city||""}</span></div>
         {result.owner&&<p style={{fontSize:10,color:S.ts,margin:"4px 0 0"}}>Responsável: {result.owner}</p>}
       </div>
-      {isExcluido&&<>
-        <p style={{fontSize:12,color:S.gold,fontWeight:500,margin:"0 0 8px"}}>Deseja abrir um atendimento?</p>
-        <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:12}}>
-          {TYPES.map(t=><button key={t.id} onClick={()=>{const note=prompt(`${t.l} com ${result.name}:`);if(note?.trim()){postTask(token,result.id,note,t.id,true).then(()=>alert("Registrado no Agendor!")).catch(e=>alert("Erro: "+e.message));onCancel();}}} style={{padding:10,textAlign:"left",fontSize:12,background:S.bg,border:`1px solid ${S.brd}`,borderRadius:8}}>
-            {t.id==="VISITA"?"📍":t.id==="WHATSAPP"?"💬":t.id==="LIGACAO"?"📞":t.id==="EMAIL"?"📧":t.id==="REUNIAO"?"🤝":"📄"} {t.l}
-          </button>)}
+      <p style={{fontSize:12,color:S.gold,fontWeight:500,margin:"0 0 8px"}}>Tipo de atendimento:</p>
+      <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:12}}>{TYPES.map(t=><button key={t.id} onClick={()=>{const note=prompt(`${t.l} com ${result.name}:`);if(note?.trim()){postTask(token,result.id,note,t.id,true).then(()=>alert("Registrado no Agendor!")).catch(e=>alert("Erro: "+e.message));onCancel();}}} style={{padding:10,textAlign:"left",fontSize:12,background:S.bg,border:`1px solid ${S.brd}`,borderRadius:8}}>{t.id==="VISITA"?"📍":t.id==="WHATSAPP"?"💬":t.id==="LIGACAO"?"📞":t.id==="EMAIL"?"📧":t.id==="REUNIAO"?"🤝":"📄"} {t.l}</button>)}</div>
+      <button onClick={()=>loadPeople(result.id)} style={{width:"100%",marginBottom:8,padding:10,fontSize:12,background:S.pri+"22",border:`1px solid ${S.pri}`,color:S.pri,fontWeight:500}}>{pLo?"Carregando...":"👤 Ver / Adicionar Contatos"}</button>
+      <div style={{display:"flex",gap:8}}><button onClick={()=>{setStep("search");setResult(null);setShowPeople(false);}} style={{flex:1}}>Voltar</button>{!isExcluido&&<button onClick={()=>{onFound(result);onCancel();}} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Ir ao cliente</button>}{isExcluido&&<button onClick={onCancel} style={{flex:1}}>Fechar</button>}</div></>}
+    {step==="found"&&showPeople&&<>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}><p style={{fontWeight:600,fontSize:14,margin:0}}>👤 Contatos — {result?.name}</p><button onClick={()=>setShowPeople(false)} style={{fontSize:10,padding:"4px 10px"}}>← Voltar</button></div>
+      {people.length===0&&!pLo&&<p style={{fontSize:12,color:S.ts,padding:"1rem 0",textAlign:"center"}}>Nenhum contato cadastrado</p>}
+      {people.map(p=><div key={p.id} style={{background:S.cl,borderRadius:8,padding:10,marginBottom:6}}>
+        <p style={{fontSize:13,fontWeight:600,margin:"0 0 2px"}}>{p.name}</p>
+        {p.role&&<p style={{fontSize:10,color:S.acc,margin:"0 0 2px"}}>{p.role}</p>}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:2}}>
+          {p.contact?.email&&<span style={{fontSize:10,color:S.ts}}>📧 {p.contact.email}</span>}
+          {p.contact?.mobile&&<span style={{fontSize:10,color:S.ts}}>📱 {p.contact.mobile}</span>}
+          {p.contact?.whatsapp&&<a href={`https://wa.me/55${p.contact.whatsapp.replace(/\D/g,"")}`} target="_blank" rel="noopener" style={{fontSize:10,color:S.ok,textDecoration:"none"}}>💬 WhatsApp</a>}
         </div>
-      </>}
-      <div style={{display:"flex",gap:8}}>
-        <button onClick={()=>{setStep("search");setResult(null);}} style={{flex:1}}>Voltar</button>
-        {!isExcluido&&<button onClick={()=>{onFound(result);onCancel();}} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>Ir ao cliente</button>}
-        {isExcluido&&<button onClick={onCancel} style={{flex:1}}>Fechar</button>}
-      </div>
-    </>}
-
+      </div>)}
+      {!addP&&<button onClick={()=>setAddP(true)} style={{width:"100%",padding:10,fontSize:12,background:S.acc,border:"none",fontWeight:600,marginTop:4}}>+ Adicionar Contato</button>}
+      {addP&&<div style={{background:S.cl,borderRadius:8,padding:10,marginTop:6}}>
+        <p style={{fontSize:12,fontWeight:500,margin:"0 0 6px"}}>Novo Contato</p>
+        <input value={pName} onChange={e=>setPName(e.target.value)} placeholder="Nome *" style={{width:"100%",marginBottom:4,fontSize:12}}/>
+        <input value={pCargo} onChange={e=>setPCargo(e.target.value)} placeholder="Cargo" style={{width:"100%",marginBottom:4,fontSize:12}}/>
+        <input value={pEmail} onChange={e=>setPEmail(e.target.value)} placeholder="E-mail" type="email" style={{width:"100%",marginBottom:4,fontSize:12}}/>
+        <input value={pPhone} onChange={e=>setPPhone(e.target.value)} placeholder="Telefone" style={{width:"100%",marginBottom:4,fontSize:12}}/>
+        <input value={pWhats} onChange={e=>setPWhats(e.target.value)} placeholder="WhatsApp" style={{width:"100%",marginBottom:6,fontSize:12}}/>
+        <div style={{display:"flex",gap:6}}><button onClick={()=>setAddP(false)} style={{flex:1,fontSize:11}}>Cancelar</button><button onClick={addPerson} disabled={pLo||!pName.trim()} style={{flex:1,fontSize:11,background:S.acc,border:"none",fontWeight:600}}>{pLo?"...":"Salvar no Agendor"}</button></div>
+      </div>}</>}
     {(step==="notfound"||step==="notfound_rf")&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:S.gold}}>Cliente não encontrado</p>
-      <p style={{fontSize:12,color:S.ts,margin:"0 0 8px"}}>{cnpj} não esta cadastrado no Agendor</p>
-      {step==="notfound_rf"&&result?.rfData&&<div style={{background:S.cl,borderRadius:10,padding:10,margin:"0 0 8px"}}>
-        <p style={{fontSize:11,color:S.acc,margin:"0 0 2px"}}>Dados da Receita Federal:</p>
-        <p style={{fontSize:12,fontWeight:500,margin:"0 0 1px"}}>{result.rfData.nome_fantasia||"-"}</p>
-        <p style={{fontSize:11,color:S.ts,margin:0}}>{result.rfData.razao_social||""}</p>
-        <p style={{fontSize:10,color:S.ts,margin:0}}>{result.rfData.municipio||""}/{result.rfData.uf||""}</p>
-      </div>}
-      <div style={{display:"flex",gap:8}}><button onClick={()=>{setStep("search");setResult(null);}} style={{flex:1}}>Voltar</button><button onClick={()=>{onNewClient(cnpj.replace(/[.\-\/]/g,""),result?.rfData||null);onCancel();}} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Cadastrar Novo</button></div></>}
+      <p style={{fontSize:12,color:S.ts,margin:"0 0 8px"}}>{q} não esta cadastrado no Agendor</p>
+      {step==="notfound_rf"&&result?.rfData&&<div style={{background:S.cl,borderRadius:10,padding:10,margin:"0 0 8px"}}><p style={{fontSize:11,color:S.acc,margin:"0 0 2px"}}>Dados da Receita Federal:</p><p style={{fontSize:12,fontWeight:500,margin:"0 0 1px"}}>{result.rfData.nome_fantasia||"-"}</p><p style={{fontSize:11,color:S.ts,margin:0}}>{result.rfData.razao_social||""}</p><p style={{fontSize:10,color:S.ts,margin:0}}>{result.rfData.municipio||""}/{result.rfData.uf||""}</p></div>}
+      <div style={{display:"flex",gap:8}}><button onClick={()=>{setStep("search");setResult(null);}} style={{flex:1}}>Voltar</button><button onClick={()=>{onNewClient(q.replace(/[.\-\/]/g,""),result?.rfData||null);onCancel();}} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Cadastrar Novo</button></div></>}
   </div></div>);}
-
 // ═══════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════
 export default function App(){
-  const[token,setToken]=useState(()=>sL("jc:token",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);
+  const[token,setToken]=useState(()=>sL("jc:token",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);
   const[visits,setVisits]=useState(()=>sL("jc:visits",[]));const[active,setActive]=useState(()=>sL("jc:active",null));
   const[tab,setTab]=useState("pdvs");const[search,setSearch]=useState("");const[catFilters,setCatFilters]=useState([]);const[cityFilter,setCityFilter]=useState("Todas");const[stateFilter,setStateFilter]=useState("Todos");const[segFilter,setSegFilter]=useState("Todos");const[prodFilter,setProdFilter]=useState("Todos");const[ownerFilter,setOwnerFilter]=useState("Todos");
   // Visit date range filter: "all" | "visited" | "not_visited"
@@ -657,7 +656,7 @@ export default function App(){
   const hasEndBase=dayBases[today]?.end!=null;
   const canCloseRoute=todayVisits.length>0&&!active&&!hasEndBase;
 
-  const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data.map(strip).filter(o=>o.cat!=="Excluido"));setOrgs([...all]);if(d.data.length<100)break;pg++;}setSyncMsg(`${all.length}`);}catch(e){setSyncMsg("Erro");}setSyncing(false);};
+  const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data.map(strip));if(d.data.length<100)break;pg++;}setAllOrgs(all);setOrgs(all.filter(o=>o.cat!=="Excluido"));setSyncMsg(`${all.length}`);}catch(e){setSyncMsg("Erro");}setSyncing(false);};
 
   const loadHistory=async()=>{setSyncMsg("Carregando historico...");try{const since=new Date();since.setDate(since.getDate()-90);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100`,token);if(d.data?.length){const remote=d.data.filter(t=>t.type==="Visita"&&t.done).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));const existing=new Set(visits.map(v=>v.orgId+"|"+v.checkinTime?.slice(0,16)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+r.checkinTime?.slice(0,16)));if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas carregadas`);}else setSyncMsg("Historico ja esta atualizado");}else setSyncMsg("Nenhuma visita encontrada");}catch(e){setSyncMsg("Erro: "+e.message);}};
 
@@ -808,7 +807,7 @@ export default function App(){
     {coTarget&&<NoteModal org={coTarget} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
     {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();setDayBases(p=>{const n={...p,[t]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
     {showEndDay&&<DayEndModal user={user} onSave={b=>{const t=todayLocal();setDayBases(p=>{const cur=p[t]||{};const n={...p,[t]:{...cur,end:b}};sS("jc:dayBases",n);return n;});setShowEndDay(false);}} onCancel={()=>setShowEndDay(false)}/>}
-    {searchAdd&&<SearchOrAddModal token={token} orgs={orgs}
+    {searchAdd&&<SearchOrAddModal token={token} allOrgs={allOrgs}
       onFound={(org)=>{setSearch(org.name||org.nickname);setTab("pdvs");}}
       onNewClient={(cnpj,rfData)=>{sS("jc:prefill",{cnpj,rfData});setNewClient(true);}}
       onCancel={()=>setSearchAdd(false)}/>}
