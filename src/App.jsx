@@ -490,7 +490,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v8.5</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v8.6</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -548,32 +548,54 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
   </div>);}
 
 // ─── SearchOrAddModal: CNPJ first, then register if not found ───
-function SearchOrAddModal({token,orgs,onFound,onNewClient,onCancel}){
-  const[cnpj,setCnpj]=useState("");const[lo,setLo]=useState(false);const[result,setResult]=useState(null);const[err,setErr]=useState("");const[step,setStep]=useState("search");// search | found | notfound
-  const search=async()=>{const clean=cnpj.replace(/[.\-\/]/g,"");if(clean.length<11){setErr("Digite CNPJ ou parte do nome");return;}setLo(true);setErr("");setResult(null);
-    // First check local orgs
+function SearchOrAddModal({token,orgs,onFound,onNewClient,onQuickAction,onCancel}){
+  const[cnpj,setCnpj]=useState("");const[lo,setLo]=useState(false);const[result,setResult]=useState(null);const[err,setErr]=useState("");const[step,setStep]=useState("search");
+  const search=async()=>{const clean=cnpj.replace(/[.\-\/]/g,"");if(clean.length<3){setErr("Digite CNPJ ou nome");return;}setLo(true);setErr("");setResult(null);
+    // Check local orgs (including any cached)
     const local=orgs.find(o=>o.cnpj?.replace(/[.\-\/]/g,"")===clean);
     if(local){setResult(local);setStep("found");setLo(false);return;}
-    // Search in Agendor by CNPJ
-    try{const d=await agF(`/organizations?cnpj=${clean}`,token);if(d.data?.length){const o=strip(d.data[0]);setResult(o);setStep("found");setLo(false);return;}}catch{}
+    // Search Agendor by CNPJ (don't filter Excluido — we want to find them)
+    if(clean.length>=11){try{const d=await agF(`/organizations?cnpj=${clean}`,token);if(d.data?.length){const o=strip(d.data[0]);setResult(o);setStep("found");setLo(false);return;}}catch{}}
     // Search by name
-    try{const d=await agF(`/organizations?name=${encodeURIComponent(cnpj.trim())}`,token);if(d.data?.length){const matches=d.data.map(strip).filter(o=>o.cat!=="Excluido");if(matches.length){setResult(matches[0]);setStep("found");setLo(false);return;}}}catch{}
-    // Not found anywhere — check Receita Federal
-    if(clean.length===14){try{const rf=await fetchCNPJ(clean);setResult({rfData:rf,name:rf.nome_fantasia||rf.razao_social||"",cnpj:clean});setStep("notfound_rf");}catch{setStep("notfound");}}else{setStep("notfound");}
-    setLo(false);};
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420}}>
+    try{const d=await agF(`/organizations?name=${encodeURIComponent(cnpj.trim())}`,token);if(d.data?.length){setResult(strip(d.data[0]));setStep("found");setLo(false);return;}}catch{}
+    // Not found — check Receita Federal
+    if(clean.length===14){try{const rf=await fetchCNPJ(clean);setResult({rfData:rf,name:rf.nome_fantasia||rf.razao_social||"",cnpj:clean});setStep("notfound_rf");setLo(false);return;}catch{}}
+    setStep("notfound");setLo(false);};
+  const isExcluido=result?.cat==="Excluido";
+  const catColor=CC[result?.cat]||S.ts;
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
     {step==="search"&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Buscar / Cadastrar Cliente</p>
-      <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Digite o CNPJ para verificar se ja existe</p>
+      <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Digite o CNPJ ou nome para verificar</p>
       <input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="CNPJ ou nome do cliente" style={{width:"100%",marginBottom:8,fontSize:14}} onKeyDown={e=>e.key==="Enter"&&search()} autoFocus/>
       {err&&<p style={{fontSize:12,color:S.dng,margin:"0 0 6px"}}>{err}</p>}
       <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={search} disabled={lo||!cnpj.trim()} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"🔍 Buscando...":"Buscar"}</button></div></>}
-    {step==="found"&&result&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:S.ok}}>✅ Cliente encontrado!</p>
+
+    {step==="found"&&result&&<>
+      <p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:isExcluido?S.gold:S.ok}}>{isExcluido?"📋 Cadastro encontrado":"✅ Cliente encontrado!"}</p>
       <div style={{background:S.cl,borderRadius:10,padding:12,margin:"8px 0 12px"}}>
         <p style={{fontSize:14,fontWeight:600,margin:"0 0 2px"}}>{result.name||result.nickname}</p>
         {result.cnpj&&<p style={{fontSize:11,color:S.ts,margin:"0 0 2px"}}>{result.cnpj}</p>}
-        <p style={{fontSize:11,color:S.ts,margin:0}}>{result.cat||""} · {result.addr?.city_name||result.addr?.city||""}</p>
+        <div style={{display:"flex",gap:4,alignItems:"center",marginTop:4}}>
+          <span style={{fontSize:10,color:"#fff",background:catColor,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{result.cat||"?"}</span>
+          <span style={{fontSize:11,color:S.ts}}>{result.addr?.city_name||result.addr?.city||""}</span>
+        </div>
+        {result.owner&&<p style={{fontSize:10,color:S.ts,margin:"4px 0 0"}}>Responsável: {result.owner}</p>}
       </div>
-      <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Fechar</button><button onClick={()=>{onFound(result);onCancel();}} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>Ir ao cliente</button></div></>}
+      {isExcluido&&<>
+        <p style={{fontSize:12,color:S.gold,fontWeight:500,margin:"0 0 8px"}}>Deseja abrir um atendimento?</p>
+        <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:12}}>
+          {TYPES.map(t=><button key={t.id} onClick={()=>{const note=prompt(`${t.l} com ${result.name}:`);if(note?.trim()){postTask(token,result.id,note,t.id,true).then(()=>alert("Registrado no Agendor!")).catch(e=>alert("Erro: "+e.message));onCancel();}}} style={{padding:10,textAlign:"left",fontSize:12,background:S.bg,border:`1px solid ${S.brd}`,borderRadius:8}}>
+            {t.id==="VISITA"?"📍":t.id==="WHATSAPP"?"💬":t.id==="LIGACAO"?"📞":t.id==="EMAIL"?"📧":t.id==="REUNIAO"?"🤝":"📄"} {t.l}
+          </button>)}
+        </div>
+      </>}
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>{setStep("search");setResult(null);}} style={{flex:1}}>Voltar</button>
+        {!isExcluido&&<button onClick={()=>{onFound(result);onCancel();}} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>Ir ao cliente</button>}
+        {isExcluido&&<button onClick={onCancel} style={{flex:1}}>Fechar</button>}
+      </div>
+    </>}
+
     {(step==="notfound"||step==="notfound_rf")&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:S.gold}}>Cliente não encontrado</p>
       <p style={{fontSize:12,color:S.ts,margin:"0 0 8px"}}>{cnpj} não esta cadastrado no Agendor</p>
       {step==="notfound_rf"&&result?.rfData&&<div style={{background:S.cl,borderRadius:10,padding:10,margin:"0 0 8px"}}>
