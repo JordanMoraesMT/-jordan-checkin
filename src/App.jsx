@@ -213,12 +213,12 @@ function RotasTab({visits,dayBases,user,plocs}){
   const[routes,setRoutes]=useState([]);const[lo,setLo]=useState(false);
   const startBase=getBase(dayBases,sel,user?.id);
   const endBase=getEnd(dayBases,sel,user?.id);
-  // FIX: only real visits (with check-in/checkout, type VISITA)
+  // FIX: only real visits from current user
   const dv=useMemo(()=>{
     const t=new Date(sel+"T12:00:00").toDateString();
-    return visits.filter(v=>new Date(v.checkinTime).toDateString()===t&&isRealVisit(v))
+    return visits.filter(v=>new Date(v.checkinTime).toDateString()===t&&isRealVisit(v)&&(!v.userName||v.userName===user?.name))
       .sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
-  },[visits,sel]);
+  },[visits,sel,user?.name]);
   useEffect(()=>{if(!dv.length){setRoutes([]);return;}let c=false;setLo(true);(async()=>{const s=[];
     const fc=getVCoord(dv[0],plocs);
     // Start base → first PDV
@@ -236,7 +236,7 @@ function RotasTab({visits,dayBases,user,plocs}){
   const totKm=routes.reduce((s,r)=>s+r.km,0);
   // FIX: Jornada = primeiro check-in ao último check-out
   const workH=dv.length?mins(dv[0].checkinTime,dv[dv.length-1].checkoutTime):0;
-  const days=[...new Set(visits.filter(v=>isRealVisit(v)).map(v=>new Date(v.checkinTime).toISOString().slice(0,10)))].sort().reverse().slice(0,30);
+  const days=[...new Set(visits.filter(v=>isRealVisit(v)&&(!v.userName||v.userName===user?.name)).map(v=>new Date(v.checkinTime).toISOString().slice(0,10)))].sort().reverse().slice(0,30);
   return(<div><select value={sel} onChange={e=>setSel(e.target.value)} style={{width:"100%",marginBottom:12}}><option value={new Date().toISOString().slice(0,10)}>Hoje — {fD(new Date())}</option>{days.filter(d=>d!==new Date().toISOString().slice(0,10)).map(d=><option key={d} value={d}>{fD(d+"T12:00")}</option>)}</select>
     {dv.length>0&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[["Km",totKm.toFixed(1)],["Jornada",hrsMin(workH)],["Visitas",dv.length],["Base",routes.filter(r=>r.tp==="bs"||r.tp==="be").reduce((s,r)=>s+r.km,0).toFixed(1)+" km"]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}</div>}
     {startBase&&<p style={{fontSize:10,color:S.ts,margin:"0 0 4px"}}>Origem: {startBase.label||"Casa"} {endBase&&endBase!==startBase?`| Destino: ${endBase.label||"Casa"}`:""}</p>}
@@ -270,9 +270,11 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const pv=useMemo(()=>useVisits.filter(v=>{
     if(!v.checkoutTime)return false;
     if(selUser==="me"&&v.taskType&&v.taskType!=="VISITA")return false;
+    // FIX: only show current user's visits in "me" mode
+    if(selUser==="me"&&v.userName&&v.userName!==user.name)return false;
     const d=new Date(v.checkinTime).toISOString().slice(0,10);
     return d>=sd&&d<=ed;
-  }).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime)),[useVisits,sd,ed,selUser]);
+  }).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime)),[useVisits,sd,ed,selUser,user.name]);
   const bd=useMemo(()=>{const m={};pv.forEach(v=>{const k=new Date(v.checkinTime).toISOString().slice(0,10);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pv]);
   // FIX: when viewing team (Alisson), ignore Jordan's dayBases, use Alisson's home
   const getRepBase=(dt)=>{if(selUser==="team")return HOMES[repUserId]||null;return getBase(dayBases,dt,repUserId);};
@@ -458,7 +460,7 @@ export default function App(){
 
   const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data.map(strip));setOrgs([...all]);if(d.data.length<100)break;pg++;}setSyncMsg(`${all.length}`);}catch(e){setSyncMsg("Erro");}setSyncing(false);};
 
-  const loadHistory=async()=>{setSyncMsg("Carregando historico...");try{const since=new Date();since.setDate(since.getDate()-90);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100`,token);if(d.data?.length){const remote=d.data.filter(t=>t.type==="Visita"&&t.done).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));const existing=new Set(visits.map(v=>v.orgId+"|"+v.checkinTime?.slice(0,16)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+r.checkinTime?.slice(0,16)));if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas carregadas`);}else setSyncMsg("Historico ja esta atualizado");}else setSyncMsg("Nenhuma visita encontrada");}catch(e){setSyncMsg("Erro: "+e.message);}};
+  const loadHistory=async()=>{setSyncMsg("Carregando historico...");try{const since=new Date();since.setDate(since.getDate()-90);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100`,token);if(d.data?.length){const remote=d.data.filter(t=>t.type==="Visita"&&t.done&&t.user?.id===user.id).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));const existing=new Set(visits.map(v=>v.orgId+"|"+v.checkinTime?.slice(0,16)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+r.checkinTime?.slice(0,16)));if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas carregadas`);}else setSyncMsg("Historico ja esta atualizado");}else setSyncMsg("Nenhuma visita encontrada");}catch(e){setSyncMsg("Erro: "+e.message);}};
 
   const ensureBase=()=>{const t=new Date().toISOString().slice(0,10);if(!dayBases[t]||(!dayBases[t].start&&!dayBases[t].lat))setShowDB(true);};
   const cities=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const c=o.addr?.city_name||o.addr?.city;if(c)s.add(c);});return["Todas",...[...s].sort()];},[orgs]);
