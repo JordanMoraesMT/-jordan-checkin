@@ -554,8 +554,9 @@ function AgendaTab({token,user,allOrgs}){
     for(let w=0;w<6;w++){const from=new Date(now);from.setDate(from.getDate()-30*(w+1));const to=new Date(now);to.setDate(to.getDate()-30*w);
       setErr(`${all.length} tasks (${w*30}d)...`);
       let pg=1;while(true){const d=await agF(`/tasks?createdDateGt=${from.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}}
-    const mapped=all.map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt,done:!!t.done,finished:t.finishedAt||null,userName:t.user?.name||"?",userId:t.user?.id}));
-    setTasks(mapped);setErr(`${mapped.length} tarefas carregadas`);
+    // ONLY tasks with due_date (tarefas agendadas), NOT activities (logs without schedule)
+    const mapped=all.filter(t=>t.due_date||t.dueDate).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt,done:!!t.done,finished:t.finishedAt||null,userName:t.user?.name||"?",userId:t.user?.id}));
+    setTasks(mapped);setErr(`${mapped.length} tarefas de ${all.length} registros`);
   }catch(e){console.warn("agenda:",e);setErr("Erro: "+e.message);}setLo(false);};
   useEffect(()=>{load();},[]);
   const markDone=async(t)=>{if(!confirm(`Finalizar "${t.text.slice(0,50)}..."?`))return;try{await agF(`/organizations/${t.orgId}/tasks/${t.id}`,token,{method:"PUT",body:JSON.stringify({done:true,text:t.text})});setTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true,finished:new Date().toISOString()}:x));setErr("Finalizada!");}catch(e){alert("Erro: "+e.message);}};
@@ -606,8 +607,7 @@ function AgendaTab({token,user,allOrgs}){
     {lo&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando...</p>}
     {!lo&&filter==="pending"&&<>{overdue.length>0&&<><p style={{fontSize:11,fontWeight:600,color:S.dng,margin:"0 0 4px"}}>⚠️ Atrasadas ({overdue.length})</p>{overdue.map(renderTask)}</>}
       {todayT.filter(t=>!t.done).length>0&&<><p style={{fontSize:11,fontWeight:600,color:S.gold,margin:"8px 0 4px"}}>📌 Hoje ({todayT.filter(t=>!t.done).length})</p>{todayT.filter(t=>!t.done).map(renderTask)}</>}
-      {futureT.length>0&&<><p style={{fontSize:11,fontWeight:600,color:S.pri,margin:"8px 0 4px"}}>🗓️ Próximas ({futureT.length})</p>{futureT.map(renderTask)}</>}
-      {noDueT.filter(t=>!t.done).length>0&&<><p style={{fontSize:11,fontWeight:600,color:S.td,margin:"8px 0 4px"}}>📋 Sem prazo ({noDueT.filter(t=>!t.done).length})</p>{noDueT.filter(t=>!t.done).map(renderTask)}</>}</>}
+      {futureT.length>0&&<><p style={{fontSize:11,fontWeight:600,color:S.pri,margin:"8px 0 4px"}}>🗓️ Próximas ({futureT.length})</p>{futureT.map(renderTask)}</>}</>}
     {!lo&&filter==="done"&&<>{doneT.length?doneT.map(renderTask):<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma finalizada no período</p>}</>}
     {!lo&&!filtered.length&&filter==="pending"&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma tarefa pendente</p>}
     {/* Add Task Modal */}
@@ -647,7 +647,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v10.5</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v10.6</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
