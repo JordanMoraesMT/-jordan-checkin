@@ -112,8 +112,9 @@ function NoteModal({org,onSave,onCancel}){
 </div></div>);}
 
 function NewClientModal({token,onSave,onCancel}){
+  const pf=sL("jc:prefill",null);useEffect(()=>{sS("jc:prefill",null);},[]);// Clear prefill after reading
   const[step,setStep]=useState(1);const[orgId,setOrgId]=useState(null);const[orgName,setOrgName]=useState("");const[orgData,setOrgData]=useState(null);
-  const[name,setName]=useState("");const[legal,setLegal]=useState("");const[cnpj,setCnpj]=useState("");const[city,setCity]=useState("");const[state,setState]=useState("MT");const[district,setDistrict]=useState("");const[street,setStreet]=useState("");const[num,setNum]=useState("");const[comp,setComp]=useState("");const[cep,setCep]=useState("");const[phone,setPhone]=useState("");
+  const[name,setName]=useState(pf?.rfData?.nome_fantasia||"");const[legal,setLegal]=useState(pf?.rfData?.razao_social||"");const[cnpj,setCnpj]=useState(pf?.cnpj||"");const[city,setCity]=useState(pf?.rfData?.municipio||"");const[state,setState]=useState(pf?.rfData?.uf||"MT");const[district,setDistrict]=useState(pf?.rfData?.bairro||"");const[street,setStreet]=useState([pf?.rfData?.descricao_tipo_de_logradouro,pf?.rfData?.logradouro].filter(Boolean).join(" ")||"");const[num,setNum]=useState(pf?.rfData?.numero||"");const[comp,setComp]=useState(pf?.rfData?.complemento||"");const[cep,setCep]=useState(pf?.rfData?.cep||"");const[phone,setPhone]=useState(pf?.rfData?.ddd_telefone_1?.replace(/[^\d]/g,"")||"");
   const[catId,setCatId]=useState(3186598);const[sectorId,setSectorId]=useState("");const[originId,setOriginId]=useState("");const[grupo,setGrupo]=useState("");
   const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[fetching,setFetching]=useState(false);
   const[pName,setPName]=useState("");const[pEmail,setPEmail]=useState("");const[pPhone,setPPhone]=useState("");const[pWhats,setPWhats]=useState("");
@@ -489,7 +490,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v8.4</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v8.5</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -546,6 +547,44 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     </div>
   </div>);}
 
+// ─── SearchOrAddModal: CNPJ first, then register if not found ───
+function SearchOrAddModal({token,orgs,onFound,onNewClient,onCancel}){
+  const[cnpj,setCnpj]=useState("");const[lo,setLo]=useState(false);const[result,setResult]=useState(null);const[err,setErr]=useState("");const[step,setStep]=useState("search");// search | found | notfound
+  const search=async()=>{const clean=cnpj.replace(/[.\-\/]/g,"");if(clean.length<11){setErr("Digite CNPJ ou parte do nome");return;}setLo(true);setErr("");setResult(null);
+    // First check local orgs
+    const local=orgs.find(o=>o.cnpj?.replace(/[.\-\/]/g,"")===clean);
+    if(local){setResult(local);setStep("found");setLo(false);return;}
+    // Search in Agendor by CNPJ
+    try{const d=await agF(`/organizations?cnpj=${clean}`,token);if(d.data?.length){const o=strip(d.data[0]);setResult(o);setStep("found");setLo(false);return;}}catch{}
+    // Search by name
+    try{const d=await agF(`/organizations?name=${encodeURIComponent(cnpj.trim())}`,token);if(d.data?.length){const matches=d.data.map(strip).filter(o=>o.cat!=="Excluido");if(matches.length){setResult(matches[0]);setStep("found");setLo(false);return;}}}catch{}
+    // Not found anywhere — check Receita Federal
+    if(clean.length===14){try{const rf=await fetchCNPJ(clean);setResult({rfData:rf,name:rf.nome_fantasia||rf.razao_social||"",cnpj:clean});setStep("notfound_rf");}catch{setStep("notfound");}}else{setStep("notfound");}
+    setLo(false);};
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420}}>
+    {step==="search"&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Buscar / Cadastrar Cliente</p>
+      <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Digite o CNPJ para verificar se ja existe</p>
+      <input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="CNPJ ou nome do cliente" style={{width:"100%",marginBottom:8,fontSize:14}} onKeyDown={e=>e.key==="Enter"&&search()} autoFocus/>
+      {err&&<p style={{fontSize:12,color:S.dng,margin:"0 0 6px"}}>{err}</p>}
+      <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={search} disabled={lo||!cnpj.trim()} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"🔍 Buscando...":"Buscar"}</button></div></>}
+    {step==="found"&&result&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:S.ok}}>✅ Cliente encontrado!</p>
+      <div style={{background:S.cl,borderRadius:10,padding:12,margin:"8px 0 12px"}}>
+        <p style={{fontSize:14,fontWeight:600,margin:"0 0 2px"}}>{result.name||result.nickname}</p>
+        {result.cnpj&&<p style={{fontSize:11,color:S.ts,margin:"0 0 2px"}}>{result.cnpj}</p>}
+        <p style={{fontSize:11,color:S.ts,margin:0}}>{result.cat||""} · {result.addr?.city_name||result.addr?.city||""}</p>
+      </div>
+      <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Fechar</button><button onClick={()=>{onFound(result);onCancel();}} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>Ir ao cliente</button></div></>}
+    {(step==="notfound"||step==="notfound_rf")&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:S.gold}}>Cliente não encontrado</p>
+      <p style={{fontSize:12,color:S.ts,margin:"0 0 8px"}}>{cnpj} não esta cadastrado no Agendor</p>
+      {step==="notfound_rf"&&result?.rfData&&<div style={{background:S.cl,borderRadius:10,padding:10,margin:"0 0 8px"}}>
+        <p style={{fontSize:11,color:S.acc,margin:"0 0 2px"}}>Dados da Receita Federal:</p>
+        <p style={{fontSize:12,fontWeight:500,margin:"0 0 1px"}}>{result.rfData.nome_fantasia||"-"}</p>
+        <p style={{fontSize:11,color:S.ts,margin:0}}>{result.rfData.razao_social||""}</p>
+        <p style={{fontSize:10,color:S.ts,margin:0}}>{result.rfData.municipio||""}/{result.rfData.uf||""}</p>
+      </div>}
+      <div style={{display:"flex",gap:8}}><button onClick={()=>{setStep("search");setResult(null);}} style={{flex:1}}>Voltar</button><button onClick={()=>{onNewClient(cnpj.replace(/[.\-\/]/g,""),result?.rfData||null);onCancel();}} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Cadastrar Novo</button></div></>}
+  </div></div>);}
+
 // ═══════════════════════════════════════════════════════════════
 // MAIN APP
 // ═══════════════════════════════════════════════════════════════
@@ -557,7 +596,7 @@ export default function App(){
   const[visitMode,setVisitMode]=useState("all");const[visitFrom,setVisitFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return toLocalDate(d);});const[visitTo,setVisitTo]=useState(todayLocal);
   const[nearMe,setNearMe]=useState(null);const[nearLoading,setNearLoading]=useState(false);const[nearRoad,setNearRoad]=useState({});const[sortMode,setSortMode]=useState("alpha");
   const[syncing,setSyncing]=useState(false);const[syncMsg,setSyncMsg]=useState("");const[ldId,setLdId]=useState(null);const[geoErr,setGeoErr]=useState("");
-  const[coTarget,setCoTarget]=useState(null);const[personTarget,setPersonTarget]=useState(null);const[newClient,setNewClient]=useState(false);const[divTarget,setDivTarget]=useState(null);const[editTarget,setEditTarget]=useState(null);
+  const[coTarget,setCoTarget]=useState(null);const[personTarget,setPersonTarget]=useState(null);const[newClient,setNewClient]=useState(false);const[searchAdd,setSearchAdd]=useState(false);const[divTarget,setDivTarget]=useState(null);const[editTarget,setEditTarget]=useState(null);
   const[plocs,setPlocs]=useState(()=>sL("jc:pdvLocs",{}));const[dayBases,setDayBases]=useState(()=>sL("jc:dayBases",{}));
   const[showDB,setShowDB]=useState(false);const[showEndDay,setShowEndDay]=useState(false);const[vc,setVc]=useState(PG);
 
@@ -596,7 +635,7 @@ export default function App(){
   const hasEndBase=dayBases[today]?.end!=null;
   const canCloseRoute=todayVisits.length>0&&!active&&!hasEndBase;
 
-  const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data.map(strip));setOrgs([...all]);if(d.data.length<100)break;pg++;}setSyncMsg(`${all.length}`);}catch(e){setSyncMsg("Erro");}setSyncing(false);};
+  const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data.map(strip).filter(o=>o.cat!=="Excluido"));setOrgs([...all]);if(d.data.length<100)break;pg++;}setSyncMsg(`${all.length}`);}catch(e){setSyncMsg("Erro");}setSyncing(false);};
 
   const loadHistory=async()=>{setSyncMsg("Carregando historico...");try{const since=new Date();since.setDate(since.getDate()-90);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100`,token);if(d.data?.length){const remote=d.data.filter(t=>t.type==="Visita"&&t.done).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));const existing=new Set(visits.map(v=>v.orgId+"|"+v.checkinTime?.slice(0,16)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+r.checkinTime?.slice(0,16)));if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas carregadas`);}else setSyncMsg("Historico ja esta atualizado");}else setSyncMsg("Nenhuma visita encontrada");}catch(e){setSyncMsg("Erro: "+e.message);}};
 
@@ -660,11 +699,11 @@ export default function App(){
         <img src="/logo.png" alt="" style={{height:56,width:"auto",objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
         <div><p style={{fontSize:18,fontWeight:700,margin:0}}>Check-in</p><p style={{fontSize:13,color:S.ts,margin:0}}>{user?.name} — {fD(new Date())}</p></div>
       </div>
-      <div style={{display:"flex",gap:6}}><button onClick={()=>setNewClient(true)} style={{padding:"10px 14px",fontSize:18,background:S.acc,border:"none",fontWeight:700}}>+</button><button onClick={()=>doSync()} disabled={syncing} style={{padding:"10px 16px",fontSize:15,background:syncing?S.cl:S.pri,border:"none",fontWeight:500}}>{syncing?"...":"🔄"}</button></div>
+      <div style={{display:"flex",gap:6}}><button onClick={()=>setSearchAdd(true)} style={{padding:"10px 14px",fontSize:18,background:S.acc,border:"none",fontWeight:700}}>+</button><button onClick={()=>doSync()} disabled={syncing} style={{padding:"10px 16px",fontSize:15,background:syncing?S.cl:S.pri,border:"none",fontWeight:500}}>{syncing?"...":"🔄"}</button></div>
     </div>
     <div style={{padding:"0 16px"}}>
       {active&&tab!=="config"&&<Banner v={active} orgs={orgs} onClick={()=>{setTab("pdvs");setSearch(active.orgName);}}/>}
-      {teamActive&&tab!=="config"&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,borderRadius:"50%",background:S.gold,animation:"pulse 2s infinite"}}/><p style={{fontSize:13,color:S.gold,margin:0}}>{user.id===743088?"Alisson":"Jordan"} em atendimento: <b>{teamActive.orgName}</b></p></div><p style={{fontSize:11,color:S.ts,margin:"3px 0 0 16px"}}>Desde {fT(teamActive.checkinTime)} — {mins(teamActive.checkinTime,new Date())} min</p><style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style></div>}
+      {teamActive&&tab!=="config"&&user?.id===743088&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,borderRadius:"50%",background:S.gold,animation:"pulse 2s infinite"}}/><p style={{fontSize:13,color:S.gold,margin:0}}>Alisson em atendimento: <b>{teamActive.orgName}</b></p></div><p style={{fontSize:11,color:S.ts,margin:"3px 0 0 16px"}}>Desde {fT(teamActive.checkinTime)} — {mins(teamActive.checkinTime,new Date())} min</p><style>{`@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}`}</style></div>}
 
       {mAlert&&!active&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.gold,margin:0}}>⏰ Bom dia! Atividades ainda nao iniciadas.</p></div>}
       {prevDay&&<div style={{background:S.dng+"18",border:`1px solid ${S.dng}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.dng,margin:"0 0 8px"}}>⚠️ Visita aberta de {fD(prevDay.checkinTime)} — {prevDay.orgName}</p><div style={{display:"flex",gap:8}}><button onClick={()=>{const c=new Date(prevDay.checkinTime);c.setHours(18);setVisits(p=>[{...prevDay,checkoutTime:c.toISOString(),note:"Auto 18h",taskType:"VISITA",synced:false},...p]);setActive(null);setPrevDay(null);}} style={{flex:1,fontSize:12,background:S.dng,border:"none"}}>Fechar 18h</button><button onClick={()=>setCoTarget({id:prevDay.orgId,name:prevDay.orgName})} style={{flex:1,fontSize:12}}>Com obs.</button></div></div>}
@@ -747,6 +786,10 @@ export default function App(){
     {coTarget&&<NoteModal org={coTarget} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
     {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();setDayBases(p=>{const n={...p,[t]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
     {showEndDay&&<DayEndModal user={user} onSave={b=>{const t=todayLocal();setDayBases(p=>{const cur=p[t]||{};const n={...p,[t]:{...cur,end:b}};sS("jc:dayBases",n);return n;});setShowEndDay(false);}} onCancel={()=>setShowEndDay(false)}/>}
+    {searchAdd&&<SearchOrAddModal token={token} orgs={orgs}
+      onFound={(org)=>{setSearch(org.name||org.nickname);setTab("pdvs");}}
+      onNewClient={(cnpj,rfData)=>{sS("jc:prefill",{cnpj,rfData});setNewClient(true);}}
+      onCancel={()=>setSearchAdd(false)}/>}
     {newClient&&<NewClientModal token={token} onSave={org=>{setOrgs(p=>[org,...p]);setNewClient(false);}} onCancel={()=>setNewClient(false)}/>}
     {personTarget&&<PersonModal org={personTarget} token={token} onClose={()=>setPersonTarget(null)}/>}
     {editTarget&&<EditModal org={editTarget} token={token} users={usersList} onSave={u=>{setOrgs(p=>p.map(o=>o.id===u.id?u:o));setEditTarget(null);}} onClose={()=>setEditTarget(null)}/>}
