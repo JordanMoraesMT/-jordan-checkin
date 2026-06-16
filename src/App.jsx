@@ -37,6 +37,10 @@ function getBase(dayBases,date,userId){const b=dayBases[date];if(!b)return HOMES
 function getEnd(dayBases,date,userId){const b=dayBases[date];if(b?.end)return b.end;return getBase(dayBases,date,userId);}
 // ─── Helper: only real visits (check-in based, not WhatsApp/calls) ───
 function isRealVisit(v){if(!v.checkoutTime)return false;if(v.taskType&&v.taskType!=="VISITA")return false;return true;}
+// ─── Helper: resolve GPS from visit directly OR from plocs by orgId ───
+function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs&&v.orgId&&plocs[v.orgId])return{lat:plocs[v.orgId].lat,lng:plocs[v.orgId].lng};return null;}
+function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
+const MIN_OBS=100;
 
 const LB=({t,children})=><div style={{marginBottom:6}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px",textTransform:"uppercase",letterSpacing:.5}}>{t}</p>{children}</div>;
 
@@ -83,19 +87,20 @@ function NoteModal({org,onSave,onCancel}){
   const[n,setN]=useState("");const[tp,setTp]=useState("VISITA");const[nt,setNt]=useState("VISITA");const[nd,setNd]=useState("");const[nh,setNh]=useState("09:00");const[ndsc,setNdsc]=useState("");
   const[sale,setSale]=useState(false);const[brand,setBrand]=useState("");const[saleVal,setSaleVal]=useState("");
   const today=new Date().toISOString().slice(0,10);
-  const dateValid=nd>=today;const ok=n.trim()&&nd&&ndsc.trim()&&dateValid;
+  const dateValid=nd>=today;const ok=n.trim().length>=MIN_OBS&&nd&&ndsc.trim().length>=MIN_OBS&&dateValid;
+  const obsLeft=MIN_OBS-n.trim().length;const dscLeft=MIN_OBS-ndsc.trim().length;
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:50}}><div style={{background:S.card,borderRadius:"16px 16px 0 0",padding:"1.25rem",width:"100%",maxWidth:480,maxHeight:"92vh",overflowY:"auto"}}>
   <p style={{fontWeight:600,fontSize:16,margin:"0 0 8px"}}>Registrar atividade</p>
   <p style={{fontSize:12,color:S.ts,margin:"0 0 8px"}}>{org?.name||org?.nickname}</p>
   <LB t="O QUE FOI FEITO"><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4}}>{TYPES.map(t=><button key={t.id} onClick={()=>setTp(t.id)} style={{padding:"6px",fontSize:10,border:tp===t.id?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:tp===t.id?S.cl:S.bg,color:tp===t.id?S.pl:S.ts,fontWeight:tp===t.id?600:400}}>{t.l}</button>)}</div></LB>
-  <LB t="OBSERVAÇÃO"><textarea value={n} onChange={e=>setN(e.target.value)} placeholder="Descreva (obrigatorio)" rows={2} style={{width:"100%",border:`1px solid ${n.trim()?S.brd:S.dng}`}}/></LB>
+  <LB t="OBSERVAÇÃO"><textarea value={n} onChange={e=>setN(e.target.value)} placeholder={`Descreva detalhadamente (min ${MIN_OBS} caracteres)`} rows={3} style={{width:"100%",border:`1px solid ${n.trim().length>=MIN_OBS?S.brd:S.dng}`}}/>{obsLeft>0&&<p style={{fontSize:10,color:S.dng,margin:"2px 0 0"}}>Faltam {obsLeft} caracteres</p>}</LB>
   <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8,padding:"8px",background:sale?S.ok+"18":S.bg,border:`1px solid ${sale?S.ok:S.brd}`,borderRadius:8,cursor:"pointer"}} onClick={()=>setSale(!sale)}><span style={{fontSize:16}}>{sale?"✅":"💰"}</span><span style={{fontSize:12,fontWeight:500,color:sale?S.ok:S.ts}}>Venda realizada</span></div>
   {sale&&<div style={{marginBottom:8}}><div style={{display:"flex",gap:6}}><select value={brand} onChange={e=>setBrand(e.target.value)} style={{flex:1,fontSize:11}}><option value="">Marca</option>{BRANDS.map(b=><option key={b}>{b}</option>)}</select><input type="number" value={saleVal} onChange={e=>setSaleVal(e.target.value)} placeholder="R$ valor" style={{width:100}}/></div></div>}
   <div style={{borderTop:`1px solid ${S.brd}`,paddingTop:8}}>
     <LB t="PRÓXIMO PASSO"><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4}}>{TYPES.map(t=><button key={t.id} onClick={()=>setNt(t.id)} style={{padding:"6px",fontSize:10,border:nt===t.id?`2px solid ${S.acc}`:`1px solid ${S.brd}`,background:nt===t.id?S.cl:S.bg,color:nt===t.id?S.acc:S.ts,fontWeight:nt===t.id?600:400}}>{t.l}</button>)}</div></LB>
     <LB t="DATA / HORA"><div style={{display:"flex",gap:6}}><input type="date" value={nd} min={today} onChange={e=>setNd(e.target.value)} style={{flex:1,border:`1px solid ${nd&&dateValid?S.brd:S.dng}`}}/><input type="time" value={nh} onChange={e=>setNh(e.target.value)} style={{width:80}}/></div></LB>
     {nd&&!dateValid&&<p style={{fontSize:10,color:S.dng,margin:"-4px 0 4px"}}>Data nao pode ser anterior a hoje</p>}
-    <LB t="DESCRIÇÃO"><textarea value={ndsc} onChange={e=>setNdsc(e.target.value)} placeholder="Proximo contato (obrigatorio)" rows={1} style={{width:"100%",border:`1px solid ${ndsc.trim()?S.brd:S.dng}`}}/></LB>
+    <LB t="DESCRIÇÃO"><textarea value={ndsc} onChange={e=>setNdsc(e.target.value)} placeholder={`Proximo contato detalhado (min ${MIN_OBS} caracteres)`} rows={3} style={{width:"100%",border:`1px solid ${ndsc.trim().length>=MIN_OBS?S.brd:S.dng}`}}/>{dscLeft>0&&<p style={{fontSize:10,color:S.dng,margin:"2px 0 0"}}>Faltam {dscLeft} caracteres</p>}</LB>
   </div>
   <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={()=>ok&&onSave(n,tp,{nextType:nt,nextDate:nd,nextTime:nh,nextDesc:ndsc},sale?{brand,value:parseFloat(saleVal)||0}:null)} disabled={!ok} style={{flex:1,background:ok?S.pri:S.cl,border:"none",fontWeight:600}}>Registrar</button></div>
 </div></div>);}
@@ -155,8 +160,24 @@ function EditModal({org,token,users,onSave,onClose}){const[name,setName]=useStat
   {msg&&<p style={{fontSize:12,color:msg.startsWith("Erro")?S.dng:S.ok,margin:"0 0 6px"}}>{msg}</p>}
   <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={onClose} style={{flex:1}}>Cancelar</button><button onClick={save} disabled={lo} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"...":"Salvar"}</button></div></div></div>);}
 
-// ─── DayBaseModal: INÍCIO da jornada (de onde saiu) ───
-function DayBaseModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[tp,setTp]=useState("home");const[lo,setLo]=useState(false);const[hn,setHn]=useState("");const go=async()=>{if(tp==="home"&&home){onSave({type:"home",...home});return;}setLo(true);try{const g=await gps();onSave({type:tp,lat:g.lat,lng:g.lng,label:hn||"Hotel/Airbnb"});}catch{alert("GPS indisponivel.");}setLo(false);};return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:400}}><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>De onde esta saindo?</p><p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Inicio da jornada de hoje</p>{["home","hotel"].map(t=><label key={t} style={{display:"flex",alignItems:"center",gap:10,padding:12,border:`${tp===t?2:1}px solid ${tp===t?S.pri:S.brd}`,borderRadius:10,marginBottom:8,cursor:"pointer",background:tp===t?S.cl:S.bg}}><input type="radio" checked={tp===t} onChange={()=>setTp(t)}/><span style={{fontWeight:500}}>{t==="home"?"🏠 Casa":"🏨 Hotel / Airbnb"}</span></label>)}{tp==="hotel"&&<input value={hn} onChange={e=>setHn(e.target.value)} placeholder="Nome do hotel / cidade" style={{width:"100%",marginBottom:8}}/>}<div style={{display:"flex",gap:8,marginTop:8}}><button onClick={onCancel} style={{flex:1}}>Depois</button><button onClick={go} disabled={lo} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"📍 GPS...":"Confirmar"}</button></div></div></div>);}
+// ─── JourneyModal: INÍCIO da jornada — origem E destino ───
+function JourneyModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[orig,setOrig]=useState("home");const[dest,setDest]=useState("home");const[lo,setLo]=useState(false);const[origName,setOrigName]=useState("");const[destName,setDestName]=useState("");
+  const go=async()=>{setLo(true);let startBase,endBase;
+    if(orig==="home"&&home){startBase={type:"home",...home};}else{try{const g=await gps();startBase={type:"hotel",lat:g.lat,lng:g.lng,label:origName||"Hotel"};}catch{alert("GPS indisponivel para origem.");setLo(false);return;}}
+    if(dest==="home"&&home){endBase={type:"home",...home};}else{endBase={type:"hotel",lat:null,lng:null,label:destName||"Hotel (GPS ao fechar)"};}
+    onSave({start:startBase,end:endBase});setLo(false);};
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
+    <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Jornada de Trabalho</p>
+    <p style={{fontSize:12,color:S.acc,fontWeight:600,margin:"0 0 6px"}}>DE ONDE ESTÁ SAINDO?</p>
+    {["home","hotel"].map(t=><label key={"o"+t} style={{display:"flex",alignItems:"center",gap:10,padding:10,border:`${orig===t?2:1}px solid ${orig===t?S.pri:S.brd}`,borderRadius:10,marginBottom:6,cursor:"pointer",background:orig===t?S.cl:S.bg}}><input type="radio" checked={orig===t} onChange={()=>setOrig(t)}/><span style={{fontSize:13,fontWeight:500}}>{t==="home"?"🏠 Casa":"🏨 Hotel / Airbnb"}</span></label>)}
+    {orig==="hotel"&&<input value={origName} onChange={e=>setOrigName(e.target.value)} placeholder="Nome do hotel / cidade" style={{width:"100%",marginBottom:8,fontSize:12}}/>}
+    <div style={{borderTop:`1px solid ${S.brd}`,margin:"10px 0",paddingTop:10}}>
+    <p style={{fontSize:12,color:S.gold,fontWeight:600,margin:"0 0 6px"}}>PARA ONDE VAI NO FINAL DO DIA?</p>
+    {["home","hotel"].map(t=><label key={"d"+t} style={{display:"flex",alignItems:"center",gap:10,padding:10,border:`${dest===t?2:1}px solid ${dest===t?S.gold:S.brd}`,borderRadius:10,marginBottom:6,cursor:"pointer",background:dest===t?S.cl:S.bg}}><input type="radio" checked={dest===t} onChange={()=>setDest(t)}/><span style={{fontSize:13,fontWeight:500}}>{t==="home"?"🏠 Voltar para casa":"🏨 Hotel / Airbnb"}</span></label>)}
+    {dest==="hotel"&&<input value={destName} onChange={e=>setDestName(e.target.value)} placeholder="Nome do hotel / cidade destino" style={{width:"100%",marginBottom:8,fontSize:12}}/>}
+    </div>
+    <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={onCancel} style={{flex:1}}>Depois</button><button onClick={go} disabled={lo} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"📍 GPS...":"Iniciar Jornada"}</button></div>
+  </div></div>);}
 
 // ─── DayEndModal: FECHAMENTO do roteiro (para onde vai) ───
 function DayEndModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[tp,setTp]=useState("home");const[lo,setLo]=useState(false);const[hn,setHn]=useState("");const go=async()=>{if(tp==="home"&&home){onSave({type:"home",...home});return;}setLo(true);try{const g=await gps();onSave({type:tp,lat:g.lat,lng:g.lng,label:hn||"Hotel/Airbnb"});}catch{alert("GPS indisponivel. Ative a localização.");}setLo(false);};return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:400}}><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Fechar roteiro do dia</p><p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Para onde esta indo agora?</p>{["home","hotel"].map(t=><label key={t} style={{display:"flex",alignItems:"center",gap:10,padding:12,border:`${tp===t?2:1}px solid ${tp===t?S.pri:S.brd}`,borderRadius:10,marginBottom:8,cursor:"pointer",background:tp===t?S.cl:S.bg}}><input type="radio" checked={tp===t} onChange={()=>setTp(t)}/><span style={{fontWeight:500}}>{t==="home"?"🏠 Voltando para casa":"🏨 Hotel / Airbnb"}</span></label>)}{tp==="hotel"&&<input value={hn} onChange={e=>setHn(e.target.value)} placeholder="Nome do hotel / cidade" style={{width:"100%",marginBottom:8}}/>}<div style={{display:"flex",gap:8,marginTop:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={go} disabled={lo} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>{lo?"📍 Capturando GPS...":"Fechar Roteiro"}</button></div></div></div>);}
@@ -166,7 +187,7 @@ function DivergentModal({org,dist,onAction,onCancel}){return(<div style={{positi
 // ═══════════════════════════════════════════════════════════════
 // FIX: RotasTab — skip same-org km, use separate start/end base
 // ═══════════════════════════════════════════════════════════════
-function RotasTab({visits,dayBases,user}){
+function RotasTab({visits,dayBases,user,plocs}){
   const[sel,setSel]=useState(new Date().toISOString().slice(0,10));
   const[routes,setRoutes]=useState([]);const[lo,setLo]=useState(false);
   const startBase=getBase(dayBases,sel,user?.id);
@@ -178,16 +199,19 @@ function RotasTab({visits,dayBases,user}){
       .sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
   },[visits,sel]);
   useEffect(()=>{if(!dv.length){setRoutes([]);return;}let c=false;setLo(true);(async()=>{const s=[];
+    const fc=getVCoord(dv[0],plocs);
     // Start base → first PDV
-    if(startBase&&dv[0]?.lat)s.push({f:startBase.label||"Base",t:dv[0].orgName,tp:"bs",...await roadKm(startBase.lat,startBase.lng,dv[0].lat,dv[0].lng)});
-    // Between PDVs — FIX: skip same orgId consecutive
+    if(startBase&&fc)s.push({f:startBase.label||"Base",t:dv[0].orgName,tp:"bs",...await roadKm(startBase.lat,startBase.lng,fc.lat,fc.lng)});
+    // Between PDVs — skip same orgId consecutive
     for(let i=0;i<dv.length-1;i++){const a=dv[i],b=dv[i+1];
-      if(a.orgId===b.orgId)continue; // SKIP same PDV sequential
-      if(a.lat&&b.lat)s.push({f:a.orgName,t:b.orgName,tp:hourDec(a.checkoutTime)>=LUNCH_START&&hourDec(b.checkinTime)<=LUNCH_END+1?"lch":"tr",...await roadKm(a.checkoutLat||a.lat,a.checkoutLng||a.lng,b.lat,b.lng)});}
+      if(a.orgId===b.orgId)continue;
+      const ca=getVEndCoord(a,plocs),cb=getVCoord(b,plocs);
+      if(ca&&cb)s.push({f:a.orgName,t:b.orgName,tp:hourDec(a.checkoutTime)>=LUNCH_START&&hourDec(b.checkinTime)<=LUNCH_END+1?"lch":"tr",...await roadKm(ca.lat,ca.lng,cb.lat,cb.lng)});}
     // Last PDV → end base
     const last=dv[dv.length-1];const eb=endBase||startBase;
-    if(eb&&last?.lat)s.push({f:last.orgName,t:eb.label||"Base",tp:"be",...await roadKm(last.checkoutLat||last.lat,last.checkoutLng||last.lng,eb.lat,eb.lng)});
-    if(!c){setRoutes(s);setLo(false);}})();return()=>{c=true;};},[dv,startBase,endBase]);
+    const lc=getVEndCoord(last,plocs);
+    if(eb&&lc)s.push({f:last.orgName,t:eb.label||"Base",tp:"be",...await roadKm(lc.lat,lc.lng,eb.lat,eb.lng)});
+    if(!c){setRoutes(s);setLo(false);}})();return()=>{c=true;};},[dv,startBase,endBase,plocs]);
   const totKm=routes.reduce((s,r)=>s+r.km,0);
   // FIX: Jornada = primeiro check-in ao último check-out
   const workH=dv.length?mins(dv[0].checkinTime,dv[dv.length-1].checkoutTime):0;
@@ -205,11 +229,12 @@ function RotasTab({visits,dayBases,user}){
 // ═══════════════════════════════════════════════════════════════
 // FIX: RelatorioTab — somente visitas com check-in, sem WhatsApp
 // ═══════════════════════════════════════════════════════════════
-function RelatorioTab({visits,dayBases,user,token}){
+function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const[sd,setSd]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return d.toISOString().slice(0,10);});
   const[ed,setEd]=useState(new Date().toISOString().slice(0,10));
   const[selUser,setSelUser]=useState("me");const[remoteVisits,setRemoteVisits]=useState([]);const[rLo,setRLo]=useState(false);
-  // FIX: only load VISITA type from Agendor (remove WhatsApp)
+  const[editDay,setEditDay]=useState(null);// day being edited for base correction
+  // FIX: only load VISITA type from Agendor (no WhatsApp/calls)
   const loadRemote=async()=>{setRLo(true);try{
     const d=await agF(`/tasks?createdDateGt=${sd}T00:00:00Z&per_page=100`,token);
     const otherId=user.id===743088?743347:743088;
@@ -219,7 +244,7 @@ function RelatorioTab({visits,dayBases,user,token}){
   }catch(e){alert("Erro Relatório: "+e.message);}setRLo(false);};
   useEffect(()=>{if(selUser==="team")loadRemote();},[selUser,sd]);
   const useVisits=selUser==="me"?visits:remoteVisits;
-  // FIX: only real visits (check-in based, not phone/email/whatsapp)
+  // FIX: only real visits
   const pv=useMemo(()=>useVisits.filter(v=>{
     if(!v.checkoutTime)return false;
     if(selUser==="me"&&v.taskType&&v.taskType!=="VISITA")return false;
@@ -227,13 +252,16 @@ function RelatorioTab({visits,dayBases,user,token}){
     return d>=sd&&d<=ed;
   }).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime)),[useVisits,sd,ed,selUser]);
   const bd=useMemo(()=>{const m={};pv.forEach(v=>{const k=new Date(v.checkinTime).toISOString().slice(0,10);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pv]);
-  // FIX: Km skip same-org consecutive
-  const totKm=useMemo(()=>{let km=0;bd.forEach(([dt,dvs])=>{const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+  // FIX: Km using plocs fallback for GPS resolution
+  const calcDayKm=(dvs,dt)=>{let km=0;const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
     const b2=getBase(dayBases,dt,user?.id);const eb=getEnd(dayBases,dt,user?.id);
-    if(b2&&s[0]?.lat)km+=hav(b2.lat,b2.lng,s[0].lat,s[0].lng)*1.3;
-    for(let i=1;i<s.length;i++){if(s[i].orgId===s[i-1].orgId)continue;if(s[i].lat&&s[i-1].lat)km+=hav(s[i-1].checkoutLat||s[i-1].lat,s[i-1].checkoutLng||s[i-1].lng,s[i].lat,s[i].lng)*1.3;}
-    const l=s[s.length-1];const endB=eb||b2;if(endB&&l?.lat)km+=hav(l.checkoutLat||l.lat,l.checkoutLng||l.lng,endB.lat,endB.lng)*1.3;
-  });return km;},[bd,dayBases,user?.id]);
+    const fc=getVCoord(s[0],plocs);
+    if(b2&&fc)km+=hav(b2.lat,b2.lng,fc.lat,fc.lng)*1.3;
+    for(let i=1;i<s.length;i++){if(s[i].orgId===s[i-1].orgId)continue;const ca=getVEndCoord(s[i-1],plocs);const cb=getVCoord(s[i],plocs);if(ca&&cb)km+=hav(ca.lat,ca.lng,cb.lat,cb.lng)*1.3;}
+    const l=s[s.length-1];const endB=eb||b2;const lc=getVEndCoord(l,plocs);
+    if(endB&&lc)km+=hav(lc.lat,lc.lng,endB.lat,endB.lng)*1.3;
+    return km;};
+  const totKm=useMemo(()=>bd.reduce((acc,[dt,dvs])=>acc+calcDayKm(dvs,dt),0),[bd,dayBases,plocs,user?.id]);
   // FIX: Jornada = first checkin to last checkout per day
   const workH=bd.reduce((s,[,d])=>{const sr=[...d].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));return s+mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime);},0);
   const mx=Math.max(1,...bd.map(([,v])=>v.length));
@@ -241,9 +269,38 @@ function RelatorioTab({visits,dayBases,user,token}){
     {user?.id===743088&&<div style={{display:"flex",gap:4,marginBottom:8}}><button onClick={()=>setSelUser("me")} style={{flex:1,padding:8,fontSize:12,border:selUser==="me"?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:selUser==="me"?S.pri+"22":"transparent",color:selUser==="me"?S.pri:S.ts,fontWeight:selUser==="me"?600:400}}>Meus dados</button><button onClick={()=>setSelUser("team")} style={{flex:1,padding:8,fontSize:12,border:selUser==="team"?`2px solid ${S.acc}`:`1px solid ${S.brd}`,background:selUser==="team"?S.acc+"22":"transparent",color:selUser==="team"?S.acc:S.ts,fontWeight:selUser==="team"?600:400}}>{rLo?"Carregando...":"Alisson Henrique"}</button></div>}
     <div style={{display:"flex",gap:6,marginBottom:12,alignItems:"center"}}><input type="date" value={sd} onChange={e=>setSd(e.target.value)} style={{flex:1,fontSize:12}}/><span style={{color:S.td}}>ate</span><input type="date" value={ed} onChange={e=>setEd(e.target.value)} style={{flex:1,fontSize:12}}/></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[["Km",totKm.toFixed(0)],["Visitas",pv.length],["Dias",bd.length],["Jornada",hrsMin(workH)]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}</div>
-    <div style={{display:"flex",gap:6,marginBottom:12}}><button onClick={()=>{const rows=[["Data","Vendedor","Origem","Destino","Visitas","Km","Jornada","Clientes"]];bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const b2=getBase(dayBases,dt,user?.id);const eb=getEnd(dayBases,dt,user?.id);let dk=0;if(b2&&sr[0]?.lat)dk+=hav(b2.lat,b2.lng,sr[0].lat,sr[0].lng)*1.3;for(let i=1;i<sr.length;i++){if(sr[i].orgId===sr[i-1].orgId)continue;if(sr[i].lat&&sr[i-1].lat)dk+=hav(sr[i-1].checkoutLat||sr[i-1].lat,sr[i-1].checkoutLng||sr[i-1].lng,sr[i].lat,sr[i].lng)*1.3;}const l=sr[sr.length-1];const endB=eb||b2;if(endB&&l?.lat)dk+=hav(l.checkoutLat||l.lat,l.checkoutLng||l.lng,endB.lat,endB.lng)*1.3;rows.push([fD(dt+"T12:00"),user?.name,b2?.label||"Casa",endB?.label||"Casa",dvs.length,dk.toFixed(1),hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)),dvs.map(v=>v.orgName).join(", ")]);});rows.push([],["TOTAL","","","",pv.length,totKm.toFixed(1),hrsMin(workH),""]);csv(rows,`km-${user?.name}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Resumo</button>
-      <button onClick={()=>{const rows=[["Data","In","Out","Min","Cliente","Cidade","Tipo","Obs","Venda"]];pv.forEach(v=>rows.push([fD(v.checkinTime),fT(v.checkinTime),fT(v.checkoutTime),mins(v.checkinTime,v.checkoutTime),v.orgName,v.city||"",v.taskType||"VISITA",v.note||"",v.sale?`${v.sale.brand} R$${v.sale.value}`:""]));csv(rows,`visitas-${user?.name}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Detalhado</button></div>
+    {/* Correção de Origem/Destino por dia */}
+    {bd.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"10px 14px",marginBottom:12}}>
+      <p style={{fontWeight:500,fontSize:12,margin:"0 0 8px",color:S.ts}}>Origem / Destino por dia (toque para corrigir)</p>
+      {bd.map(([dt])=>{const sb=getBase(dayBases,dt,user?.id);const eb=getEnd(dayBases,dt,user?.id);return(
+        <div key={dt} onClick={()=>setEditDay(editDay===dt?null:dt)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:`1px solid ${S.brd}`,cursor:"pointer"}}>
+          <span style={{fontSize:11,color:S.ts}}>{fDS(dt+"T12:00")}</span>
+          <span style={{fontSize:11,color:S.pl}}>{sb?.label||"Casa"} → {eb?.label||"Casa"}</span>
+          <span style={{fontSize:10,color:S.acc}}>✏️</span>
+        </div>);})}
+    </div>}
+    {editDay&&<BaseEditInline day={editDay} dayBases={dayBases} userId={user?.id} onSave={(d,start,end)=>{onEditBase(d,start,end);setEditDay(null);}} onCancel={()=>setEditDay(null)}/>}
+    <div style={{display:"flex",gap:6,marginBottom:12}}>
+      <button onClick={()=>{const rows=[["Data","Vendedor","Origem","Destino","Visitas","Km","Jornada","Clientes"]];bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const b2=getBase(dayBases,dt,user?.id);const eb=getEnd(dayBases,dt,user?.id);const dk=calcDayKm(dvs,dt);rows.push([fD(dt+"T12:00"),user?.name,b2?.label||"Casa",eb?.label||"Casa",dvs.length,dk.toFixed(1),hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)),dvs.map(v=>v.orgName).join(", ")]);});rows.push([],["TOTAL","","","",pv.length,totKm.toFixed(1),hrsMin(workH),""]);csv(rows,`km-${user?.name}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Resumo</button>
+      <button onClick={()=>{const rows=[["Data","In","Out","Min","Cliente","Cidade","Tipo","Obs","Venda"]];pv.forEach(v=>rows.push([fD(v.checkinTime),fT(v.checkinTime),fT(v.checkoutTime),mins(v.checkinTime,v.checkoutTime),v.orgName,v.city||"",v.taskType||"VISITA",v.note||"",v.sale?`${v.sale.brand} R$${v.sale.value}`:""]));csv(rows,`visitas-${user?.name}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Detalhado</button>
+    </div>
     {bd.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px"}}><p style={{fontWeight:500,marginBottom:8,fontSize:13}}>Visitas/dia</p>{bd.map(([dt,dvs])=><div key={dt} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><span style={{fontSize:10,color:S.ts,width:42,textAlign:"right"}}>{fDS(dt+"T12:00")}</span><div style={{flex:1,height:14,background:S.bg,borderRadius:3}}><div style={{height:"100%",width:`${(dvs.length/mx)*100}%`,background:S.pri,borderRadius:3,minWidth:3}}/></div><span style={{fontSize:11,fontWeight:600,width:16,textAlign:"right"}}>{dvs.length}</span></div>)}</div>}
+  </div>);}
+
+// ─── Inline base editor for Relatório ───
+function BaseEditInline({day,dayBases,userId,onSave,onCancel}){
+  const home=HOMES[userId];const cur=getBase(dayBases,day,userId);const curEnd=getEnd(dayBases,day,userId);
+  const[origType,setOrigType]=useState(cur?.type||"home");const[destType,setDestType]=useState(curEnd?.type||"home");
+  const[origName,setOrigName]=useState(cur?.type==="hotel"?cur.label:"");const[destName,setDestName]=useState(curEnd?.type==="hotel"?curEnd.label:"");
+  const save=()=>{
+    const start=origType==="home"&&home?{type:"home",...home}:{type:"hotel",lat:home?.lat||-15.6,lng:home?.lng||-56.1,label:origName||"Hotel"};
+    const end=destType==="home"&&home?{type:"home",...home}:{type:"hotel",lat:home?.lat||-15.6,lng:home?.lng||-56.1,label:destName||"Hotel"};
+    onSave(day,start,end);};
+  return(<div style={{background:S.cl,border:`1px solid ${S.acc}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+    <p style={{fontWeight:500,fontSize:13,margin:"0 0 8px"}}>Corrigir {fD(day+"T12:00")}</p>
+    <LB t="ORIGEM"><div style={{display:"flex",gap:6}}><button onClick={()=>setOrigType("home")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${origType==="home"?S.pri:S.brd}`,background:origType==="home"?S.pri+"22":"transparent",color:origType==="home"?S.pri:S.ts}}>🏠 Casa</button><button onClick={()=>setOrigType("hotel")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${origType==="hotel"?S.gold:S.brd}`,background:origType==="hotel"?S.gold+"22":"transparent",color:origType==="hotel"?S.gold:S.ts}}>🏨 Hotel</button></div>{origType==="hotel"&&<input value={origName} onChange={e=>setOrigName(e.target.value)} placeholder="Nome hotel/cidade" style={{width:"100%",marginTop:4,fontSize:11}}/>}</LB>
+    <LB t="DESTINO"><div style={{display:"flex",gap:6}}><button onClick={()=>setDestType("home")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${destType==="home"?S.pri:S.brd}`,background:destType==="home"?S.pri+"22":"transparent",color:destType==="home"?S.pri:S.ts}}>🏠 Casa</button><button onClick={()=>setDestType("hotel")} style={{flex:1,padding:6,fontSize:11,border:`1px solid ${destType==="hotel"?S.gold:S.brd}`,background:destType==="hotel"?S.gold+"22":"transparent",color:destType==="hotel"?S.gold:S.ts}}>🏨 Hotel</button></div>{destType==="hotel"&&<input value={destName} onChange={e=>setDestName(e.target.value)} placeholder="Nome hotel/cidade destino" style={{width:"100%",marginTop:4,fontSize:11}}/>}</LB>
+    <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1,fontSize:11}}>Cancelar</button><button onClick={save} style={{flex:1,fontSize:11,background:S.acc,border:"none",fontWeight:600}}>Salvar</button></div>
   </div>);}
 
 // ═══════════════════════════════════════════════════════════════
@@ -353,7 +410,7 @@ export default function App(){
 
   const loadHistory=async()=>{setSyncMsg("Carregando historico...");try{const since=new Date();since.setDate(since.getDate()-90);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100`,token);if(d.data?.length){const remote=d.data.filter(t=>t.type==="Visita"&&t.done).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));const existing=new Set(visits.map(v=>v.orgId+"|"+v.checkinTime?.slice(0,16)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+r.checkinTime?.slice(0,16)));if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas carregadas`);}else setSyncMsg("Historico ja esta atualizado");}else setSyncMsg("Nenhuma visita encontrada");}catch(e){setSyncMsg("Erro: "+e.message);}};
 
-  const ensureBase=()=>{const t=new Date().toISOString().slice(0,10);if(!dayBases[t]&&!dayBases[t]?.start)setShowDB(true);};
+  const ensureBase=()=>{const t=new Date().toISOString().slice(0,10);if(!dayBases[t]||(!dayBases[t].start&&!dayBases[t].lat))setShowDB(true);};
   const cities=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const c=o.addr?.city_name||o.addr?.city;if(c)s.add(c);});return["Todas",...[...s].sort()];},[orgs]);
   const states=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.addr?.state)s.add(o.addr.state);});return["Todos",...[...s].sort()];},[orgs]);
   const segments=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.sector)s.add(o.sector);});return["Todos",...[...s].sort()];},[orgs]);
@@ -457,19 +514,19 @@ export default function App(){
           {search.replace(/[.\-\/]/g,"").length>=11&&fo.length===0&&<button onClick={async()=>{try{const d=await agF(`/organizations?cnpj=${search.replace(/[.\-\/]/g,"")}`,token);if(d.data?.length)setOrgs(p=>{const ids=new Set(p.map(o=>o.id));return[...d.data.map(strip).filter(f=>!ids.has(f.id)),...p];});}catch{}}} style={{width:"100%",marginTop:8,padding:14,background:S.acc,border:"none",fontWeight:500}}>Buscar CNPJ no Agendor</button>}
         </>}
       </div>}
-      {tab==="rotas"&&<RotasTab visits={visits} dayBases={dayBases} user={user}/>}
-      {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token}/>}
+      {tab==="rotas"&&<RotasTab visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
+      {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end)=>{setDayBases(p=>{const n={...p,[d]:{...p[d],start,end}};sS("jc:dayBases",n);return n;});}}/>}
       {tab==="equipe"&&user?.id===743088&&<EquipeTab token={token} plocs={plocs} orgs={orgs}/>}
 
       {tab==="config"&&<div>
         <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:15,fontWeight:600,margin:"0 0 4px"}}>{user?.name}</p>{HOMES[user?.id]&&<p style={{fontSize:12,color:S.ok}}>Casa: {HOMES[user.id].label}</p>}{getBase(dayBases,today,user?.id)&&<p style={{fontSize:11,color:S.ts,margin:"2px 0 0"}}>Base hoje: {getBase(dayBases,today,user?.id)?.label||"Casa"}{getEnd(dayBases,today,user?.id)!==getBase(dayBases,today,user?.id)?` → ${getEnd(dayBases,today,user?.id)?.label||"Casa"}`:""}</p>}</div>
-        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p><p style={{fontSize:11,color:syncStatus.startsWith("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p><p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | v7</p></div>
+        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}><p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p><p style={{fontSize:11,color:syncStatus.startsWith("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p><p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | v7.1</p></div>
         <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
           <button onClick={()=>doSync()} disabled={syncing} style={{padding:14,fontSize:14,fontWeight:500,background:S.pri,border:"none"}}>{syncing?syncMsg:"Sincronizar Clientes"}</button>
           <button onClick={loadHistory} style={{padding:12,fontSize:13,background:S.acc+"22",border:`1px solid ${S.acc}`,color:S.acc,fontWeight:500}}>Carregar historico do Agendor</button>
           <button onClick={()=>{syncPull();setSyncStatus("Forçando sync...");}} style={{padding:12,fontSize:13,background:S.gold+"22",border:`1px solid ${S.gold}`,color:S.gold,fontWeight:500}}>Forçar sincronização</button>
           <button onClick={async()=>{if(!Object.keys(plocs).length){alert("Nenhum GPS salvo");return;}setSyncStatus("Enviando GPS...");try{const r=await fetch(`${API}?sync=plocs`);const d=await r.json();const merged={...(d.active||{}),...plocs};await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:merged})});setSyncStatus(`${Object.keys(merged).length} GPS enviados!`);}catch(e){setSyncStatus("Erro: "+e.message);}}} style={{padding:12,fontSize:13,background:S.ok+"22",border:`1px solid ${S.ok}`,color:S.ok,fontWeight:500}}>Compartilhar {Object.keys(plocs).length} GPS com equipe</button>
-          <button onClick={()=>setShowDB(true)} style={{padding:12}}>🏠 Definir origem do dia</button>
+          <button onClick={()=>setShowDB(true)} style={{padding:12}}>🗺️ Definir jornada (origem e destino)</button>
           <button onClick={()=>setShowEndDay(true)} style={{padding:12}}>🏨 Fechar roteiro do dia</button>
           {user?.id===743088&&<>
             <button onClick={()=>{const dt=prompt("Data para limpar visitas (DD/MM/AAAA):");if(!dt)return;const[d,m,y]=dt.split("/");const target=`${y}-${m}-${d}`;const count=visits.filter(v=>v.checkinTime?.startsWith(target)).length;if(!count){alert("Nenhuma visita nessa data.");return;}if(confirm(`Excluir ${count} visitas de ${dt}?`))setVisits(prev=>prev.filter(v=>!v.checkinTime?.startsWith(target)));}} style={{color:S.gold}}>Limpar visitas (por data)</button>
@@ -481,7 +538,7 @@ export default function App(){
     </div>
     <div style={{position:"fixed",bottom:0,left:0,right:0,background:S.card,borderTop:`1px solid ${S.brd}`,display:"flex",justifyContent:"center",zIndex:40}}><div style={{display:"flex",maxWidth:960,width:"100%"}}>{tabs.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setVc(PG);}} style={{flex:1,border:"none",borderRadius:0,background:"transparent",padding:"10px 4px 8px",fontSize:10,fontWeight:tab===t.id?600:400,color:tab===t.id?S.pl:S.td}}><span style={{fontSize:18,display:"block",marginBottom:2}}>{t.i}</span>{t.l}</button>)}</div></div>
     {coTarget&&<NoteModal org={coTarget} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
-    {showDB&&<DayBaseModal user={user} onSave={b=>{const t=new Date().toISOString().slice(0,10);setDayBases(p=>{const cur=p[t]||{};const n={...p,[t]:{...cur,start:b}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
+    {showDB&&<JourneyModal user={user} onSave={j=>{const t=new Date().toISOString().slice(0,10);setDayBases(p=>{const n={...p,[t]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
     {showEndDay&&<DayEndModal user={user} onSave={b=>{const t=new Date().toISOString().slice(0,10);setDayBases(p=>{const cur=p[t]||{};const n={...p,[t]:{...cur,end:b}};sS("jc:dayBases",n);return n;});setShowEndDay(false);}} onCancel={()=>setShowEndDay(false)}/>}
     {newClient&&<NewClientModal token={token} onSave={org=>{setOrgs(p=>[org,...p]);setNewClient(false);}} onCancel={()=>setNewClient(false)}/>}
     {personTarget&&<PersonModal org={personTarget} token={token} onClose={()=>setPersonTarget(null)}/>}
