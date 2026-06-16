@@ -306,10 +306,12 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const totKm=useMemo(()=>bd.reduce((acc,[dt,dvs])=>acc+calcDayKm(dvs,dt),0),[bd,dayBases,plocs,repUserId]);
   const workH=bd.reduce((s,[,d])=>{const sr=[...d].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));return s+mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime);},0);
   const mx=Math.max(1,...bd.map(([,v])=>v.length));
-  return(<div>
+    const firstCheckin=pv.length?fT(pv[0].checkinTime):"-";
+    const lastCheckout=pv.length?fT(pv[pv.length-1].checkoutTime):"-";
+    return(<div>
     {user?.id===743088&&<div style={{display:"flex",gap:4,marginBottom:8}}><button onClick={()=>setSelUser("me")} style={{flex:1,padding:8,fontSize:12,border:selUser==="me"?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:selUser==="me"?S.pri+"22":"transparent",color:selUser==="me"?S.pri:S.ts,fontWeight:selUser==="me"?600:400}}>Meus dados</button><button onClick={()=>setSelUser("team")} style={{flex:1,padding:8,fontSize:12,border:selUser==="team"?`2px solid ${S.acc}`:`1px solid ${S.brd}`,background:selUser==="team"?S.acc+"22":"transparent",color:selUser==="team"?S.acc:S.ts,fontWeight:selUser==="team"?600:400}}>{rLo?"Carregando...":"Alisson Henrique"}</button></div>}
     <div style={{display:"flex",gap:6,marginBottom:12,alignItems:"center"}}><input type="date" value={sd} onChange={e=>setSd(e.target.value)} style={{flex:1,fontSize:12}}/><span style={{color:S.td}}>ate</span><input type="date" value={ed} onChange={e=>setEd(e.target.value)} style={{flex:1,fontSize:12}}/></div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[["Km",totKm.toFixed(0)],["Visitas",pv.length],["Dias",bd.length],["Jornada",hrsMin(workH)]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>{[["Visitas",pv.length],["Dias",bd.length],["Jornada",hrsMin(workH)],["Km",totKm.toFixed(0)],["1º Check-in",firstCheckin],["Último",lastCheckout]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:16,fontWeight:600,margin:0}}>{v}</p></div>)}</div>
     {bd.length>0&&(selUser==="me"||user?.id===743088)&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"10px 14px",marginBottom:12}}>
       <p style={{fontWeight:500,fontSize:12,margin:"0 0 8px",color:S.ts}}>Origem / Destino {selUser==="team"?"(Alisson)":""} por dia (toque para corrigir)</p>
       {bd.map(([dt])=>{const sb=getRepBase(dt);const eb=getRepEnd(dt);return(
@@ -352,7 +354,8 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
             <span style={{fontSize:11,fontWeight:600,width:16,textAlign:"right",flexShrink:0}}>{dvs.length}</span>
           </div>
           <div style={{display:"flex",gap:4,marginLeft:48}}>
-            <span style={{fontSize:10,color:S.ts}}>{dayKm>0?`${dayKm.toFixed(0)}km`:""} · {hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime))}</span>
+            <span style={{fontSize:10,color:S.acc,fontWeight:500}}>{fT(sr[0].checkinTime)}</span>
+            <span style={{fontSize:10,color:S.ts}}>{dayKm>0?`· ${dayKm.toFixed(0)}km`:""} · {hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime))}</span>
             {hasRoute&&<a href={mapsUrl} target="_blank" rel="noopener" style={{fontSize:10,color:S.acc,textDecoration:"none",fontWeight:600,marginLeft:"auto"}}>📍 Ver Rota</a>}
           </div>
           {/* Rota detalhada do dia */}
@@ -468,7 +471,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v8</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v8.1</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
