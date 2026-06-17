@@ -357,7 +357,7 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
     let allT=[];const start=new Date(sd+"T00:00:00Z");const end=new Date();
     for(let d=new Date(start);d<end;){const win=new Date(d);win.setDate(win.getDate()+30);const to=win>end?end:win;
       let pg=1;while(true){const r=await agF(`/tasks?createdDateGt=${d.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,token);if(!r.data?.length)break;allT.push(...r.data);if(r.data.length<100)break;pg++;}d=to;}
-    const tasks=allT.filter(t=>t.user?.id===otherId&&(t.type==="Visita"||t.type==="VISITA"))
+    const tasks=allT.filter(t=>t.user?.id===otherId&&(t.type==="Visita"||t.type==="VISITA")&&!t.due_date&&!t.dueDate)
       .map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",userName:t.user?.name||"",taskType:"VISITA"}));
     setRemoteVisits(tasks);
   }catch(e){console.warn("loadRemote:",e);alert("Erro: "+e.message);}setRLo(false);};
@@ -655,7 +655,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v12.1</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v12.2</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -791,7 +791,7 @@ export default function App(){
     setTeamActive(d2.active||null);
     const r3=await fetch(`${API}?sync=plocs`);const d3=await r3.json();
     if(d3.active){const deleted=sL("jc:deletedGPS",[]);setPlocs(prev=>{const cloud={...d3.active};deleted.forEach(id=>{delete cloud[id];});const m={...cloud,...prev};sS("jc:pdvLocs",m);return m;});}
-    setSyncStatus(`OK ${fT(new Date())} | eu:${d.active?"ativo":"--"} | equipe:${d2.active?d2.active.orgName:"--"}`);
+    setSyncStatus(`OK ${fT(new Date())} | eu:${d.active?"ativo":"--"}${user?.id===743088?` | equipe:${d2.active?d2.active.orgName:"--"}`:""}`);
   }catch(e){setSyncStatus("Erro: "+e.message);}};
   useEffect(()=>{if(!token||!user)return;syncPull();syncVisitLoad();syncDayBasesLoad();const iv=setInterval(()=>{syncPull();syncDayBasesLoad();},15000);return()=>clearInterval(iv);},[token,user]);
 
@@ -838,7 +838,9 @@ export default function App(){
     for(let w=0;w<3;w++){const from=new Date(now);from.setDate(from.getDate()-30*(w+1));const to=new Date(now);to.setDate(to.getDate()-30*w);
       setSyncMsg(`${allTasks.length} atividades (${w*30}d)...`);
       let pg=1;while(true){const d=await agF(`/tasks?createdDateGt=${from.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,tk||token);if(!d.data?.length)break;allTasks.push(...d.data);if(d.data.length<100)break;pg++;}}
-    const remote=allTasks.filter(t=>(t.type==="Visita"||t.type==="VISITA")&&(t.done||t.finishedAt)).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));
+    // Activities WITHOUT due_date are visit logs (app creates POST without due_date)
+    // Activities WITH due_date are scheduled tasks (agenda) — skip those
+    const remote=allTasks.filter(t=>(t.type==="Visita"||t.type==="VISITA")&&!t.due_date&&!t.dueDate).map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));
     const existing=new Set(visits.map(v=>v.orgId+"|"+v.userName+"|"+v.checkinTime?.slice(0,16)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+r.userName+"|"+r.checkinTime?.slice(0,16)));
     if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas`);}else setSyncMsg("Atualizado");};
   const loadHistory=async()=>{try{await loadHistoryInner();}catch(e){setSyncMsg("Erro: "+e.message);}};
