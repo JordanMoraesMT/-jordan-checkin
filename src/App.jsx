@@ -37,8 +37,8 @@ function csv(rows,fn){const b="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c??"").re
 function strip(o){const a=o.address||{};const desc=o.description||"";return{id:o.id,name:o.name||"",nickname:o.nickname||"",legalName:o.legalName||"",cnpj:o.cnpj||"",cat:o.category?.name||"",sector:o.sector?.name||"",products:(o.products||[]).map(p=>p.name).join(", "),owner:o.ownerUser?.name||"",ownerId:o.ownerUser?.id||null,grupo:desc.startsWith("Grupo:")?desc:"",addr:{street:a.streetName||a.street||"",number:a.streetNumber||a.number||"",district:a.district||a.neighborhood||"",city:a.city||"",city_name:a.city_name||a.city||"",state:a.state||""},people:(o.people||[]).map(p=>p.name).join(", ")};}
 async function fetchCNPJ(cnpj){const clean=cnpj.replace(/[.\-\/]/g,"");try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);if(r.ok)return r.json();}catch{}const r2=await fetch(`${API}?cnpj=${clean}`);if(!r2.ok)throw new Error("CNPJ nao encontrado");return r2.json();}
 // ─── Helper: get base for date (backward compatible) ───
-function getBase(dayBases,date,userId){const b=dayBases[date];if(!b)return HOMES[userId]||null;if(b.start)return b.start;return b;}
-function getEnd(dayBases,date,userId){const b=dayBases[date];if(b?.end)return b.end;return getBase(dayBases,date,userId);}
+function getBase(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBases[date];if(!b)return HOMES[userId]||null;if(b.start)return b.start;return b;}
+function getEnd(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBases[date];if(b?.end)return b.end;return getBase(dayBases,date,userId);}
 // ─── Helper: only real visits (check-in based, not WhatsApp/calls) ───
 function isRealVisit(v){if(!v.checkoutTime)return false;if(v.taskType&&v.taskType!=="VISITA")return false;return true;}
 // ─── Helper: resolve GPS from visit directly OR from plocs by orgId ───
@@ -48,7 +48,7 @@ const MIN_OBS=50;
 
 const LB=({t,children})=><div style={{marginBottom:6}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px",textTransform:"uppercase",letterSpacing:.5}}>{t}</p>{children}</div>;
 
-function Login({onLogin}){const[tk,setTk]=useState("");const[lo,setLo]=useState(false);const[er,setEr]=useState("");const go=async()=>{if(!tk.trim())return;setLo(true);setEr("");try{const d=await agF("/users/me",tk.trim());d.data?onLogin(tk.trim(),d.data):setEr("Token invalido.");}catch(e){setEr("Erro: "+e.message);}setLo(false);};return(<div style={{padding:"3rem 1rem",textAlign:"center"}}><img src="/logo.png" alt="" style={{height:56,borderRadius:12,marginBottom:16}} onError={e=>{e.target.style.display="none"}}/><h1 style={{fontSize:20,fontWeight:600,margin:"0 0 4px"}}>TeamCheck</h1><p style={{fontSize:13,color:S.ts,margin:"0 0 2rem"}}>Jordan Representações</p><div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1.25rem",textAlign:"left"}}><LB t="TOKEN DA API AGENDOR"><input type="password" value={tk} onChange={e=>setTk(e.target.value)} placeholder="Cole seu token..." style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&go()}/></LB><button onClick={go} disabled={lo||!tk.trim()} style={{width:"100%",background:S.pri,border:"none",fontWeight:600,fontSize:15,padding:12,marginTop:8}}>{lo?"Conectando...":"Conectar ao Agendor"}</button>{er&&<p style={{fontSize:13,color:S.dng,marginTop:12,textAlign:"center"}}>{er}</p>}</div></div>);}
+function Login({onLogin}){const[tk,setTk]=useState("");const[lo,setLo]=useState(false);const[er,setEr]=useState("");const go=async()=>{if(!tk.trim())return;setLo(true);setEr("");try{const d=await agF("/users/me",tk.trim());d.data?onLogin(tk.trim(),d.data):setEr("Token invalido.");}catch(e){setEr("Erro: "+e.message);}setLo(false);};return(<div style={{padding:"3rem 1rem",textAlign:"center"}}><img src="/logo.png" alt="" style={{height:56,borderRadius:10,background:"#fff",padding:"4px 12px",marginBottom:16}} onError={e=>{e.target.style.display="none"}}/><h1 style={{fontSize:20,fontWeight:600,margin:"0 0 4px"}}>TeamCheck</h1><p style={{fontSize:13,color:S.ts,margin:"0 0 2rem"}}>Jordan Representações</p><div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1.25rem",textAlign:"left"}}><LB t="TOKEN DA API AGENDOR"><input type="password" value={tk} onChange={e=>setTk(e.target.value)} placeholder="Cole seu token..." style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&go()}/></LB><button onClick={go} disabled={lo||!tk.trim()} style={{width:"100%",background:S.pri,border:"none",fontWeight:600,fontSize:15,padding:12,marginTop:8}}>{lo?"Conectando...":"Conectar ao Agendor"}</button>{er&&<p style={{fontSize:13,color:S.dng,marginTop:12,textAlign:"center"}}>{er}</p>}</div></div>);}
 
 function OrgCard({org,active,onIn,onOut,onEdit,onPerson,onQuick,onInfo,ldId,plocs,lastVisit,lastOrder,nearRoad}){
   const isA=active?.orgId===org.id;const a=org.addr||{};const addr=[a.street,a.number].filter(Boolean).join(", ");const loc=[a.district,a.city_name||a.city,a.state].filter(Boolean).join(" · ");
@@ -111,15 +111,15 @@ function NoteModal({org,onSave,onCancel}){
   <div style={{display:"flex",gap:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={()=>ok&&onSave(n,tp,{nextType:nt,nextDate:nd,nextTime:nh,nextDesc:ndsc},sale?{brand,value:parseFloat(saleVal)||0}:null)} disabled={!ok} style={{flex:1,background:ok?S.pri:S.cl,border:"none",fontWeight:600}}>Registrar</button></div>
 </div></div>);}
 
-function NewClientModal({token,onSave,onCancel}){
+function NewClientModal({token,allOrgs,onSave,onCancel}){
   const pf=sL("jc:prefill",null);useEffect(()=>{sS("jc:prefill",null);},[]);// Clear prefill after reading
   const[step,setStep]=useState(1);const[orgId,setOrgId]=useState(null);const[orgName,setOrgName]=useState("");const[orgData,setOrgData]=useState(null);
   const[name,setName]=useState(pf?.rfData?.nome_fantasia||"");const[legal,setLegal]=useState(pf?.rfData?.razao_social||"");const[cnpj,setCnpj]=useState(pf?.cnpj||"");const[city,setCity]=useState(pf?.rfData?.municipio||"");const[state,setState]=useState(pf?.rfData?.uf||"MT");const[district,setDistrict]=useState(pf?.rfData?.bairro||"");const[street,setStreet]=useState([pf?.rfData?.descricao_tipo_de_logradouro,pf?.rfData?.logradouro].filter(Boolean).join(" ")||"");const[num,setNum]=useState(pf?.rfData?.numero||"");const[comp,setComp]=useState(pf?.rfData?.complemento||"");const[cep,setCep]=useState(pf?.rfData?.cep||"");const[phone,setPhone]=useState(pf?.rfData?.ddd_telefone_1?.replace(/[^\d]/g,"")||"");
-  const[catId,setCatId]=useState(3186598);const[sectorId,setSectorId]=useState("");const[originId,setOriginId]=useState("");const[grupo,setGrupo]=useState("");
+  const[catId,setCatId]=useState(3186598);const[sectorId,setSectorId]=useState("");const[originId,setOriginId]=useState("");const[grupo,setGrupo]=useState("");const[newGrupo,setNewGrupo]=useState("");
   const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[fetching,setFetching]=useState(false);
   const[pName,setPName]=useState("");const[pEmail,setPEmail]=useState("");const[pPhone,setPPhone]=useState("");const[pWhats,setPWhats]=useState("");
   const buscarCNPJ=async()=>{const c=cnpj.replace(/[.\-\/]/g,"");if(c.length!==14){setEr("CNPJ deve ter 14 digitos");return;}setFetching(true);setEr("");try{const d=await fetchCNPJ(c);setName(d.nome_fantasia||"");setLegal(d.razao_social||"");setStreet([d.descricao_tipo_de_logradouro,d.logradouro].filter(Boolean).join(" ")||"");setNum(d.numero||"");setComp(d.complemento||"");setDistrict(d.bairro||"");setCity(d.municipio||"");setState(d.uf||"MT");setCep(d.cep||"");if(d.ddd_telefone_1)setPhone(d.ddd_telefone_1.replace(/[^\d]/g,""));}catch(e){setEr(e.message);}setFetching(false);};
-  const createOrg=async()=>{if(!name.trim()&&!legal.trim())return;setLo(true);setEr("");try{const body={name:name.trim()||legal.trim(),legalName:legal.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");const addr={};if(street)addr.street_name=street;if(num)addr.street_number=num;if(comp)addr.additional_info=comp;if(district)addr.district=district;if(city)addr.city=city;if(state)addr.state=state;if(cep)addr.postal_code=cep;if(Object.keys(addr).length)body.address=addr;if(phone)body.contact={work:phone};if(catId)body.category=catId;if(sectorId)body.sector=parseInt(sectorId);if(originId)body.leadOrigin=parseInt(originId);if(grupo)body.description=`Grupo: ${grupo}`;const d=await agF("/organizations",token,{method:"POST",body:JSON.stringify(body)});if(d.data){setOrgId(d.data.id);setOrgName(d.data.name||name);setOrgData(strip(d.data));setStep(2);}else setEr("Erro");}catch(e){setEr(e.message==="400"?"Cliente ja existe no Agendor":"Erro: "+e.message);}setLo(false);};
+  const createOrg=async()=>{if(!name.trim()&&!legal.trim())return;setLo(true);setEr("");try{const body={name:name.trim()||legal.trim(),legalName:legal.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");const addr={};if(street)addr.street_name=street;if(num)addr.street_number=num;if(comp)addr.additional_info=comp;if(district)addr.district=district;if(city)addr.city=city;if(state)addr.state=state;if(cep)addr.postal_code=cep;if(Object.keys(addr).length)body.address=addr;if(phone)body.contact={work:phone};if(catId)body.category=catId;if(sectorId)body.sector=parseInt(sectorId);if(originId)body.leadOrigin=parseInt(originId);const gFinal=grupo==="__new__"?newGrupo.trim():grupo;if(gFinal)body.description=`Grupo: ${gFinal}`;const d=await agF("/organizations",token,{method:"POST",body:JSON.stringify(body)});if(d.data){setOrgId(d.data.id);setOrgName(d.data.name||name);setOrgData(strip(d.data));setStep(2);}else setEr("Erro");}catch(e){setEr(e.message==="400"?"Cliente ja existe no Agendor":"Erro: "+e.message);}setLo(false);};
   const[pCargo,setPCargo]=useState("");
   const finish=(wp)=>{const od=orgData||strip({id:orgId,name:orgName||name,legalName:legal,cnpj,address:{city,state,district},category:{id:catId,name:CAT_IDS.find(c=>c.id===catId)?.n},sector:{id:parseInt(sectorId),name:SECTORS.find(s=>s.id===parseInt(sectorId))?.n}});if(wp&&pName.trim()){setLo(true);agF("/people",token,{method:"POST",body:JSON.stringify({name:pName,organization:orgId,role:pCargo||undefined,contact:{...(pEmail?{email:pEmail}:{}),...(pPhone?{mobile:pPhone}:{}),...(pWhats?{whatsapp:pWhats}:{})}})}).then(()=>{setLo(false);setOrgData(od);setStep(3);}).catch((e)=>{setLo(false);alert("Empresa criada, mas ERRO ao cadastrar pessoa: "+e.message);setOrgData(od);setStep(3);});}else{setOrgData(od);setStep(3);}};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
@@ -135,7 +135,8 @@ function NewClientModal({token,onSave,onCancel}){
   <LB t="TELEFONE"><input value={phone} onChange={e=>setPhone(e.target.value)} style={{width:"100%"}}/></LB>
   <LB t="CATEGORIA"><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{CAT_IDS.map(c=><button key={c.id} type="button" onClick={()=>setCatId(c.id)} style={{padding:"4px 10px",fontSize:10,border:catId===c.id?`2px solid ${CC[c.n]||S.pri}`:`1px solid ${S.brd}`,background:catId===c.id?`${CC[c.n]||S.pri}22`:"transparent",color:catId===c.id?CC[c.n]||S.pri:S.ts,borderRadius:6,fontWeight:catId===c.id?600:400}}>{c.n}</button>)}</div></LB>
   <LB t="ORIGEM"><select value={originId} onChange={e=>setOriginId(e.target.value)} style={{width:"100%",fontSize:11}}><option value="">Origem</option>{ORIGINS.map(o=><option key={o.id} value={o.id}>{o.n}</option>)}</select></LB>
-  <LB t="SETOR / GRUPO"><div style={{display:"flex",gap:6}}><select value={sectorId} onChange={e=>setSectorId(e.target.value)} style={{flex:1,fontSize:11}}><option value="">Setor</option>{SECTORS.map(s=><option key={s.id} value={s.id}>{s.n}</option>)}</select><input value={grupo} onChange={e=>setGrupo(e.target.value)} placeholder="Grupo" style={{flex:1}}/></div></LB>
+  const existingGroups=useMemo(()=>[...new Set((allOrgs||[]).map(o=>o.grupo?.replace("Grupo: ","")).filter(Boolean))].sort(),[allOrgs]);
+  <LB t="SETOR / GRUPO"><div style={{display:"flex",gap:6}}><select value={sectorId} onChange={e=>setSectorId(e.target.value)} style={{flex:1,fontSize:11}}><option value="">Setor</option>{SECTORS.map(s=><option key={s.id} value={s.id}>{s.n}</option>)}</select><select value={grupo} onChange={e=>setGrupo(e.target.value)} style={{flex:1,fontSize:11}}><option value="">Grupo</option>{existingGroups.map(g=><option key={g} value={g}>{g}</option>)}<option value="__new__">+ Novo</option></select></div>{grupo==="__new__"&&<input value={newGrupo} onChange={e=>setNewGrupo(e.target.value)} placeholder="Nome do grupo" style={{width:"100%",marginTop:4,fontSize:11}}/>}</LB>
   {er&&<p style={{fontSize:12,color:S.dng,margin:"0 0 6px"}}>{er}</p>}
   <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={createOrg} disabled={lo||(!name.trim()&&!legal.trim())} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"Salvando...":"Próximo →"}</button></div>
   </>:step===2?<><p style={{fontWeight:600,fontSize:16,margin:"0 0 2px"}}>Contato — {orgName}</p><p style={{fontSize:11,color:S.ts,margin:"0 0 10px"}}>Etapa 2 de 3 (opcional)</p>
@@ -216,13 +217,13 @@ function PeopleModal({org,token,onClose}){
 
 const PRODS=[{id:761952,n:"TRAMONTINA"},{id:761953,n:"PADO"},{id:761954,n:"HIPER TEXTIL"},{id:1139796,n:"PLASTILIT"},{id:1392476,n:"FESTCOLOR"},{id:1627655,n:"ZAGONEL"},{id:2046010,n:"RUVOLO"},{id:2260997,n:"SANTANA"}];
 
-function EditModal({org,token,users,onSave,onClose}){const[name,setName]=useState(org.name||"");const[legal,setLegal]=useState("");const[catId,setCatId]=useState("");const[sectorId,setSectorId]=useState("");const[grupo,setGrupo]=useState(org.grupo?.replace("Grupo: ","")||"");const[ownerId,setOwnerId]=useState("");
+function EditModal({org,token,users,allOrgs,onSave,onClose}){const[name,setName]=useState(org.name||"");const[legal,setLegal]=useState("");const[catId,setCatId]=useState("");const[sectorId,setSectorId]=useState("");const[grupo,setGrupo]=useState(org.grupo?.replace("Grupo: ","")||"");const[newGrupo,setNewGrupo]=useState("");const[ownerId,setOwnerId]=useState("");
   const curProds=org.products?org.products.split(", ").filter(p=>!p.startsWith("P_")):[];
   const[selProds,setSelProds]=useState(()=>PRODS.filter(p=>curProds.includes(p.n)).map(p=>p.id));
   const[lo,setLo]=useState(false);const[fetching,setFetching]=useState(false);const[msg,setMsg]=useState("");
   const toggleProd=id=>setSelProds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
   const refresh=async()=>{if(!org.cnpj)return;setFetching(true);setMsg("");try{const d=await fetchCNPJ(org.cnpj);setName(d.nome_fantasia||name);setLegal(d.razao_social||"");setMsg("Dados atualizados!");}catch(e){setMsg("Erro: "+e.message);}setFetching(false);};
-  const save=async()=>{setLo(true);setMsg("");try{const body={products:selProds};if(name.trim())body.name=name.trim();if(legal.trim())body.legalName=legal.trim();if(catId)body.category=parseInt(catId);if(sectorId)body.sector=parseInt(sectorId);if(ownerId)body.ownerUser=parseInt(ownerId);body.description=grupo.trim()?`Grupo: ${grupo.trim()}`:"";const resp=await agF(`/organizations/${org.id}`,token,{method:"PUT",body:JSON.stringify(body)});if(resp.data){onSave(strip(resp.data));setMsg("Salvo!");}else{onSave({...org,name:name||org.name});}}catch(e){setMsg("Erro: "+e.message);}setLo(false);};
+  const save=async()=>{setLo(true);setMsg("");try{const body={products:selProds};if(name.trim())body.name=name.trim();if(legal.trim())body.legalName=legal.trim();if(catId)body.category=parseInt(catId);if(sectorId)body.sector=parseInt(sectorId);if(ownerId)body.ownerUser=parseInt(ownerId);const gFinal=grupo==="__new__"?newGrupo.trim():grupo;body.description=gFinal?`Grupo: ${gFinal}`:"";const resp=await agF(`/organizations/${org.id}`,token,{method:"PUT",body:JSON.stringify(body)});if(resp.data){onSave(strip(resp.data));setMsg("Salvo!");}else{onSave({...org,name:name||org.name});}}catch(e){setMsg("Erro: "+e.message);}setLo(false);};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}><p style={{fontWeight:600,fontSize:16,margin:0}}>Editar Cliente</p>{org.cnpj&&<button onClick={refresh} disabled={fetching} style={{padding:"4px 10px",fontSize:11,background:S.acc+"22",border:`1px solid ${S.acc}`,color:S.acc}}>{fetching?"...":"🔄 RF"}</button>}</div>
   {org.cnpj&&<p style={{fontSize:11,color:S.td,margin:"0 0 8px"}}>CNPJ: {org.cnpj}</p>}
   <LB t="NOME FANTASIA"><input value={name} onChange={e=>setName(e.target.value)} style={{width:"100%"}}/></LB>
@@ -230,7 +231,8 @@ function EditModal({org,token,users,onSave,onClose}){const[name,setName]=useStat
   <LB t="CATEGORIA"><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{CAT_IDS.map(c=><button key={c.id} type="button" onClick={()=>setCatId(String(c.id))} style={{padding:"4px 10px",fontSize:10,border:catId===String(c.id)?`2px solid ${CC[c.n]||S.pri}`:`1px solid ${S.brd}`,background:catId===String(c.id)?`${CC[c.n]||S.pri}22`:"transparent",color:catId===String(c.id)?CC[c.n]||S.pri:S.ts,borderRadius:6,fontWeight:catId===String(c.id)?600:400}}>{c.n}{org.cat===c.n&&!catId?" (atual)":""}</button>)}</div></LB>
   <LB t="RESPONSÁVEL"><select value={ownerId} onChange={e=>setOwnerId(e.target.value)} style={{width:"100%",fontSize:12}}><option value="">Atual: {org.owner||"-"}</option>{users.map(u=><option key={u.id} value={u.id}>{u.n}</option>)}</select></LB>
   <LB t="SETOR"><select value={sectorId} onChange={e=>setSectorId(e.target.value)} style={{width:"100%",fontSize:12}}><option value="">Atual: {org.sector||"-"}</option>{SECTORS.map(s=><option key={s.id} value={s.id}>{s.n}</option>)}</select></LB>
-  <LB t="GRUPO"><input value={grupo} onChange={e=>setGrupo(e.target.value)} placeholder="Nome do grupo" style={{width:"100%"}}/></LB>
+  const existingGroups=useMemo(()=>[...new Set((allOrgs||[]).map(o=>o.grupo?.replace("Grupo: ","")).filter(Boolean))].sort(),[allOrgs]);
+  <LB t="GRUPO"><select value={grupo} onChange={e=>{setGrupo(e.target.value);if(e.target.value!=="__new__")setNewGrupo("");}} style={{width:"100%",fontSize:12,marginBottom:newGrupo||grupo==="__new__"?4:0}}><option value="">Sem grupo</option>{existingGroups.map(g=><option key={g} value={g}>{g}</option>)}<option value="__new__">+ Criar novo grupo</option></select>{(grupo==="__new__")&&<input value={newGrupo} onChange={e=>setNewGrupo(e.target.value)} placeholder="Nome do novo grupo" style={{width:"100%",fontSize:12}}/>}</LB>
   <LB t="PRODUTOS / MARCAS"><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{PRODS.map(p=><button key={p.id} onClick={()=>toggleProd(p.id)} style={{padding:"4px 8px",fontSize:10,border:selProds.includes(p.id)?`2px solid ${S.ok}`:`1px solid ${S.brd}`,background:selProds.includes(p.id)?S.ok+"22":"transparent",color:selProds.includes(p.id)?S.ok:S.ts,borderRadius:6,fontWeight:selProds.includes(p.id)?600:400}}>{p.n}</button>)}</div></LB>
   {msg&&<p style={{fontSize:12,color:msg.startsWith("Erro")?S.dng:S.ok,margin:"0 0 6px"}}>{msg}</p>}
   <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={onClose} style={{flex:1}}>Cancelar</button><button onClick={save} disabled={lo} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"...":"Salvar"}</button></div></div></div>);}
@@ -392,7 +394,7 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
       segs.push(ca&&cb?hav(ca.lat,ca.lng,cb.lat,cb.lng)*1.3:0);}
     return segs;};
   const totKm=useMemo(()=>bd.reduce((acc,[dt,dvs])=>acc+calcDayKm(dvs,dt),0),[bd,dayBases,plocs,repUserId]);
-  const workH=bd.reduce((s,[,d])=>{const sr=[...d].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));return s+mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime);},0);
+  const workH=bd.reduce((s,[,d])=>{const sr=[...d].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const raw=mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime);return s+Math.max(0,raw-60);},0);
   const mx=Math.max(1,...bd.map(([,v])=>v.length));
     const firstCheckin=pv.length?fT(pv[0].checkinTime):"-";
     const lastCheckout=pv.length?fT(pv[pv.length-1].checkoutTime):"-";
@@ -653,7 +655,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v11.2</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v12</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -824,7 +826,7 @@ export default function App(){
   // Check if day has visits but no active visit (can close route)
   const today=todayLocal();
   const todayVisits=useMemo(()=>visits.filter(v=>{const d=toLocalDate(v.checkinTime);return d===today&&isRealVisit(v);}),[visits,today]);
-  const hasEndBase=dayBases[today]?.end!=null;
+  const hasEndBase=dayBases[user?.id+"_"+today]?.end!=null||dayBases[today]?.end!=null;
   const canCloseRoute=todayVisits.length>0&&!active&&!hasEndBase;
 
   const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[];while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;all.push(...d.data.map(strip));if(d.data.length<100)break;pg++;}setAllOrgs(all);setOrgs(all);setSyncMsg(`${all.length} clientes`);
@@ -841,7 +843,7 @@ export default function App(){
     if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas`);}else setSyncMsg("Atualizado");};
   const loadHistory=async()=>{try{await loadHistoryInner();}catch(e){setSyncMsg("Erro: "+e.message);}};
 
-  const ensureBase=()=>{const t=todayLocal();if(!dayBases[t]||(!dayBases[t].start&&!dayBases[t].lat))setShowDB(true);};
+  const ensureBase=()=>{const t=todayLocal();const k=user.id+"_"+t;if(!dayBases[k]||(!dayBases[k].start&&!dayBases[k].lat))setShowDB(true);};
   const cities=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const c=o.addr?.city_name||o.addr?.city;if(c)s.add(c);});return["Todas",...[...s].sort()];},[orgs]);
   const states=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.addr?.state)s.add(o.addr.state);});return["Todos",...[...s].sort()];},[orgs]);
   const segments=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.sector)s.add(o.sector);});return["Todos",...[...s].sort()];},[orgs]);
@@ -902,7 +904,7 @@ export default function App(){
   return(<div style={{minHeight:"100vh",paddingBottom:70}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px",background:S.card,borderBottom:`1px solid ${S.brd}`,marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:14}}>
-        <img src="/logo.png" alt="" style={{height:56,width:"auto",objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
+        <img src="/logo.png" alt="" style={{height:44,borderRadius:8,background:"#fff",padding:"3px 10px",objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
         <div><p style={{fontSize:18,fontWeight:700,margin:0}}>TeamCheck</p><p style={{fontSize:13,color:S.ts,margin:0}}>{user?.name} — {fD(new Date())}</p></div>
       </div>
       <div style={{display:"flex",gap:6}}><button onClick={()=>setSearchAdd(true)} style={{padding:"10px 14px",fontSize:18,background:S.acc,border:"none",fontWeight:700}}>+</button><button onClick={async()=>{await doSync();await loadHistory();syncVisitLoad();}} disabled={syncing} style={{padding:"10px 16px",fontSize:15,background:syncing?S.cl:S.pri,border:"none",fontWeight:500}}>{syncing?"...":"🔄"}</button></div>
@@ -992,14 +994,14 @@ export default function App(){
     </div>
     <div style={{position:"fixed",bottom:0,left:0,right:0,background:S.card,borderTop:`1px solid ${S.brd}`,display:"flex",justifyContent:"center",zIndex:40}}><div style={{display:"flex",maxWidth:960,width:"100%"}}>{tabs.map(t=><button key={t.id} onClick={()=>{setTab(t.id);setVc(PG);}} style={{flex:1,border:"none",borderRadius:0,background:"transparent",padding:"10px 4px 8px",fontSize:10,fontWeight:tab===t.id?600:400,color:tab===t.id?S.pl:S.td}}><span style={{fontSize:18,display:"block",marginBottom:2}}>{t.i}</span>{t.l}</button>)}</div></div>
     {coTarget&&<NoteModal org={coTarget} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
-    {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();setDayBases(p=>{const n={...p,[t]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
-    {showEndDay&&<DayEndModal user={user} onSave={b=>{const t=todayLocal();setDayBases(p=>{const cur=p[t]||{};const n={...p,[t]:{...cur,end:b}};sS("jc:dayBases",n);return n;});setShowEndDay(false);}} onCancel={()=>setShowEndDay(false)}/>}
+    {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const n={...p,[k]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
+    {showEndDay&&<DayEndModal user={user} onSave={b=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const cur=p[k]||{};const n={...p,[k]:{...cur,end:b}};sS("jc:dayBases",n);return n;});setShowEndDay(false);}} onCancel={()=>setShowEndDay(false)}/>}
     {searchAdd&&<SearchOrAddModal token={token} allOrgs={allOrgs}
       onFound={(org)=>{setSearch(org.name||org.nickname);setTab("pdvs");}}
       onNewClient={(cnpj,rfData)=>{sS("jc:prefill",{cnpj,rfData});setNewClient(true);}}
       onCancel={()=>setSearchAdd(false)}/>}
-    {newClient&&<NewClientModal token={token} onSave={org=>{setOrgs(p=>[org,...p]);setNewClient(false);}} onCancel={()=>setNewClient(false)}/>}
+    {newClient&&<NewClientModal token={token} allOrgs={allOrgs} onSave={org=>{setOrgs(p=>[org,...p]);setAllOrgs(p=>[org,...p]);setNewClient(false);}} onCancel={()=>setNewClient(false)}/>}
     {personTarget&&<PeopleModal org={personTarget} token={token} onClose={()=>setPersonTarget(null)}/>}
-    {editTarget&&<EditModal org={editTarget} token={token} users={usersList} onSave={u=>{setOrgs(p=>p.map(o=>o.id===u.id?u:o));setEditTarget(null);}} onClose={()=>setEditTarget(null)}/>}
+    {editTarget&&<EditModal org={editTarget} token={token} users={usersList} allOrgs={allOrgs} onSave={u=>{setOrgs(p=>p.map(o=>o.id===u.id?u:o));setAllOrgs(p=>p.map(o=>o.id===u.id?u:o));setEditTarget(null);}} onClose={()=>setEditTarget(null)}/>}
     {divTarget&&<DivergentModal org={divTarget.org} dist={divTarget.dist} onAction={handleDivAction} onCancel={()=>setDivTarget(null)}/>}
   </div>);}
