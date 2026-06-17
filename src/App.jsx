@@ -346,31 +346,22 @@ function RotasTab({visits,dayBases,user,plocs}){
 function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const[sd,setSd]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return toLocalDate(d);});
   const[ed,setEd]=useState(todayLocal());
-  const[selUser,setSelUser]=useState("me");const[remoteVisits,setRemoteVisits]=useState([]);const[rLo,setRLo]=useState(false);
+  const[selUser,setSelUser]=useState("me");
   const[editDay,setEditDay]=useState(null);
-  // FIX: resolve correct userId and name based on who we're viewing
   const otherId=user.id===743088?743347:743088;
   const repUserId=selUser==="me"?user.id:otherId;
   const repUserName=selUser==="me"?user.name:(USERS.find(u=>u.id===otherId)?.n||"Alisson");
-  const loadRemote=async()=>{setRLo(true);try{
-    // Use 30-day windows from sd to today (API max 31 days)
-    let allT=[];const start=new Date(sd+"T00:00:00Z");const end=new Date();
-    for(let d=new Date(start);d<end;){const win=new Date(d);win.setDate(win.getDate()+30);const to=win>end?end:win;
-      let pg=1;while(true){const r=await agF(`/tasks?createdDateGt=${d.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,token);if(!r.data?.length)break;allT.push(...r.data);if(r.data.length<100)break;pg++;}d=to;}
-    const tasks=allT.filter(t=>t.user?.id===otherId&&(t.type==="Visita"||t.type==="VISITA")&&!t.due_date&&!t.dueDate)
-      .map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",userName:t.user?.name||"",taskType:"VISITA"}));
-    setRemoteVisits(tasks);
-  }catch(e){console.warn("loadRemote:",e);alert("Erro: "+e.message);}setRLo(false);};
-  useEffect(()=>{if(selUser==="team")loadRemote();},[selUser,sd]);
-  const useVisits=selUser==="me"?visits:remoteVisits;
-  const pv=useMemo(()=>useVisits.filter(v=>{
+  // DEFINITIVE: Use SAME visits array for both modes (KV-synced, single source of truth)
+  // Filter by userName to separate Jordan's visits from Alisson's
+  const pv=useMemo(()=>visits.filter(v=>{
     if(!v.checkoutTime)return false;
-    if(selUser==="me"&&v.taskType&&v.taskType!=="VISITA")return false;
-    // FIX: only show current user's visits in "me" mode
+    if(v.taskType&&v.taskType!=="VISITA")return false;
+    // Filter by user: "me" = current user, "team" = other user
     if(selUser==="me"&&v.userName&&v.userName!==user.name)return false;
+    if(selUser==="team"&&v.userName!==repUserName)return false;
     const d=toLocalDate(v.checkinTime);
     return d>=sd&&d<=ed;
-  }).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime)),[useVisits,sd,ed,selUser,user.name]);
+  }).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime)),[visits,sd,ed,selUser,user.name,repUserName]);
   const bd=useMemo(()=>{const m={};pv.forEach(v=>{const k=toLocalDate(v.checkinTime);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pv]);
   // FIX: when team, check for admin-set base (keyed as "userId_date"), fallback to team home
   const getRepBase=(dt)=>{if(selUser==="team"){const k=repUserId+"_"+dt;if(dayBases[k]?.start)return dayBases[k].start;if(dayBases[k])return dayBases[k];return HOMES[repUserId]||null;}return getBase(dayBases,dt,repUserId);};
@@ -399,7 +390,7 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
     const firstCheckin=pv.length?fT(pv[0].checkinTime):"-";
     const lastCheckout=pv.length?fT(pv[pv.length-1].checkoutTime):"-";
     return(<div>
-    {user?.id===743088&&<div style={{display:"flex",gap:4,marginBottom:8}}><button onClick={()=>setSelUser("me")} style={{flex:1,padding:8,fontSize:12,border:selUser==="me"?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:selUser==="me"?S.pri+"22":"transparent",color:selUser==="me"?S.pri:S.ts,fontWeight:selUser==="me"?600:400}}>Meus dados</button><button onClick={()=>setSelUser("team")} style={{flex:1,padding:8,fontSize:12,border:selUser==="team"?`2px solid ${S.acc}`:`1px solid ${S.brd}`,background:selUser==="team"?S.acc+"22":"transparent",color:selUser==="team"?S.acc:S.ts,fontWeight:selUser==="team"?600:400}}>{rLo?"Carregando...":"Alisson Henrique"}</button></div>}
+    {user?.id===743088&&<div style={{display:"flex",gap:4,marginBottom:8}}><button onClick={()=>setSelUser("me")} style={{flex:1,padding:8,fontSize:12,border:selUser==="me"?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:selUser==="me"?S.pri+"22":"transparent",color:selUser==="me"?S.pri:S.ts,fontWeight:selUser==="me"?600:400}}>Meus dados</button><button onClick={()=>setSelUser("team")} style={{flex:1,padding:8,fontSize:12,border:selUser==="team"?`2px solid ${S.acc}`:`1px solid ${S.brd}`,background:selUser==="team"?S.acc+"22":"transparent",color:selUser==="team"?S.acc:S.ts,fontWeight:selUser==="team"?600:400}}>Alisson Henrique</button></div>}
     <div style={{display:"flex",gap:6,marginBottom:12,alignItems:"center"}}><input type="date" value={sd} onChange={e=>setSd(e.target.value)} style={{flex:1,fontSize:12}}/><span style={{color:S.td}}>ate</span><input type="date" value={ed} onChange={e=>setEd(e.target.value)} style={{flex:1,fontSize:12}}/></div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>{[["Visitas",pv.length],["Dias",bd.length],["Jornada",hrsMin(workH)],["Km",totKm.toFixed(0)],["1º Check-in",firstCheckin],["Último",lastCheckout]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:16,fontWeight:600,margin:0}}>{v}</p></div>)}</div>
     {bd.length>0&&(selUser==="me"||user?.id===743088)&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"10px 14px",marginBottom:12}}>
@@ -655,7 +646,7 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v12.2</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v12.3</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
