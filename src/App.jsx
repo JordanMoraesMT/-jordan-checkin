@@ -30,9 +30,7 @@ const hav=(a,b,c,d)=>{const R=6371,x=((c-a)*Math.PI)/180,y=((d-b)*Math.PI)/180;c
 function sL(k,f){try{return JSON.parse(localStorage.getItem(k))||f;}catch{return f;}}
 function sS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("sync:",e);}}
 async function agF(path,token,opts={}){const p=path.startsWith("/")?path.slice(1):path;const[base,qs]=p.split("?");let u=`${API}?path=${encodeURIComponent(base)}`;if(qs)u+="&"+qs;
-  // Add cache buster to force fresh response (avoid stale CDN cache)
-  u+=(u.includes("?")?"&":"?")+"_t="+Date.now();
-  const r=await fetch(u,{...opts,cache:"no-store",headers:{Authorization:`Token ${token}`,"Content-Type":"application/json; charset=utf-8","Accept":"application/json; charset=utf-8","Accept-Encoding":"identity","Cache-Control":"no-cache","Pragma":"no-cache",...(opts.headers||{})}});
+  const r=await fetch(u,{...opts,cache:"no-store",headers:{Authorization:`Token ${token}`,"Content-Type":"application/json; charset=utf-8","Accept":"application/json; charset=utf-8",...(opts.headers||{})}});
   if(!r.ok)throw new Error(`${r.status}`);
   const buf=await r.arrayBuffer();
   const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);
@@ -725,7 +723,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v13.3</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v13.4</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
