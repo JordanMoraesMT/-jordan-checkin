@@ -48,7 +48,7 @@ const MIN_OBS=50;
 
 const LB=({t,children})=><div style={{marginBottom:6}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px",textTransform:"uppercase",letterSpacing:.5}}>{t}</p>{children}</div>;
 
-function Login({onLogin}){const[tk,setTk]=useState("");const[lo,setLo]=useState(false);const[er,setEr]=useState("");const go=async()=>{if(!tk.trim())return;setLo(true);setEr("");try{const d=await agF("/users/me",tk.trim());d.data?onLogin(tk.trim(),d.data):setEr("Token invalido.");}catch(e){setEr("Erro: "+e.message);}setLo(false);};return(<div style={{padding:"3rem 1rem",textAlign:"center"}}><img src="/logo.png" alt="" style={{height:56,borderRadius:10,background:"#fff",padding:"4px 12px",marginBottom:16}} onError={e=>{e.target.style.display="none"}}/><h1 style={{fontSize:20,fontWeight:600,margin:"0 0 4px"}}>TeamCheck</h1><p style={{fontSize:13,color:S.ts,margin:"0 0 2rem"}}>Jordan Representações</p><div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1.25rem",textAlign:"left"}}><LB t="TOKEN DA API AGENDOR"><input type="password" value={tk} onChange={e=>setTk(e.target.value)} placeholder="Cole seu token..." style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&go()}/></LB><button onClick={go} disabled={lo||!tk.trim()} style={{width:"100%",background:S.pri,border:"none",fontWeight:600,fontSize:15,padding:12,marginTop:8}}>{lo?"Conectando...":"Conectar ao Agendor"}</button>{er&&<p style={{fontSize:13,color:S.dng,marginTop:12,textAlign:"center"}}>{er}</p>}</div></div>);}
+function Login({onLogin}){const[tk,setTk]=useState("");const[lo,setLo]=useState(false);const[er,setEr]=useState("");const go=async()=>{if(!tk.trim())return;setLo(true);setEr("");try{const d=await agF("/users/me",tk.trim());d.data?onLogin(tk.trim(),d.data):setEr("Token invalido.");}catch(e){setEr("Erro: "+e.message);}setLo(false);};return(<div style={{padding:"3rem 1rem",textAlign:"center"}}><img src="/logo.png" alt="" style={{height:64,borderRadius:10,background:"#fff",padding:"2px 6px",marginBottom:16}} onError={e=>{e.target.style.display="none"}}/><h1 style={{fontSize:20,fontWeight:600,margin:"0 0 4px"}}>TeamCheck</h1><p style={{fontSize:13,color:S.ts,margin:"0 0 2rem"}}>Jordan Representações</p><div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1.25rem",textAlign:"left"}}><LB t="TOKEN DA API AGENDOR"><input type="password" value={tk} onChange={e=>setTk(e.target.value)} placeholder="Cole seu token..." style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&go()}/></LB><button onClick={go} disabled={lo||!tk.trim()} style={{width:"100%",background:S.pri,border:"none",fontWeight:600,fontSize:15,padding:12,marginTop:8}}>{lo?"Conectando...":"Conectar ao Agendor"}</button>{er&&<p style={{fontSize:13,color:S.dng,marginTop:12,textAlign:"center"}}>{er}</p>}</div></div>);}
 
 function OrgCard({org,active,onIn,onOut,onEdit,onPerson,onQuick,onInfo,ldId,plocs,lastVisit,lastOrder,nearRoad}){
   const isA=active?.orgId===org.id;const a=org.addr||{};const addr=[a.street,a.number].filter(Boolean).join(", ");const loc=[a.district,a.city_name||a.city,a.state].filter(Boolean).join(" · ");
@@ -505,8 +505,13 @@ function EquipeTab({token,plocs,orgs,dayBases}){
     setErr("Buscando...");
     const d=await agF(`/tasks?createdDateGt=${dtStart}&createdDateLt=${dtEnd}&per_page=100`,token);
     const all=d.data||[];
-    const alisson=all.filter(t=>t.user?.id===743347).map(t=>({type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",time:t.createdAt,done:t.done}));
-    setTasks(alisson);setErr(`${all.length} total, ${alisson.length} Alisson`);
+    // FIX: only Visita activities (no due_date = visit log, not scheduled task)
+    const visitas=all.filter(t=>t.user?.id===743347&&(t.type==="Visita"||t.type==="VISITA")&&!t.due_date&&!t.dueDate);
+    // DEDUP: max 1 per orgId+date (eliminates checkout+next-step duplicates)
+    const seen=new Set();const deduped=[];
+    for(const t of visitas){const key=t.organization?.id+"|"+t.createdAt?.slice(0,10);if(seen.has(key))continue;seen.add(key);deduped.push(t);}
+    const alisson=deduped.map(t=>({type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",time:t.createdAt,done:t.done}));
+    setTasks(alisson);setErr(`${alisson.length} visitas (${all.length} total)`);
     if(alisson.length>=1){const sorted=[...alisson].sort((a,b)=>a.time.localeCompare(b.time));let km=0;const startB=getBase(dayBases,sel,743347);const endB=getEnd(dayBases,sel,743347);const fc=getCoord(sorted[0].orgId),lc=getCoord(sorted[sorted.length-1].orgId);
       if(startB&&fc)km+=hav(startB.lat,startB.lng,fc[0],fc[1])*1.3;
       for(let i=0;i<sorted.length-1;i++){
@@ -646,7 +651,7 @@ function ProgressBar({active,msg}){if(!active)return null;return(<div style={{wi
 </div>);}
 
 // ─── ConfigTab with GPS delete, confirmations, progress ───
-function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syncMsg,onSync,onLoadHistory,onSyncPull,onShareGPS,onShowDB,onShowEnd,onDeleteGPS,onSaveGPS,onClearVisits,onClearAllGPS,onLogout}){
+function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStatus,syncing,syncMsg,onSync,onLoadHistory,onSyncPull,onShareGPS,onShowDB,onShowEnd,onDeleteGPS,onSaveGPS,onClearVisits,onClearAllGPS,onLogout,doSync}){
   const[gpsSearch,setGpsSearch]=useState("");const[histLoading,setHistLoading]=useState(false);const[shareLoading,setShareLoading]=useState(false);
   const[gpsAddSearch,setGpsAddSearch]=useState("");const[gpsAddTarget,setGpsAddTarget]=useState(null);const[gpsAddLat,setGpsAddLat]=useState(null);const[gpsAddLng,setGpsAddLng]=useState(null);
   const gpsResults=gpsSearch.trim().length>=2?orgs.filter(o=>{const q=gpsSearch.toLowerCase().replace(/[.\-\/]/g,"");return plocs[o.id]&&[o.name,o.nickname,o.cnpj?.replace(/[.\-\/]/g,"")].filter(Boolean).join(" ").toLowerCase().includes(q);}).slice(0,10):[];
@@ -715,6 +720,12 @@ function ConfigTab({user,orgs,visits,plocs,dayBases,today,syncStatus,syncing,syn
         </div>
         <button onClick={()=>{const dt=prompt("Data para limpar visitas (DD/MM/AAAA):");if(!dt)return;const[d,m,y]=dt.split("/");const target=`${y}-${m}-${d}`;const count=visits.filter(v=>v.checkinTime?.startsWith(target)).length;if(!count){alert("Nenhuma visita nessa data.");return;}if(confirm(`Tem certeza que deseja excluir ${count} visitas de ${dt}?\nEssa ação não pode ser desfeita.`))onClearVisits(target);}} style={{color:S.gold}}>🗓️ Limpar visitas (por data)</button>
         <button onClick={()=>{if(confirm(`Tem certeza que deseja apagar TODOS os ${Object.keys(plocs).length} GPS salvos?\nEssa ação não pode ser desfeita.`))onClearAllGPS();}} style={{color:S.gold}}>📍 Limpar todos GPS PDVs</button>
+        {/* Bulk update grupos */}
+        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginTop:8}}>
+          <p style={{fontSize:12,fontWeight:500,margin:"0 0 6px"}}>📋 Atualizar grupos em massa</p>
+          <p style={{fontSize:10,color:S.ts,margin:"0 0 8px"}}>CSV com colunas: CNPJ, Grupo</p>
+          <input type="file" accept=".csv" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;const text=await file.text();const lines=text.split(/\r?\n/).filter(Boolean);const rows=lines.slice(1).map(l=>{const[c,g]=l.split(/[,;]/);return{cnpj:(c||"").replace(/\D/g,""),grupo:(g||"").trim().replace(/^"|"$/g,"")};}).filter(r=>r.cnpj&&r.grupo);if(!rows.length){alert("CSV vazio ou formato inválido.\nFormato: CNPJ,Grupo\n12345678000190,REDE MATEUS");e.target.value="";return;}if(!confirm(`Atualizar grupos em ${rows.length} clientes?\nIsto vai sobrescrever o campo description no Agendor.`)){e.target.value="";return;}let ok=0,fail=0,notfound=0;const log=[];for(const r of rows){const org=allOrgs.find(o=>o.cnpj?.replace(/\D/g,"")===r.cnpj);if(!org){notfound++;log.push(`${r.cnpj}: não encontrado`);continue;}try{await agF(`/organizations/${org.id}`,token,{method:"PUT",body:JSON.stringify({description:`Grupo: ${r.grupo}`,products:[]})});ok++;log.push(`✅ ${org.name.slice(0,30)} → ${r.grupo}`);}catch(x){fail++;log.push(`❌ ${org.name.slice(0,30)}: ${x.message}`);}}alert(`Concluído!\n✅ ${ok} atualizados\n❌ ${fail} falharam\n⚠️ ${notfound} não encontrados\n\nLog:\n${log.slice(0,20).join("\n")}${log.length>20?`\n... +${log.length-20} mais`:""}`);e.target.value="";if(ok)await doSync();}} style={{width:"100%",fontSize:11,padding:6}}/>
+        </div>
       </>}
       <button onClick={()=>{if(confirm("Deseja realmente desconectar?\nVoce precisara inserir o token novamente."))onLogout();}} style={{color:S.dng,marginTop:8}}>🚪 Desconectar</button>
     </div>
@@ -916,7 +927,7 @@ export default function App(){
   return(<div style={{minHeight:"100vh",paddingBottom:70}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px",background:S.card,borderBottom:`1px solid ${S.brd}`,marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:14}}>
-        <img src="/logo.png" alt="" style={{height:48,borderRadius:10,background:"#fff",padding:"6px 16px",objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
+        <img src="/logo.png" alt="" style={{height:52,borderRadius:10,background:"#fff",padding:"2px 6px",objectFit:"contain"}} onError={e=>{e.target.style.display="none"}}/>
         <div><p style={{fontSize:18,fontWeight:700,margin:0}}>TeamCheck</p><p style={{fontSize:13,color:S.ts,margin:0}}>{user?.name} — {fD(new Date())}</p></div>
       </div>
       <div style={{display:"flex",gap:6}}><button onClick={()=>setSearchAdd(true)} style={{padding:"10px 14px",fontSize:18,background:S.acc,border:"none",fontWeight:700}}>+</button><button onClick={async()=>{await doSync();await loadHistory();syncVisitLoad();}} disabled={syncing} style={{padding:"10px 16px",fontSize:15,background:syncing?S.cl:S.pri,border:"none",fontWeight:500}}>{syncing?"...":"🔄"}</button></div>
@@ -986,7 +997,7 @@ export default function App(){
       {tab==="equipe"&&user?.id===743088&&<EquipeTab token={token} plocs={plocs} orgs={orgs} dayBases={dayBases}/>}
       {tab==="agenda"&&<AgendaTab token={token} user={user} allOrgs={allOrgs}/>}
 
-      {tab==="config"&&<ConfigTab user={user} orgs={orgs} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
+      {tab==="config"&&<ConfigTab user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
         onSync={doSync} onLoadHistory={loadHistory} onSyncPull={()=>{syncPull();setSyncStatus("Forçando sync...");}}
         onShareGPS={async()=>{if(!Object.keys(plocs).length){alert("Nenhum GPS salvo");return;}setSyncStatus("Enviando GPS...");try{const r=await fetch(`${API}?sync=plocs`);const d=await r.json();const merged={...(d.active||{}),...plocs};await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:merged})});setSyncStatus(`${Object.keys(merged).length} GPS enviados!`);}catch(e){setSyncStatus("Erro: "+e.message);}}}
         onShowDB={()=>setShowDB(true)} onShowEnd={()=>setShowEndDay(true)}
