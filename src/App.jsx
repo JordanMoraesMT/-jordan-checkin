@@ -144,14 +144,14 @@ function OrgCard({org,active,onIn,onOut,onEdit,onPerson,onQuick,onInfo,ldId,ploc
         {isA?<button onClick={()=>onOut(org)} disabled={ldId===org.id} style={{background:S.dng,border:"none",color:"#fff",fontSize:13,fontWeight:700,padding:"10px 18px",borderRadius:50,display:"flex",alignItems:"center",gap:6,boxShadow:`0 2px 10px ${S.dng}44`,cursor:"pointer"}}><LogOut size={22} strokeWidth={2.5}/>{ldId===org.id?"...":"Check-out"}</button>
         :<div style={{display:"flex",gap:5}}>
           <button onClick={()=>onIn(org)} disabled={!!active||ldId===org.id} style={{background:active?S.cl:S.acc,border:"none",color:"#fff",fontSize:13,fontWeight:700,padding:"10px 18px",borderRadius:50,opacity:active?0.4:1,display:"flex",alignItems:"center",gap:6,boxShadow:active?"none":`0 2px 10px ${S.acc}44`,cursor:"pointer"}}><LogIn size={22} strokeWidth={2.5}/>{ldId===org.id?"...":"Check-in"}</button>
-          <button onClick={()=>onQuick&&onQuick(org,"WHATSAPP")} style={{width:44,height:44,borderRadius:50,background:S.ok+"20",border:`1.5px solid ${S.ok}55`,color:S.ok,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><MessageCircle size={30} strokeWidth={2}/></button>
-          <button onClick={()=>onQuick&&onQuick(org,"LIGACAO")} style={{width:44,height:44,borderRadius:50,background:S.pri+"20",border:`1.5px solid ${S.pri}55`,color:S.pl,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Phone size={30} strokeWidth={2}/></button>
+          <button onClick={()=>onQuick&&onQuick(org,"WHATSAPP")} style={{background:"transparent",border:"none",color:S.ok,padding:6,cursor:"pointer"}}><MessageCircle size={32} strokeWidth={1.8}/></button>
+          <button onClick={()=>onQuick&&onQuick(org,"LIGACAO")} style={{background:"transparent",border:"none",color:S.pl,padding:6,cursor:"pointer"}}><Phone size={32} strokeWidth={1.8}/></button>
         </div>}
-        <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
-          {plocs&&plocs[org.id]&&<button onClick={()=>{const loc=plocs[org.id];const url=`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}&travelmode=driving`;window.open(url,"_blank","noopener");}} title="Navegar" style={{width:38,height:38,borderRadius:50,background:S.acc+"15",border:`1.5px solid ${S.acc}44`,color:S.acc,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Navigation size={24} strokeWidth={2}/></button>}
-          <button onClick={()=>onInfo&&onInfo(org)} style={{width:38,height:38,borderRadius:50,background:S.pl+"10",border:`1.5px solid ${S.brd}`,color:S.pl,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Info size={24} strokeWidth={2}/></button>
-          <button onClick={()=>onEdit&&onEdit(org)} style={{width:38,height:38,borderRadius:50,background:S.gold+"10",border:`1.5px solid ${S.brd}`,color:S.gold,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><Pencil size={24} strokeWidth={2}/></button>
-          <button onClick={()=>onPerson&&onPerson(org)} style={{width:38,height:38,borderRadius:50,background:S.ts+"10",border:`1.5px solid ${S.brd}`,color:S.ts,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}><UserPlus size={24} strokeWidth={2}/></button>
+        <div style={{display:"flex",gap:2,justifyContent:"flex-end"}}>
+          {plocs&&plocs[org.id]&&<button onClick={()=>{const loc=plocs[org.id];const url=`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}&travelmode=driving`;window.open(url,"_blank","noopener");}} title="Navegar" style={{background:"transparent",border:"none",color:S.acc,padding:4,cursor:"pointer"}}><Navigation size={26} strokeWidth={1.8}/></button>}
+          <button onClick={()=>onInfo&&onInfo(org)} style={{background:"transparent",border:"none",color:S.pl,padding:4,cursor:"pointer"}}><Info size={26} strokeWidth={1.8}/></button>
+          <button onClick={()=>onEdit&&onEdit(org)} style={{background:"transparent",border:"none",color:S.gold,padding:4,cursor:"pointer"}}><Pencil size={26} strokeWidth={1.8}/></button>
+          <button onClick={()=>onPerson&&onPerson(org)} style={{background:"transparent",border:"none",color:S.ts,padding:4,cursor:"pointer"}}><UserPlus size={26} strokeWidth={1.8}/></button>
         </div>
       </div>
     </div>
@@ -464,7 +464,7 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const getRepBase=(dt)=>{if(selUser==="team"){const k=repUserId+"_"+dt;if(dayBases[k]?.start)return dayBases[k].start;if(dayBases[k])return dayBases[k];return HOMES[repUserId]||null;}return getBase(dayBases,dt,repUserId);};
   const getRepEnd=(dt)=>{if(selUser==="team"){const k=repUserId+"_"+dt;if(dayBases[k]?.end)return dayBases[k].end;return getRepBase(dt);}return getEnd(dayBases,dt,repUserId);};
   // FIX: use repUserId (correct user) for base resolution
-  const calcDayKm=(dvs,dt)=>{let km=0;const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+  const calcDayKm=(dvs,dt)=>{if(!dvs?.length)return 0;let km=0;const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
     const b2=getRepBase(dt);const eb=getRepEnd(dt);
     const fc=getVCoord(s[0],plocs);
     if(b2&&fc)km+=hav(b2.lat,b2.lng,fc.lat,fc.lng)*1.3;
@@ -473,7 +473,7 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
     if(endB&&lc)km+=hav(lc.lat,lc.lng,endB.lat,endB.lng)*1.3;
     return km;};
   // FIX: calculate km segments for detailed export
-  const calcSegKm=(dvs,dt)=>{const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+  const calcSegKm=(dvs,dt)=>{if(!dvs?.length)return[];const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
     const b2=getRepBase(dt);const eb=getRepEnd(dt);
     const segs=[];const fc=getVCoord(s[0],plocs);
     segs.push(b2&&fc?hav(b2.lat,b2.lng,fc.lat,fc.lng)*1.3:0);// first: base→pdv
@@ -532,8 +532,8 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
             <span style={{fontSize:11,fontWeight:600,width:16,textAlign:"right",flexShrink:0}}>{dvs.length}</span>
           </div>
           <div style={{display:"flex",gap:4,marginLeft:48}}>
-            <span style={{fontSize:10,color:S.acc,fontWeight:500}}>{fT(sr[0].checkinTime)}</span>
-            <span style={{fontSize:10,color:S.ts}}>{dayKm>0?`· ${dayKm.toFixed(0)}km`:""} · {hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime))}</span>
+            <span style={{fontSize:10,color:S.acc,fontWeight:500}}>{sr[0]?fT(sr[0].checkinTime):"-"}</span>
+            <span style={{fontSize:10,color:S.ts}}>{dayKm>0?`· ${dayKm.toFixed(0)}km`:""} · {sr.length>=1?hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)):"-"}</span>
             {hasRoute&&<a href={mapsUrl} target="_blank" rel="noopener" style={{fontSize:10,color:S.acc,textDecoration:"none",fontWeight:600,marginLeft:"auto"}}>📍 Ver Rota</a>}
           </div>
           {/* Rota detalhada do dia */}
@@ -748,7 +748,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v15.2</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v16</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
