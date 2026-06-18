@@ -353,15 +353,29 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const repUserName=selUser==="me"?user.name:(USERS.find(u=>u.id===otherId)?.n||"Alisson");
   // DEFINITIVE: Use SAME visits array for both modes (KV-synced, single source of truth)
   // Filter by userName to separate Jordan's visits from Alisson's
-  const pv=useMemo(()=>visits.filter(v=>{
-    if(!v.checkoutTime)return false;
-    if(v.taskType&&v.taskType!=="VISITA")return false;
-    // Filter by user: "me" = current user, "team" = other user
-    if(selUser==="me"&&v.userName&&v.userName!==user.name)return false;
-    if(selUser==="team"&&v.userName!==repUserName)return false;
-    const d=toLocalDate(v.checkinTime);
-    return d>=sd&&d<=ed;
-  }).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime)),[visits,sd,ed,selUser,user.name,repUserName]);
+  const pv=useMemo(()=>{
+    const filtered=visits.filter(v=>{
+      if(!v.checkoutTime)return false;
+      if(v.taskType&&v.taskType!=="VISITA")return false;
+      if(selUser==="me"&&v.userName&&v.userName!==user.name)return false;
+      if(selUser==="team"&&v.userName!==repUserName)return false;
+      const d=toLocalDate(v.checkinTime);
+      return d>=sd&&d<=ed;
+    });
+    // DEFINITIVE DEDUP: max 1 visit per orgId+userName+date
+    // Priority: app visits (with real check-in time) > API visits (with createdAt)
+    const map=new Map();
+    for(const v of filtered){
+      const key=v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime);
+      const existing=map.get(key);
+      if(!existing){map.set(key,v);continue;}
+      // Keep the one with longer duration (real app visit) over API (instant)
+      const exDur=new Date(existing.checkoutTime)-new Date(existing.checkinTime);
+      const vDur=new Date(v.checkoutTime)-new Date(v.checkinTime);
+      if(vDur>exDur)map.set(key,v);
+    }
+    return Array.from(map.values()).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+  },[visits,sd,ed,selUser,user.name,repUserName]);
   const bd=useMemo(()=>{const m={};pv.forEach(v=>{const k=toLocalDate(v.checkinTime);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pv]);
   // FIX: when team, check for admin-set base (keyed as "userId_date"), fallback to team home
   const getRepBase=(dt)=>{if(selUser==="team"){const k=repUserId+"_"+dt;if(dayBases[k]?.start)return dayBases[k].start;if(dayBases[k])return dayBases[k];return HOMES[repUserId]||null;}return getBase(dayBases,dt,repUserId);};
@@ -831,9 +845,9 @@ export default function App(){
       let pg=1;while(true){const d=await agF(`/tasks?createdDateGt=${from.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,tk||token);if(!d.data?.length)break;allTasks.push(...d.data);if(d.data.length<100)break;pg++;}}
     // Only activities (no due_date) of type Visita = real visit logs
     const apiVisits=allTasks.filter(t=>(t.type==="Visita"||t.type==="VISITA")&&!t.due_date&&!t.dueDate);
-    // Dedup API by orgId + date (keep first occurrence, skip next-step duplicates)
+    // Dedup API by orgId+userId+date (keep first occurrence)
     const seen=new Set();const deduped=[];
-    for(const t of apiVisits){const key=t.organization?.id+"|"+t.createdAt?.slice(0,10);if(seen.has(key))continue;seen.add(key);deduped.push(t);}
+    for(const t of apiVisits){const key=t.organization?.id+"|"+(t.user?.id||"")+"|"+t.createdAt?.slice(0,10);if(seen.has(key))continue;seen.add(key);deduped.push(t);}
     const remote=deduped.map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));
     // Merge: KV/local visits take priority (have real timestamps)
     const existing=new Set(visits.map(v=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime)));
