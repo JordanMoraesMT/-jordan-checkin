@@ -232,13 +232,10 @@ function EditModal({org,token,users,allOrgs,onSave,onClose}){const[name,setName]
   <LB t="CATEGORIA"><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{CAT_IDS.map(c=><button key={c.id} type="button" onClick={()=>setCatId(String(c.id))} style={{padding:"4px 10px",fontSize:10,border:catId===String(c.id)?`2px solid ${CC[c.n]||S.pri}`:`1px solid ${S.brd}`,background:catId===String(c.id)?`${CC[c.n]||S.pri}22`:"transparent",color:catId===String(c.id)?CC[c.n]||S.pri:S.ts,borderRadius:6,fontWeight:catId===String(c.id)?600:400}}>{c.n}{org.cat===c.n&&!catId?" (atual)":""}</button>)}</div></LB>
   <LB t="RESPONSÁVEL"><select value={ownerId} onChange={e=>setOwnerId(e.target.value)} style={{width:"100%",fontSize:12}}><option value="">Atual: {org.owner||"-"}</option>{users.map(u=><option key={u.id} value={u.id}>{u.n}</option>)}</select></LB>
   <LB t="SETOR"><select value={sectorId} onChange={e=>setSectorId(e.target.value)} style={{width:"100%",fontSize:12}}><option value="">Atual: {org.sector||"-"}</option>{SECTORS.map(s=><option key={s.id} value={s.id}>{s.n}</option>)}</select></LB>
-  <LB t="GRUPO"><input value={grupo==="__new__"?"":(grupoSearch||"")} onChange={e=>{setGrupoSearch(e.target.value);if(grupo==="__new__"&&!e.target.value)setGrupo("");}} placeholder="Buscar grupo..." style={{width:"100%",fontSize:12,marginBottom:4}}/>
-    <select value={grupo} onChange={e=>{setGrupo(e.target.value);if(e.target.value!=="__new__"){setNewGrupo("");setGrupoSearch(e.target.value);}else setGrupoSearch("");}} style={{width:"100%",fontSize:12,marginBottom:grupo==="__new__"?4:0}}>
-      <option value="">Sem grupo</option>
-      <option value="__new__">➕ Criar novo grupo</option>
-      {existGrp.filter(g=>!grupoSearch||g.toLowerCase().includes(grupoSearch.toLowerCase())).map(g=><option key={g} value={g}>{g}</option>)}
-    </select>
-    {grupo==="__new__"&&<input value={newGrupo} onChange={e=>setNewGrupo(e.target.value)} placeholder="Nome do novo grupo" style={{width:"100%",fontSize:12}}/>}</LB>
+  <LB t="GRUPO"><input value={grupoSearch} onChange={e=>{const v=e.target.value;setGrupoSearch(v);const match=existGrp.find(g=>g.toLowerCase()===v.toLowerCase());if(match){setGrupo(match);setNewGrupo("");}else if(v.trim()){setGrupo("__new__");setNewGrupo(v);}else{setGrupo("");setNewGrupo("");}}} placeholder="Buscar ou digitar novo grupo..." style={{width:"100%",fontSize:12,marginBottom:4}} list="grupos-list"/>
+    <datalist id="grupos-list">{existGrp.map(g=><option key={g} value={g}/>)}</datalist>
+    {grupo==="__new__"&&grupoSearch.trim()&&<p style={{fontSize:10,color:S.acc,margin:"2px 0 0"}}>➕ Criar novo grupo: "{grupoSearch}"</p>}
+    {grupo&&grupo!=="__new__"&&<p style={{fontSize:10,color:S.ok,margin:"2px 0 0"}}>✓ Selecionado: {grupo}</p>}</LB>
   <LB t="PRODUTOS / MARCAS"><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{PRODS.map(p=><button key={p.id} onClick={()=>toggleProd(p.id)} style={{padding:"4px 8px",fontSize:10,border:selProds.includes(p.id)?`2px solid ${S.ok}`:`1px solid ${S.brd}`,background:selProds.includes(p.id)?S.ok+"22":"transparent",color:selProds.includes(p.id)?S.ok:S.ts,borderRadius:6,fontWeight:selProds.includes(p.id)?600:400}}>{p.n}</button>)}</div></LB>
   {msg&&<p style={{fontSize:12,color:msg.startsWith("Erro")?S.dng:S.ok,margin:"0 0 6px"}}>{msg}</p>}
   <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={onClose} style={{flex:1}}>Cancelar</button><button onClick={save} disabled={lo} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"...":"Salvar"}</button></div></div></div>);}
@@ -671,7 +668,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v12.5</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v12.6</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -931,12 +928,18 @@ export default function App(){
   const tabs=user?.id===743088?[...baseTabs.slice(0,3),{id:"equipe",i:"👥",l:"Equipe"},...baseTabs.slice(3)]:baseTabs;
 
   return(<div style={{minHeight:"100vh",paddingBottom:70}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"16px",background:S.card,borderBottom:`1px solid ${S.brd}`,marginBottom:12}}>
-      <div style={{display:"flex",alignItems:"center",gap:16}}>
-        <img src="/logo-white.png" alt="" style={{height:64,width:"auto",objectFit:"contain",display:"block",filter:"brightness(0) invert(1)"}} onError={e=>{e.target.src="/logo.png";e.target.style.filter="brightness(0) invert(1)";}}/>
-        <div><p style={{fontSize:26,fontWeight:700,margin:0,letterSpacing:"0.5px",color:"#fff"}}>TeamCheck</p><p style={{fontSize:12,color:S.ts,margin:"2px 0 0"}}>{user?.name} — {fD(new Date())}</p></div>
+    <div style={{padding:"14px 16px 12px",background:S.card,borderBottom:`1px solid ${S.brd}`,marginBottom:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"auto 1fr auto",alignItems:"center",gap:12}}>
+        <img src="/logo.png" alt="" style={{height:60,width:"auto",objectFit:"contain",display:"block",filter:"brightness(0) invert(1)"}} onError={e=>{e.target.style.display="none"}}/>
+        <p style={{fontSize:30,fontWeight:800,margin:0,letterSpacing:"1px",color:"#fff",textAlign:"center"}}>TeamCheck</p>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={()=>setSearchAdd(true)} style={{padding:"10px 14px",fontSize:18,background:S.acc,border:"none",fontWeight:700}}>+</button>
+            <button onClick={async()=>{await doSync();await loadHistory();syncVisitLoad();}} disabled={syncing} style={{padding:"10px 16px",fontSize:15,background:syncing?S.cl:S.pri,border:"none",fontWeight:500}}>{syncing?"...":"🔄"}</button>
+          </div>
+          <p style={{fontSize:11,color:S.ts,margin:0,textAlign:"right",lineHeight:1.2}}>{user?.name}<br/>{fD(new Date())}</p>
+        </div>
       </div>
-      <div style={{display:"flex",gap:6}}><button onClick={()=>setSearchAdd(true)} style={{padding:"10px 14px",fontSize:18,background:S.acc,border:"none",fontWeight:700}}>+</button><button onClick={async()=>{await doSync();await loadHistory();syncVisitLoad();}} disabled={syncing} style={{padding:"10px 16px",fontSize:15,background:syncing?S.cl:S.pri,border:"none",fontWeight:500}}>{syncing?"...":"🔄"}</button></div>
     </div>
     <div style={{padding:"0 16px"}}>
       {active&&tab!=="config"&&<Banner v={active} orgs={orgs} onClick={()=>{setTab("pdvs");setSearch("");setCatFilters([]);setVisitMode("all");setTimeout(()=>{const el=document.getElementById("org-"+active.orgId);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});else setSearch(active.orgName);},200);}}/>}
