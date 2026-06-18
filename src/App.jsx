@@ -29,25 +29,60 @@ const hourDec=d=>{const t=new Date(d);return t.getHours()+t.getMinutes()/60;};
 const hav=(a,b,c,d)=>{const R=6371,x=((c-a)*Math.PI)/180,y=((d-b)*Math.PI)/180;const z=Math.sin(x/2)**2+Math.cos((a*Math.PI)/180)*Math.cos((c*Math.PI)/180)*Math.sin(y/2)**2;return R*2*Math.atan2(Math.sqrt(z),Math.sqrt(1-z));};
 function sL(k,f){try{return JSON.parse(localStorage.getItem(k))||f;}catch{return f;}}
 function sS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("sync:",e);}}
-async function agF(path,token,opts={}){const p=path.startsWith("/")?path.slice(1):path;const[base,qs]=p.split("?");let u=`${API}?path=${encodeURIComponent(base)}`;if(qs)u+="&"+qs;const r=await fetch(u,{...opts,headers:{Authorization:`Token ${token}`,"Content-Type":"application/json; charset=utf-8","Accept":"application/json; charset=utf-8",...(opts.headers||{})}});if(!r.ok)throw new Error(`${r.status}`);const buf=await r.arrayBuffer();const txt=new TextDecoder("utf-8").decode(buf);return JSON.parse(txt);}
+async function agF(path,token,opts={}){const p=path.startsWith("/")?path.slice(1):path;const[base,qs]=p.split("?");let u=`${API}?path=${encodeURIComponent(base)}`;if(qs)u+="&"+qs;
+  // Add cache buster to force fresh response (avoid stale CDN cache)
+  u+=(u.includes("?")?"&":"?")+"_t="+Date.now();
+  const r=await fetch(u,{...opts,cache:"no-store",headers:{Authorization:`Token ${token}`,"Content-Type":"application/json; charset=utf-8","Accept":"application/json; charset=utf-8","Accept-Encoding":"identity","Cache-Control":"no-cache","Pragma":"no-cache",...(opts.headers||{})}});
+  if(!r.ok)throw new Error(`${r.status}`);
+  const buf=await r.arrayBuffer();
+  const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);
+  return JSON.parse(txt);
+}
 async function postTask(token,oid,text,type="VISITA",done=true,due=null){const b={text,type,done};if(due)b.due_date=due;return agF(`/organizations/${oid}/tasks`,token,{method:"POST",body:JSON.stringify(b)});}
 function gps(){return new Promise((r,j)=>{if(!navigator.geolocation)return j(new Error("GPS"));navigator.geolocation.getCurrentPosition(p=>r({lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)}),j,{enableHighAccuracy:true,timeout:15000,maximumAge:0});});}
 async function roadKm(a,b,c,d){try{const r=await fetch(`${OSRM}/${b},${a};${d},${c}?overview=false`);const j=await r.json();if(j.code==="Ok"&&j.routes?.[0])return{km:j.routes[0].distance/1000,dur:Math.round(j.routes[0].duration/60)};}catch{}return{km:hav(a,b,c,d)*1.3,dur:0};}
 function csv(rows,fn){const b="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");Object.assign(document.createElement("a"),{href:URL.createObjectURL(new Blob([b],{type:"text/csv;charset=utf-8"})),download:fn}).click();}
-// Cloudflare Worker double-encodes: UTF-8 bytes interpreted as Latin-1 then sent
-// "Ç" = bytes c3 87, but Worker sends c3 87 as Latin-1 chars Ã‡ which then JSON-encodes as \u00c3\u0087
-// Fix: take each char's codepoint, treat as byte, decode the byte array as UTF-8
+// DEFINITIVE multi-strategy encoding fix
+// Handles: Latin-1 mojibake (Ã‡), double-UTF-8 (Ã‡), replacement char ( )
 function fixMojibake(s){
   if(!s||typeof s!=="string")return s;
-  // Check if string has high-byte chars that look like Latin-1 mojibake
-  let needsFix=false;
-  for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);if(c>=0x80&&c<=0xFF){needsFix=true;break;}}
-  if(!needsFix)return s;
-  try{
-    const bytes=new Uint8Array(s.length);
-    for(let i=0;i<s.length;i++)bytes[i]=s.charCodeAt(i)&0xFF;
-    return new TextDecoder("utf-8",{fatal:false}).decode(bytes);
-  }catch{return s;}
+  // Strategy 1: replacement char   (U+FFFD) means data is already lost, try to guess from context
+  if(s.indexOf("\uFFFD")>=0){
+    // Common patterns we KNOW: CONSTRUÇÃO, MATÉRIAS, etc - try aggressive fix
+    return s
+      .replace(/CONSTRU\uFFFD+O/gi,"CONSTRUÇÃO")
+      .replace(/CONSTRU\uFFFD+ES/gi,"CONSTRUÇÕES")
+      .replace(/MAT\uFFFDRIAS/gi,"MATÉRIAS")
+      .replace(/MAT\uFFFDRIA/gi,"MATÉRIA")
+      .replace(/PRE\uFFFDO/gi,"PREÇO")
+      .replace(/Cuiab\uFFFD/g,"Cuiabá")
+      .replace(/V\uFFFDrzea/g,"Várzea")
+      .replace(/Cap\uFFFDo/g,"Capão")
+      .replace(/Bel\uFFFDm/g,"Belém")
+      .replace(/Bras\uFFFDlia/g,"Brasília")
+      .replace(/J\uFFFDlio/g,"Júlio")
+      .replace(/Mour\uFFFDo/g,"Mourão")
+      .replace(/Guimar\uFFFDes/g,"Guimarães")
+      .replace(/Aren\uFFFDpolis/g,"Arenápolis")
+      .replace(/Campin\uFFFDpolis/g,"Campinápolis")
+      .replace(/Chapad\uFFFDo/g,"Chapadão")
+      .replace(/Esbo\uFFFDo/g,"Esboço")
+      .replace(/ALIAN\uFFFDA/g,"ALIANÇA")
+      .replace(/\uFFFD/g,"ç"); // Best-effort fallback
+  }
+  // Strategy 2: Latin-1 codepoints (0x80-0xFF) = Worker double-encoded
+  let hasMojibake=false;
+  for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);if(c>=0xC2&&c<=0xC3&&i+1<s.length){hasMojibake=true;break;}}
+  if(hasMojibake){
+    try{
+      const bytes=new Uint8Array(s.length);
+      for(let i=0;i<s.length;i++)bytes[i]=s.charCodeAt(i)&0xFF;
+      const decoded=new TextDecoder("utf-8",{fatal:false}).decode(bytes);
+      // Only return if no replacement chars were introduced
+      if(!decoded.includes("\uFFFD"))return decoded;
+    }catch{}
+  }
+  return s;
 }
 function strip(o){const a=o.address||{};const desc=fixMojibake(o.description||"");return{id:o.id,name:fixMojibake(o.name||""),nickname:fixMojibake(o.nickname||""),legalName:fixMojibake(o.legalName||""),cnpj:o.cnpj||"",cat:o.category?.name||"",sector:o.sector?.name||"",products:(o.products||[]).map(p=>p.name).join(", "),owner:o.ownerUser?.name||"",ownerId:o.ownerUser?.id||null,grupo:desc.startsWith("Grupo:")?desc:"",addr:{street:fixMojibake(a.streetName||a.street||""),number:a.streetNumber||a.number||"",district:fixMojibake(a.district||a.neighborhood||""),city:fixMojibake(a.city||""),city_name:fixMojibake(a.city_name||a.city||""),state:a.state||""},people:(o.people||[]).map(p=>p.name).join(", ")};}
 async function fetchCNPJ(cnpj){const clean=cnpj.replace(/[.\-\/]/g,"");try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);if(r.ok)return r.json();}catch{}const r2=await fetch(`${API}?cnpj=${clean}`);if(!r2.ok)throw new Error("CNPJ nao encontrado");return r2.json();}
@@ -136,7 +171,7 @@ function NewClientModal({token,allOrgs,onSave,onCancel}){
   const buscarCNPJ=async()=>{const c=cnpj.replace(/[.\-\/]/g,"");if(c.length!==14){setEr("CNPJ deve ter 14 digitos");return;}setFetching(true);setEr("");try{const d=await fetchCNPJ(c);setName(d.nome_fantasia||"");setLegal(d.razao_social||"");setStreet([d.descricao_tipo_de_logradouro,d.logradouro].filter(Boolean).join(" ")||"");setNum(d.numero||"");setComp(d.complemento||"");setDistrict(d.bairro||"");setCity(d.municipio||"");setState(d.uf||"MT");setCep(d.cep||"");if(d.ddd_telefone_1)setPhone(d.ddd_telefone_1.replace(/[^\d]/g,""));}catch(e){setEr(e.message);}setFetching(false);};
   const createOrg=async()=>{if(!name.trim()&&!legal.trim())return;setLo(true);setEr("");try{const body={name:name.trim()||legal.trim(),legalName:legal.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");const addr={};if(street)addr.street_name=street;if(num)addr.street_number=num;if(comp)addr.additional_info=comp;if(district)addr.district=district;if(city)addr.city=city;if(state)addr.state=state;if(cep)addr.postal_code=cep;if(Object.keys(addr).length)body.address=addr;if(phone)body.contact={work:phone};if(catId)body.category=catId;if(sectorId)body.sector=parseInt(sectorId);if(originId)body.leadOrigin=parseInt(originId);const gFinal=grupo==="__new__"?newGrupo.trim():grupo;if(gFinal)body.description=`Grupo: ${gFinal}`;const d=await agF("/organizations",token,{method:"POST",body:JSON.stringify(body)});if(d.data){setOrgId(d.data.id);setOrgName(d.data.name||name);setOrgData(strip(d.data));setStep(2);}else setEr("Erro");}catch(e){setEr(e.message==="400"?"Cliente ja existe no Agendor":"Erro: "+e.message);}setLo(false);};
   const[pCargo,setPCargo]=useState("");
-  const existGrp=useMemo(()=>[...new Set((allOrgs||[]).map(o=>o.grupo?.replace("Grupo: ","")).filter(Boolean))].sort(),[allOrgs]);
+  const existGrp=useMemo(()=>[...new Set((allOrgs||[]).map(o=>fixMojibake(o.grupo?.replace("Grupo: ","")||"")).filter(Boolean))].sort(),[allOrgs]);
   const finish=(wp)=>{const od=orgData||strip({id:orgId,name:orgName||name,legalName:legal,cnpj,address:{city,state,district},category:{id:catId,name:CAT_IDS.find(c=>c.id===catId)?.n},sector:{id:parseInt(sectorId),name:SECTORS.find(s=>s.id===parseInt(sectorId))?.n}});if(wp&&pName.trim()){setLo(true);agF("/people",token,{method:"POST",body:JSON.stringify({name:pName,organization:orgId,role:pCargo||undefined,contact:{...(pEmail?{email:pEmail}:{}),...(pPhone?{mobile:pPhone}:{}),...(pWhats?{whatsapp:pWhats}:{})}})}).then(()=>{setLo(false);setOrgData(od);setStep(3);}).catch((e)=>{setLo(false);alert("Empresa criada, mas ERRO ao cadastrar pessoa: "+e.message);setOrgData(od);setStep(3);});}else{setOrgData(od);setStep(3);}};
   return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
   {step===1?<><p style={{fontWeight:600,fontSize:16,margin:"0 0 2px"}}>Novo Cliente — Empresa</p><p style={{fontSize:11,color:S.ts,margin:"0 0 10px"}}>Etapa 1 de 3</p>
@@ -233,7 +268,7 @@ function PeopleModal({org,token,onClose}){
 const PRODS=[{id:761952,n:"TRAMONTINA"},{id:761953,n:"PADO"},{id:761954,n:"HIPER TEXTIL"},{id:1139796,n:"PLASTILIT"},{id:1392476,n:"FESTCOLOR"},{id:1627655,n:"ZAGONEL"},{id:2046010,n:"RUVOLO"},{id:2260997,n:"SANTANA"}];
 
 function EditModal({org,token,users,allOrgs,onSave,onClose}){const[name,setName]=useState(org.name||"");const[legal,setLegal]=useState("");const[catId,setCatId]=useState("");const[sectorId,setSectorId]=useState("");const[grupo,setGrupo]=useState(org.grupo?.replace("Grupo: ","")||"");const[newGrupo,setNewGrupo]=useState("");const[grupoSearch,setGrupoSearch]=useState(org.grupo?.replace("Grupo: ","")||"");const[grupoOpen,setGrupoOpen]=useState(false);const[ownerId,setOwnerId]=useState("");
-  const existGrp=useMemo(()=>[...new Set((allOrgs||[]).map(o=>o.grupo?.replace("Grupo: ","")).filter(Boolean))].sort(),[allOrgs]);
+  const existGrp=useMemo(()=>[...new Set((allOrgs||[]).map(o=>fixMojibake(o.grupo?.replace("Grupo: ","")||"")).filter(Boolean))].sort(),[allOrgs]);
   const curProds=org.products?org.products.split(", ").filter(p=>!p.startsWith("P_")):[];
   const[selProds,setSelProds]=useState(()=>PRODS.filter(p=>curProds.includes(p.n)).map(p=>p.id));
   const[lo,setLo]=useState(false);const[fetching,setFetching]=useState(false);const[msg,setMsg]=useState("");
@@ -690,7 +725,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v13.2</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v13.3</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -744,6 +779,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
           {gpsSearch.trim().length>=2&&!gpsResults.length&&<p style={{fontSize:11,color:S.ts}}>Nenhum cliente com GPS encontrado</p>}
         </div>
         <button onClick={()=>{const dt=prompt("Data para limpar visitas (DD/MM/AAAA):");if(!dt)return;const[d,m,y]=dt.split("/");const target=`${y}-${m}-${d}`;const count=visits.filter(v=>v.checkinTime?.startsWith(target)).length;if(!count){alert("Nenhuma visita nessa data.");return;}if(confirm(`Tem certeza que deseja excluir ${count} visitas de ${dt}?\nEssa ação não pode ser desfeita.`))onClearVisits(target);}} style={{color:S.gold}}>🗓️ Limpar visitas (por data)</button>
+        <button onClick={async()=>{if(!confirm("Forçar reload completo?\nIsto vai limpar cache e re-sincronizar todos os dados.\nVocê não perderá nada.\n\nUsado para corrigir caracteres especiais corrompidos."))return;try{if("caches" in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister();}}catch{}localStorage.removeItem("jc:prefill");window.location.reload(true);}} style={{color:S.acc}}>♻️ Forçar reload (corrigir caracteres)</button>
         <button onClick={()=>{if(confirm(`Tem certeza que deseja apagar TODOS os ${Object.keys(plocs).length} GPS salvos?\nEssa ação não pode ser desfeita.`))onClearAllGPS();}} style={{color:S.gold}}>📍 Limpar todos GPS PDVs</button>
         {/* Bulk update grupos */}
         <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginTop:8}}>
@@ -818,7 +854,7 @@ export default function App(){
   const syncPush=async(data)=>{try{await fetch(`${API}?sync=${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:data})});}catch(e){console.warn("syncPush:",e);}};
   const syncClear=async()=>{try{await fetch(`${API}?sync=${user.id}`,{method:"DELETE"});}catch(e){console.warn("syncClear:",e);}};
   const syncVisitSave=async(visit)=>{try{const r=await fetch(`${API}?sync=visits_${user.id}`);const d=await r.json();const all=[visit,...(d.active||[])].slice(0,200);await fetch(`${API}?sync=visits_${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:all})});}catch(e){console.warn("syncVisitSave:",e);}};
-  const syncVisitLoad=async()=>{try{const ids=[743088,743347];let remote=[];for(const uid of ids){const r=await fetch(`${API}?sync=visits_${uid}`);const d=await r.json();if(d.active)remote.push(...d.active);}if(remote.length){setVisits(prev=>{const existing=new Set(prev.map(v=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+(r.userName||"")+"|"+toLocalDate(r.checkinTime)));if(newOnes.length)return[...prev,...newOnes];return prev;});}}catch(e){console.warn("syncVisitLoad:",e);}};
+  const syncVisitLoad=async()=>{try{const ids=[743088,743347];let remote=[];for(const uid of ids){const r=await fetch(`${API}?sync=visits_${uid}`,{cache:"no-store"});const buf=await r.arrayBuffer();const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);const d=JSON.parse(txt);if(d.active)remote.push(...d.active.map(v=>({...v,orgName:fixMojibake(v.orgName||""),city:fixMojibake(v.city||""),note:fixMojibake(v.note||"")})));}if(remote.length){setVisits(prev=>{const existing=new Set(prev.map(v=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+(r.userName||"")+"|"+toLocalDate(r.checkinTime)));if(newOnes.length)return[...prev,...newOnes];return prev;});}}catch(e){console.warn("syncVisitLoad:",e);}};
   const syncPlocs=async(locs)=>{try{await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:locs})});}catch(e){console.warn("syncPlocs:",e);}};
   const syncDayBasesSave=async(bases)=>{try{await fetch(`${API}?sync=dayBases`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:bases})});}catch(e){console.warn("syncBases:",e);}};
   const syncDayBasesLoad=async()=>{try{const r=await fetch(`${API}?sync=dayBases`);const d=await r.json();if(d.active){setDayBases(prev=>{const merged={...prev,...d.active};sS("jc:dayBases",merged);return merged;});}}catch(e){console.warn("syncBasesLoad:",e);}};
@@ -897,7 +933,7 @@ export default function App(){
   const segments=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.sector)s.add(o.sector);});return["Todos",...[...s].sort()];},[orgs]);
   const products=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.products)(o.products.split(", ")).forEach(p=>{if(p&&!p.startsWith("P_"))s.add(p);});});return["Todos",...[...s].sort()];},[orgs]);
   const owners=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.owner)s.add(o.owner);});return["Todos",...[...s].sort()];},[orgs]);
-  const grupos=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const g=(o.grupo||"").replace("Grupo: ","").trim();if(g)s.add(g);});return["Todos",...[...s].sort()];},[orgs]);
+  const grupos=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const g=fixMojibake((o.grupo||"").replace("Grupo: ","").trim());if(g)s.add(g);});return["Todos",...[...s].sort()];},[orgs]);
   const usersList=useMemo(()=>{const m={};orgs.forEach(o=>{if(o.ownerId&&o.owner)m[o.ownerId]=o.owner;});return Object.entries(m).map(([id,n])=>({id:parseInt(id),n}));},[orgs]);
 
   const lastVisits=useMemo(()=>{const m={};visits.forEach(v=>{if(v.checkoutTime&&(!m[v.orgId]||v.checkinTime>m[v.orgId].time))m[v.orgId]={time:v.checkinTime,who:v.userName||user?.name||""};});return m;},[visits]);
