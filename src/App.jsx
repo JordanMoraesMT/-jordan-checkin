@@ -668,7 +668,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v12.8</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v12.9</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -781,7 +781,7 @@ function SearchOrAddModal({token,allOrgs,onFound,onNewClient,onCancel}){
 export default function App(){
   const[token,setToken]=useState(()=>sL("jc:token",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);
   const[visits,setVisits]=useState(()=>{const raw=sL("jc:visits",[]);const cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);const cut=cutoff.toISOString();const purged=raw.filter(v=>!v.checkinTime||v.checkinTime>=cut);if(purged.length<raw.length)console.log(`Purged ${raw.length-purged.length} visits >90d`);return purged;});const[active,setActive]=useState(()=>sL("jc:active",null));
-  const[tab,setTab]=useState("pdvs");const[search,setSearch]=useState("");const[catFilters,setCatFilters]=useState([]);const[cityFilter,setCityFilter]=useState("Todas");const[stateFilter,setStateFilter]=useState("Todos");const[segFilter,setSegFilter]=useState("Todos");const[prodFilter,setProdFilter]=useState("Todos");const[ownerFilter,setOwnerFilter]=useState("Todos");
+  const[tab,setTab]=useState("pdvs");const[search,setSearch]=useState("");const[catFilters,setCatFilters]=useState([]);const[cityFilter,setCityFilter]=useState("Todas");const[stateFilter,setStateFilter]=useState("Todos");const[segFilter,setSegFilter]=useState("Todos");const[prodFilter,setProdFilter]=useState("Todos");const[ownerFilter,setOwnerFilter]=useState("Todos");const[grupoFilter,setGrupoFilter]=useState("Todos");
   // Visit date range filter: "all" | "visited" | "not_visited"
   const[visitMode,setVisitMode]=useState("all");const[visitFrom,setVisitFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return toLocalDate(d);});const[visitTo,setVisitTo]=useState(todayLocal);
   const[nearMe,setNearMe]=useState(null);const[nearLoading,setNearLoading]=useState(false);const[nearRoad,setNearRoad]=useState({});const[sortMode,setSortMode]=useState("alpha");
@@ -875,6 +875,7 @@ export default function App(){
   const segments=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.sector)s.add(o.sector);});return["Todos",...[...s].sort()];},[orgs]);
   const products=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.products)(o.products.split(", ")).forEach(p=>{if(p&&!p.startsWith("P_"))s.add(p);});});return["Todos",...[...s].sort()];},[orgs]);
   const owners=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.owner)s.add(o.owner);});return["Todos",...[...s].sort()];},[orgs]);
+  const grupos=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const g=(o.grupo||"").replace("Grupo: ","").trim();if(g)s.add(g);});return["Todos",...[...s].sort()];},[orgs]);
   const usersList=useMemo(()=>{const m={};orgs.forEach(o=>{if(o.ownerId&&o.owner)m[o.ownerId]=o.owner;});return Object.entries(m).map(([id,n])=>({id:parseInt(id),n}));},[orgs]);
 
   const lastVisits=useMemo(()=>{const m={};visits.forEach(v=>{if(v.checkoutTime&&(!m[v.orgId]||v.checkinTime>m[v.orgId].time))m[v.orgId]={time:v.checkinTime,who:v.userName||user?.name||""};});return m;},[visits]);
@@ -888,6 +889,7 @@ export default function App(){
     if(segFilter!=="Todos")list=list.filter(o=>o.sector===segFilter);
     if(prodFilter!=="Todos")list=list.filter(o=>o.products?.includes(prodFilter));
     if(ownerFilter!=="Todos")list=list.filter(o=>o.owner===ownerFilter);
+    if(grupoFilter!=="Todos")list=list.filter(o=>(o.grupo||"").replace("Grupo: ","")===grupoFilter);
     // Visit date range filter
     if(visitMode==="visited"){list=list.filter(o=>{const vl=visitsByOrg[o.id];if(!vl)return false;return vl.some(v=>{const d=toLocalDate(v.time);return d>=visitFrom&&d<=visitTo;});});
       // Visitados: most recent first
@@ -905,7 +907,7 @@ export default function App(){
       list=list.sort((a,b)=>{const la=lastVisits[a.id]?.time||"";const lb=lastVisits[b.id]?.time||"";return lb.localeCompare(la);});
     }else{list=list.sort((a,b)=>(a.name||"").localeCompare(b.name||""));}
     return list;
-  },[orgs,search,catFilters,cityFilter,stateFilter,segFilter,prodFilter,ownerFilter,visitMode,visitFrom,visitTo,visitsByOrg,lastVisits,nearMe,plocs,sortMode]);
+  },[orgs,search,catFilters,cityFilter,stateFilter,segFilter,prodFilter,ownerFilter,grupoFilter,visitMode,visitFrom,visitTo,visitsByOrg,lastVisits,nearMe,plocs,sortMode]);
 
   useEffect(()=>{
     if(sortMode!=="near"||!nearMe||!fo.length)return;
@@ -958,7 +960,7 @@ export default function App(){
         <input value={search} onChange={e=>{setSearch(e.target.value);setVc(PG);}} placeholder="Nome, CNPJ, cidade, segmento, produto..." style={{width:"100%",marginBottom:6}}/>
         <div style={{display:"flex",gap:3,marginBottom:6,overflowX:"auto",paddingBottom:2,flexWrap:"wrap"}}>{CATS.map(c=><button key={c} onClick={()=>toggleCat(c)} style={{padding:"3px 8px",fontSize:10,whiteSpace:"nowrap",border:catFilters.includes(c)?`2px solid ${CC[c]||S.pri}`:`1px solid ${S.brd}`,background:catFilters.includes(c)?`${CC[c]}22`:"transparent",color:catFilters.includes(c)?CC[c]||S.pri:S.ts,borderRadius:20,fontWeight:catFilters.includes(c)?600:400}}>{c}</button>)}
           <button onClick={()=>setCatFilters([])} style={{padding:"3px 8px",fontSize:10,border:`1px solid ${S.brd}`,color:!catFilters.length?S.pl:S.td,borderRadius:20,background:!catFilters.length?S.pri+"22":"transparent"}}>Todos</button>
-          <button onClick={()=>{setCatFilters([]);setCityFilter("Todas");setStateFilter("Todos");setSegFilter("Todos");setProdFilter("Todos");setOwnerFilter("Todos");setVisitMode("all");setSearch("");setSortMode("alpha");setNearMe(null);setVc(PG);}} style={{padding:"3px 8px",fontSize:10,border:`1px solid ${S.dng}44`,color:S.dng,borderRadius:20,background:"transparent"}}>✕ Limpar</button>
+          <button onClick={()=>{setCatFilters([]);setCityFilter("Todas");setStateFilter("Todos");setSegFilter("Todos");setProdFilter("Todos");setOwnerFilter("Todos");setGrupoFilter("Todos");setVisitMode("all");setSearch("");setSortMode("alpha");setNearMe(null);setVc(PG);}} style={{padding:"3px 8px",fontSize:10,border:`1px solid ${S.dng}44`,color:S.dng,borderRadius:20,background:"transparent"}}>✕ Limpar</button>
         </div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>
           <select value={stateFilter} onChange={e=>{setStateFilter(e.target.value);setCityFilter("Todas");setVc(PG);}} style={{width:60,fontSize:11,padding:"4px"}}>{states.map(s=><option key={s} value={s}>{s==="Todos"?"UF":s}</option>)}</select>
@@ -970,6 +972,7 @@ export default function App(){
         </div>
         <div style={{display:"flex",gap:4,marginBottom:8}}>
           <select value={ownerFilter} onChange={e=>{setOwnerFilter(e.target.value);setVc(PG);}} style={{flex:1,fontSize:11,padding:"4px"}}>{owners.map(o=><option key={o} value={o}>{o==="Todos"?"Responsável":o}</option>)}</select>
+          <select value={grupoFilter} onChange={e=>{setGrupoFilter(e.target.value);setVc(PG);}} style={{flex:1,fontSize:11,padding:"4px"}}>{grupos.map(g=><option key={g} value={g}>{g==="Todos"?"Grupo":g}</option>)}</select>
         </div>
         {/* Visit date range filter */}
         <div style={{display:"flex",gap:3,marginBottom:4}}>
