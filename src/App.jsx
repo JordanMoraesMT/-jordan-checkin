@@ -109,7 +109,7 @@ async function fetchCNPJ(cnpj){const clean=cnpj.replace(/[.\-\/]/g,"");try{const
 function getBase(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBases[date];if(!b)return HOMES[userId]||null;if(b.start)return b.start;return b;}
 function getEnd(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBases[date];if(b?.end)return b.end;return getBase(dayBases,date,userId);}
 // ─── Helper: only real visits (check-in based, not WhatsApp/calls) ───
-function isRealVisit(v){if(!v.checkoutTime)return false;if(v.taskType&&v.taskType!=="VISITA")return false;return true;}
+function isRealVisit(v){if(!v.checkoutTime)return false;if(v.taskType&&v.taskType!=="VISITA")return false;if(v.divergent)return false;return true;}
 // ─── Helper: resolve GPS from visit directly OR from plocs by orgId ───
 function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs&&v.orgId&&plocs[v.orgId])return{lat:plocs[v.orgId].lat,lng:plocs[v.orgId].lng};return null;}
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
@@ -386,11 +386,12 @@ function RotasTab({visits,dayBases,user,plocs}){
   const startBase=getBase(dayBases,sel,user?.id);
   const endBase=getEnd(dayBases,sel,user?.id);
   // FIX: only real visits from current user
-  const dv=useMemo(()=>{
+  const dvAll=useMemo(()=>{
     const t=new Date(sel+"T12:00:00").toDateString();
-    return visits.filter(v=>new Date(v.checkinTime).toDateString()===t&&isRealVisit(v)&&(!v.userName||v.userName===user?.name))
+    return visits.filter(v=>new Date(v.checkinTime).toDateString()===t&&v.checkoutTime&&(!v.taskType||v.taskType==="VISITA")&&(!v.userName||v.userName===user?.name))
       .sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
   },[visits,sel,user?.name]);
+  const dv=useMemo(()=>dvAll.filter(v=>!v.divergent),[dvAll]);
   useEffect(()=>{if(!dv.length){setRoutes([]);return;}let c=false;setLo(true);(async()=>{const s=[];
     const fc=getVCoord(dv[0],plocs);
     // Start base → first PDV
@@ -412,8 +413,8 @@ function RotasTab({visits,dayBases,user,plocs}){
   return(<div><select value={sel} onChange={e=>setSel(e.target.value)} style={{width:"100%",marginBottom:12}}><option value={todayLocal()}>Hoje — {fD(new Date())}</option>{days.filter(d=>d!==todayLocal()).map(d=><option key={d} value={d}>{fD(d+"T12:00")}</option>)}</select>
     {dv.length>0&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>{[["Km",totKm.toFixed(1)],["Jornada",hrsMin(workH)],["Visitas",dv.length],["Base",routes.filter(r=>r.tp==="bs"||r.tp==="be").reduce((s,r)=>s+r.km,0).toFixed(1)+" km"]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}</div>}
     {startBase&&<p style={{fontSize:10,color:S.ts,margin:"0 0 4px"}}>Origem: {startBase.label||"Casa"} {endBase&&endBase!==startBase?`| Destino: ${endBase.label||"Casa"}`:""}</p>}
-    {lo&&<p style={{color:S.ts,textAlign:"center",padding:"1rem 0"}}>Calculando rotas...</p>}{!dv.length&&!lo&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma visita</p>}
-    {dv.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,overflow:"hidden"}}>{routes.find(r=>r.tp==="bs")&&<div style={{padding:"8px 14px",background:S.pri+"18"}}><span style={{fontSize:12,color:S.pl}}>{startBase?.label||"Casa"} → 1º PDV: {routes.find(r=>r.tp==="bs").km.toFixed(1)} km</span></div>}{dv.map((v,i)=>{const seg=routes.find(r=>r.tp!=="bs"&&r.tp!=="be"&&r.f===v.orgName);return(<div key={i}><div style={{padding:"10px 14px",display:"flex",gap:10,background:v.divergent?S.dng+"18":"transparent"}}><div style={{width:22,height:22,borderRadius:"50%",background:v.divergent?S.dng+"33":S.pri+"33",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:600,color:v.divergent?S.dng:S.pl}}>{v.divergent?"⚠️":i+1}</span></div><div style={{flex:1,minWidth:0}}><p style={{fontSize:13,fontWeight:500,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.orgName}{v.divergent&&<span style={{fontSize:10,color:S.dng,marginLeft:6}}>(deslocado {v.divDist}m)</span>}</p><p style={{fontSize:11,color:S.ts,margin:0}}>{fT(v.checkinTime)}→{fT(v.checkoutTime)} {hrsMin(mins(v.checkinTime,v.checkoutTime))}{v.divergent?" · não contabilizada":""}</p></div></div>{seg&&<div style={{padding:"3px 14px 3px 46px",background:seg.tp==="lch"?S.gold+"15":S.bg}}><span style={{fontSize:11,color:seg.tp==="lch"?S.gold:S.td}}>{seg.tp==="lch"?"Almoco ":"↓ "}{seg.km.toFixed(1)}km</span></div>}</div>);})}
+    {lo&&<p style={{color:S.ts,textAlign:"center",padding:"1rem 0"}}>Calculando rotas...</p>}{!dvAll.length&&!lo&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma visita</p>}
+    {dvAll.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,overflow:"hidden"}}>{routes.find(r=>r.tp==="bs")&&<div style={{padding:"8px 14px",background:S.pri+"18"}}><span style={{fontSize:12,color:S.pl}}>{startBase?.label||"Casa"} → 1º PDV: {routes.find(r=>r.tp==="bs").km.toFixed(1)} km</span></div>}{dvAll.map((v,i)=>{const seg=routes.find(r=>r.tp!=="bs"&&r.tp!=="be"&&r.f===v.orgName);return(<div key={i}><div style={{padding:"10px 14px",display:"flex",gap:10,background:v.divergent?S.dng+"18":"transparent"}}><div style={{width:22,height:22,borderRadius:"50%",background:v.divergent?S.dng+"33":S.pri+"33",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:600,color:v.divergent?S.dng:S.pl}}>{v.divergent?"⚠️":i+1}</span></div><div style={{flex:1,minWidth:0}}><p style={{fontSize:13,fontWeight:500,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.orgName}{v.divergent&&<span style={{fontSize:10,color:S.dng,marginLeft:6}}>(deslocado {v.divDist}m)</span>}</p><p style={{fontSize:11,color:S.ts,margin:0}}>{fT(v.checkinTime)}→{fT(v.checkoutTime)} {hrsMin(mins(v.checkinTime,v.checkoutTime))}{v.divergent?" · não contabilizada":""}</p></div></div>{seg&&<div style={{padding:"3px 14px 3px 46px",background:seg.tp==="lch"?S.gold+"15":S.bg}}><span style={{fontSize:11,color:seg.tp==="lch"?S.gold:S.td}}>{seg.tp==="lch"?"Almoco ":"↓ "}{seg.km.toFixed(1)}km</span></div>}</div>);})}
       {routes.find(r=>r.tp==="be")&&<div style={{padding:"8px 14px",background:S.pri+"18"}}><span style={{fontSize:12,color:S.pl}}>Ultimo → {endBase?.label||"Casa"}: {routes.find(r=>r.tp==="be").km.toFixed(1)} km</span></div>}
       <div style={{padding:"10px 14px",borderTop:`1px solid ${S.brd}`,display:"flex",justifyContent:"space-between"}}><span style={{color:S.ts}}>Total</span><span style={{fontSize:15,fontWeight:600,color:S.pl}}>{totKm.toFixed(1)} km</span></div>
       {startBase&&dv.length>0&&<a href={`https://www.google.com/maps/dir/${startBase.lat},${startBase.lng}/${dv.map(v=>`${v.lat},${v.lng}`).join("/")}/${(endBase||startBase).lat},${(endBase||startBase).lng}`} target="_blank" rel="noopener" style={{display:"block",padding:"10px",background:S.acc+"22",textAlign:"center",textDecoration:"none",color:S.acc,fontWeight:500,fontSize:13}}>Abrir no Google Maps</a>}
@@ -745,7 +746,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v13.6</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v13.7</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -1004,23 +1005,26 @@ export default function App(){
   const checkin=async(org)=>{ensureBase();if(org.cat==="Online - B2B"&&!confirm(`${org.name} e Online/B2B.\nRegistrar visita?`))return;if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\nContinuar?`))return;if(org.cat==="Excluido"&&!confirm(`${org.name} esta Excluido.\nContinuar?`))return;setLdId(org.id);setGeoErr("");try{const g=await gps();if(plocs[org.id]){const d=hav(plocs[org.id].lat,plocs[org.id].lng,g.lat,g.lng)*1000;if(d>500){setDivTarget({org,dist:Math.round(d),geo:g});setLdId(null);return;}}else{const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);}const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}catch{setGeoErr("GPS indisponivel.");}setLdId(null);};
   const handleDivAction=(action,type)=>{if(!divTarget)return;const{org,geo}=divTarget;if(action==="checkin"){const v={orgId:org.id,orgName:org.name,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:geo.lat,lng:geo.lng,accuracy:geo.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}else if(action==="remote"&&type)setCoTarget({...org,remoteType:type});setDivTarget(null);};
   const checkout=async(note,type="VISITA",next=null,sale=null)=>{if(!active||ldId)return;setLdId(active.orgId);let g=null;try{g=await gps();}catch{}
-    // CHECK: GPS divergent at checkout - compare with registered client GPS or check-in location
+    // Detect divergent checkout: GPS far from registered client location
     let divergent=false,divDist=0;
     if(g){
       const ref=plocs[active.orgId]||{lat:active.lat,lng:active.lng};
       if(ref&&ref.lat&&ref.lng){divDist=Math.round(hav(ref.lat,ref.lng,g.lat,g.lng)*1000);if(divDist>500)divergent=true;}
     }
     const done={...active,checkoutTime:new Date().toISOString(),checkoutLat:g?.lat,checkoutLng:g?.lng,note,taskType:type,sale,divergent,divDist};
-    // Only register in Agendor if NOT divergent
+    // Only register in Agendor + KV if NOT divergent
     if(!divergent){
       try{await postTask(token,active.orgId,note,type,true);done.synced=true;}catch(e){console.warn("task:",e);done.synced=false;}
-      if(next?.nextDate&&next?.nextDesc){try{await postTask(token,active.orgId,next.nextDesc,next.nextType||"VISITA",false,`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`);alert("Proximo passo agendado!");}catch(e){console.warn("nextStep:",e);alert("Erro ao agendar proximo passo");}}
+      if(next?.nextDate&&next?.nextDesc){try{await postTask(token,active.orgId,next.nextDesc,next.nextType||"VISITA",false,`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`);}catch(e){console.warn("nextStep:",e);}}
       if(sale?.brand&&sale?.value){try{await agF(`/organizations/${active.orgId}/deals`,token,{method:"POST",body:JSON.stringify({title:`Venda ${sale.brand}`,value:sale.value})});}catch(e){console.warn("deal:",e);}}
-    }else{
-      done.synced=false;
-      alert(`⚠️ CHECKOUT DESLOCADO\nVocê está a ${divDist}m do local cadastrado.\n\nEsta visita NÃO será registrada no Agendor e NÃO contará no relatório (visita e km).\n\nFica marcada com ⚠️ para conferência.`);
-    }
-    setVisits(p=>[done,...p]);syncVisitSave(done);setActive(null);syncClear();setCoTarget(null);setLdId(null);};
+      syncVisitSave(done);
+    }else{done.synced=false;}
+    // Save locally (even divergent, for visual flag)
+    setVisits(p=>[done,...p]);setActive(null);syncClear();setCoTarget(null);setLdId(null);
+    // Alert AFTER UI is cleared (non-blocking flow)
+    if(divergent)setTimeout(()=>alert(`⚠️ CHECKOUT DESLOCADO\nVocê está a ${divDist}m do local cadastrado.\n\nEsta visita NÃO foi registrada no Agendor e NÃO contará no relatório (visita e km).\n\nFica marcada com ⚠️ apenas para conferência.`),100);
+    else if(next?.nextDate&&next?.nextDesc)setTimeout(()=>alert("Proximo passo agendado!"),100);
+  };
 
   if(!token||!user)return <Login onLogin={(t,u)=>{setToken(t);setUser(u);sS("jc:token",t);sS("jc:user",u);}}/>;
   const baseTabs=[{id:"pdvs",i:"🏪",l:"PDVs"},{id:"rotas",i:"🛣️",l:"Rotas"},{id:"relatorio",i:"📊",l:"Relatório"},{id:"agenda",i:"📅",l:"Agenda"},{id:"config",i:"⚙️",l:"Config"}];
