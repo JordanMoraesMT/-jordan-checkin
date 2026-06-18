@@ -147,6 +147,7 @@ function OrgCard({org,active,onIn,onOut,onEdit,onPerson,onQuick,onInfo,ldId,ploc
           <button onClick={()=>onQuick&&onQuick(org,"LIGACAO")} style={{background:S.pri+"22",border:`1px solid ${S.pri}55`,fontSize:18,padding:"10px 12px",lineHeight:1}}>📞</button>
         </div>}
         <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
+          {plocs&&plocs[org.id]&&<button onClick={()=>{const loc=plocs[org.id];const url=`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}&travelmode=driving`;window.open(url,"_blank","noopener");}} title="Navegar até o cliente" style={{fontSize:13,padding:"6px 10px",color:S.acc,background:S.acc+"15",border:`1px solid ${S.acc}55`}}>🧭</button>}
           <button onClick={()=>onInfo&&onInfo(org)} style={{fontSize:13,padding:"6px 12px",color:S.ts,background:"transparent",border:`1px solid ${S.brd}`}}>ℹ️</button>
           <button onClick={()=>onEdit&&onEdit(org)} style={{fontSize:13,padding:"6px 12px",color:S.ts,background:"transparent",border:`1px solid ${S.brd}`}}>✏️</button>
           <button onClick={()=>onPerson&&onPerson(org)} style={{fontSize:13,padding:"6px 12px",color:S.ts,background:"transparent",border:`1px solid ${S.brd}`}}>👤+</button>
@@ -746,7 +747,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v13.7</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v14</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
