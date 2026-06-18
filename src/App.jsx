@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Store, Map, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, LogIn, LogOut, MessageCircle, Phone, Navigation, Info, Pencil, UserPlus, MapPin, Trophy, ChevronUp } from "lucide-react";
+import { Store, Map as MapIcon, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, LogIn, LogOut, MessageCircle, Phone, Navigation, Info, Pencil, UserPlus, MapPin, Trophy, ChevronUp } from "lucide-react";
 const API="https://agendor-proxy.administrativo-fc3.workers.dev";
 const OSRM="https://router.project-osrm.org/route/v1/driving";
 const HOMES={743088:{lat:-15.677694,lng:-55.954778,label:"Casa Jordan"},743347:{lat:-15.653611,lng:-56.026833,label:"Casa Alisson"}};
@@ -748,7 +748,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v16-debug</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v17</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -873,8 +873,6 @@ export default function App(){
 
   useEffect(()=>{sS("jc:visits",visits);},[visits]);useEffect(()=>{sS("jc:active",active);},[active]);useEffect(()=>{sS("jc:pdvLocs",plocs);},[plocs]);useEffect(()=>{sS("jc:dayBases",dayBases);syncDayBasesSave(dayBases);},[dayBases]);
   // Auto-clear cache once after v13.5 upgrade to remove old corrupted cached responses
-  // ─── DEBUG: Eruda mobile console (temporary) ───
-  useEffect(()=>{if(window.eruda)return;const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/eruda";s.onload=()=>{window.eruda&&window.eruda.init();console.log("[DEBUG] Eruda console ready — tap circle in corner");};document.body.appendChild(s);},[]);
   useEffect(()=>{if(!localStorage.getItem("jc:cleaned_v135")){(async()=>{try{if("caches" in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister();}}catch{}localStorage.setItem("jc:cleaned_v135","1");if(token&&user)setTimeout(()=>doSync(),500);})();}},[]);
   useEffect(()=>{if(token&&user&&!orgs.length&&!syncing)doSync();},[token,user]);
 
@@ -1031,7 +1029,7 @@ export default function App(){
   };
 
   if(!token||!user)return <Login onLogin={(t,u)=>{setToken(t);setUser(u);sS("jc:token",t);sS("jc:user",u);}}/>;
-  const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"rotas",I:Map,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
+  const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
   const tabs=user?.id===743088?[...baseTabs.slice(0,3),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(3)]:baseTabs;
 
   return(<div style={{minHeight:"100vh",paddingBottom:70}}>
