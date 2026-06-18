@@ -748,7 +748,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
       <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v16</p>
+      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v16-debug</p>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
@@ -873,6 +873,8 @@ export default function App(){
 
   useEffect(()=>{sS("jc:visits",visits);},[visits]);useEffect(()=>{sS("jc:active",active);},[active]);useEffect(()=>{sS("jc:pdvLocs",plocs);},[plocs]);useEffect(()=>{sS("jc:dayBases",dayBases);syncDayBasesSave(dayBases);},[dayBases]);
   // Auto-clear cache once after v13.5 upgrade to remove old corrupted cached responses
+  // ─── DEBUG: Eruda mobile console (temporary) ───
+  useEffect(()=>{if(window.eruda)return;const s=document.createElement("script");s.src="https://cdn.jsdelivr.net/npm/eruda";s.onload=()=>{window.eruda&&window.eruda.init();console.log("[DEBUG] Eruda console ready — tap circle in corner");};document.body.appendChild(s);},[]);
   useEffect(()=>{if(!localStorage.getItem("jc:cleaned_v135")){(async()=>{try{if("caches" in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister();}}catch{}localStorage.setItem("jc:cleaned_v135","1");if(token&&user)setTimeout(()=>doSync(),500);})();}},[]);
   useEffect(()=>{if(token&&user&&!orgs.length&&!syncing)doSync();},[token,user]);
 
