@@ -149,6 +149,7 @@ const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,o
         </div>}
         <div style={{display:"flex",gap:2,justifyContent:"flex-end"}}>
           {plocs&&plocs[org.id]&&<button onClick={()=>{const loc=plocs[org.id];const url=`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}&travelmode=driving`;window.open(url,"_blank","noopener");}} title="Navegar" style={{background:"transparent",border:"none",color:S.acc,padding:4,cursor:"pointer"}}><Navigation size={26} strokeWidth={1.8}/></button>}
+          {org.cnpj&&<button onClick={()=>window.open(`https://dashboard.jordanmt.com/?cliente=${org.cnpj.replace(/[.\-\/]/g,"")}`,"_blank","noopener")} title="Ver no Dashboard" style={{background:"transparent",border:"none",color:S.pri,padding:4,cursor:"pointer"}}><BarChart3 size={26} strokeWidth={1.8}/></button>}
           <button onClick={()=>onInfo&&onInfo(org)} style={{background:"transparent",border:"none",color:S.pl,padding:4,cursor:"pointer"}}><Info size={26} strokeWidth={1.8}/></button>
           <button onClick={()=>onEdit&&onEdit(org)} style={{background:"transparent",border:"none",color:S.gold,padding:4,cursor:"pointer"}}><Pencil size={26} strokeWidth={1.8}/></button>
           <button onClick={()=>onPerson&&onPerson(org)} style={{background:"transparent",border:"none",color:S.ts,padding:4,cursor:"pointer"}}><UserPlus size={26} strokeWidth={1.8}/></button>
