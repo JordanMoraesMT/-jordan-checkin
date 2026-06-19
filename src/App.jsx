@@ -382,8 +382,7 @@ function DivergentModal({org,dist,onAction,onCancel}){return(<div style={{positi
 // ═══════════════════════════════════════════════════════════════
 // FIX: RotasTab — skip same-org km, use separate start/end base
 // ═══════════════════════════════════════════════════════════════
-function RotasTab({visits,dayBases,user,plocs}){
-  const[sel,setSel]=useState(todayLocal());
+function RotasTab({sel,setSel,visits,dayBases,user,plocs}){
   const[routes,setRoutes]=useState([]);const[lo,setLo]=useState(false);
   const startBase=getBase(dayBases,sel,user?.id);
   const endBase=getEnd(dayBases,sel,user?.id);
@@ -974,7 +973,7 @@ export default function App(){
   const[syncing,setSyncing]=useState(false);const[syncMsg,setSyncMsg]=useState("");const[ldId,setLdId]=useState(null);const[geoErr,setGeoErr]=useState("");
   const[coTarget,setCoTarget]=useState(null);const[personTarget,setPersonTarget]=useState(null);const[newClient,setNewClient]=useState(false);const[searchAdd,setSearchAdd]=useState(false);const[divTarget,setDivTarget]=useState(null);const[editTarget,setEditTarget]=useState(null);
   const[plocs,setPlocs]=useState(()=>sL("jc:pdvLocs",{}));const[dayBases,setDayBases]=useState(()=>sL("jc:dayBases",{}));
-  const[showDB,setShowDB]=useState(false);const[showEndDay,setShowEndDay]=useState(false);const[equipeSel,setEquipeSel]=useState(todayLocal());
+  const[showDB,setShowDB]=useState(false);const[showEndDay,setShowEndDay]=useState(false);const[equipeSel,setEquipeSel]=useState(todayLocal());const[rotasSel,setRotasSel]=useState(todayLocal());
 
   useEffect(()=>{sS("jc:visits",visits);},[visits]);useEffect(()=>{sS("jc:active",active);},[active]);useEffect(()=>{sS("jc:pdvLocs",plocs);},[plocs]);useEffect(()=>{sS("jc:dayBases",dayBases);syncDayBasesSave(dayBases);},[dayBases]);
   // Auto-clear cache once after v13.5 upgrade to remove old corrupted cached responses
@@ -1120,7 +1119,7 @@ export default function App(){
       <div style={{display:"flex",gap:3,marginBottom:12,background:S.cl,borderRadius:8,padding:3}}>{tabs.map(t=><button key={t.id} onClick={()=>{setTab(t.id);}} style={{flex:1,border:"none",background:tab===t.id?S.pri:"transparent",borderRadius:6,padding:"7px 2px",fontSize:10,fontWeight:tab===t.id?700:400,color:tab===t.id?"#fff":S.ts,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={20} strokeWidth={tab===t.id?2.2:1.5}/>{t.l}</button>)}</div>
 
       <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} focusReq={focusReq}/>
-      {tab==="rotas"&&<RotasTab visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
+      {tab==="rotas"&&<RotasTab sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
       {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/>}
       {tab==="equipe"&&user?.id===743088&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} token={token} plocs={plocs} orgs={orgs} dayBases={dayBases}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs}/>
