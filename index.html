@@ -14,5 +14,16 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    <script>
+      window.addEventListener('load', function () {
+        var r = document.getElementById('root');
+        if (r) {
+          window.scrollTo = function (a) {
+            try { if (typeof a === 'object') r.scrollTo(a); else r.scrollTop = 0; }
+            catch (e) { r.scrollTop = 0; }
+          };
+        }
+      });
+    </script>
   </body>
 </html>
