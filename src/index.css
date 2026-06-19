@@ -26,8 +26,10 @@ body {
   min-height: 100dvh;
 }
 
+/* Responsivo: celular/tablet/notebook preenchem a tela; monitor gigante centraliza com teto de 1600px */
 #root {
-  max-width: 960px;
+  width: 100%;
+  max-width: 1600px;
   margin: 0 auto;
   min-height: 100dvh;
 }
