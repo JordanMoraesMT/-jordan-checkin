@@ -13,7 +13,7 @@
   </head>
   <body>
     <div id="root"></div>
-<script>window.addEventListener('load',function(){setTimeout(function(){alert('innerWidth='+innerWidth+'  innerHeight='+innerHeight+'\nscreen='+screen.width+'x'+screen.height+'\ndevicePixelRatio='+window.devicePixelRatio);},900);});</script>
+<script>window.addEventListener('load',function(){var d=document.createElement('div');d.style.cssText='position:fixed;top:0;left:0;z-index:999999;background:#000;color:#0f0;font:11px monospace;padding:3px 6px';document.body.appendChild(d);setInterval(function(){var r=document.getElementById('root');var c=document.querySelector('[id^=\"org-\"]');d.textContent='inner='+innerWidth+' root='+(r?r.offsetWidth:'-')+' card='+(c?c.offsetWidth:'-');},500);});</script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
