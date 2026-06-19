@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, memo } from "react";
+import { useState, useEffect, useMemo, useCallback, memo, useRef } from "react";
 import { Store, Map as MapIcon, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, LogIn, LogOut, MessageCircle, Phone, Navigation, Info, Pencil, UserPlus, MapPin, Trophy, ChevronUp } from "lucide-react";
 const API="https://agendor-proxy.administrativo-fc3.workers.dev";
 const OSRM="https://router.project-osrm.org/route/v1/driving";
@@ -635,7 +635,8 @@ function EquipeTab({token,plocs,orgs,dayBases}){
   </div>);}
 
 // ─── AgendaTab: tarefas pendentes do Agendor ───
-function AgendaTab({token,user,allOrgs}){
+function AgendaTab({visible,token,user,allOrgs}){
+  const loadedRef=useRef(false);
   const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[err,setErr]=useState("");const isAdmin=user?.id===743088;
   const[filter,setFilter]=useState("pending");// pending | done
   const[period,setPeriod]=useState("all");// all | week | today | custom
@@ -654,7 +655,7 @@ function AgendaTab({token,user,allOrgs}){
     const mapped=all.filter(t=>t.due_date||t.dueDate).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt,done:!!(t.finishedAt||t.done),finished:t.finishedAt||null,userName:t.user?.name||"?",userId:t.user?.id}));
     setTasks(mapped);setErr(`${mapped.length} tarefas · atualizado ${fT(new Date())}`);
   }catch(e){console.warn("agenda:",e);setErr("Erro: "+e.message);}setLo(false);};
-  useEffect(()=>{load();const iv=setInterval(()=>{load();},300000);return()=>clearInterval(iv);},[]);// Auto-refresh 5min
+  useEffect(()=>{if(!visible)return;if(!loadedRef.current){loadedRef.current=true;load();}const iv=setInterval(()=>{load();},300000);return()=>clearInterval(iv);},[visible]);// carrega só na 1ª abertura; auto-refresh 5min enquanto visível
   const markDone=async(t)=>{if(!confirm(`Finalizar "${t.text.slice(0,50)}..."?`))return;try{
     // Agendor API ignores done:true on PUT — use DELETE + POST activity
     await agF(`/organizations/${t.orgId}/tasks/${t.id}`,token,{method:"DELETE"});
@@ -691,7 +692,7 @@ function AgendaTab({token,user,allOrgs}){
     {!t.done&&<button onClick={()=>markDone(t)} style={{padding:"6px 12px",fontSize:11,background:S.ok+"22",border:`1px solid ${S.ok}`,color:S.ok,borderRadius:6,flexShrink:0,fontWeight:500}}>Finalizar</button>}
     {t.done&&<span style={{fontSize:18,flexShrink:0}}>✅</span>}
   </div>;
-  return(<div>
+  return(<div style={{display:visible?"block":"none"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
       <p style={{fontWeight:600,fontSize:16,margin:0}}>📅 Agenda</p>
       <div style={{display:"flex",gap:4}}><button onClick={()=>setShowAdd(true)} style={{padding:"6px 12px",fontSize:11,background:S.acc,border:"none",fontWeight:600}}>+ Tarefa</button><button onClick={load} disabled={lo} style={{padding:"6px 12px",fontSize:11,background:S.pri,border:"none"}}>{lo?"...":"🔄"}</button></div>
@@ -1122,7 +1123,7 @@ export default function App(){
       {tab==="rotas"&&<RotasTab visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
       {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/>}
       {tab==="equipe"&&user?.id===743088&&<EquipeTab token={token} plocs={plocs} orgs={orgs} dayBases={dayBases}/>}
-      {tab==="agenda"&&<AgendaTab token={token} user={user} allOrgs={allOrgs}/>}
+      <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs}/>
 
       {tab==="config"&&<ConfigTab user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
         onSync={doSync} onLoadHistory={loadHistory} onSyncPull={()=>{syncPull();setSyncStatus("Forçando sync...");}}
