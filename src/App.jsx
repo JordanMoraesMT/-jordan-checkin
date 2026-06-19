@@ -577,8 +577,8 @@ function BaseEditInline({day,dayBases,userId,plocs,lastVisitCoord,onSave,onCance
 // ═══════════════════════════════════════════════════════════════
 // FIX: EquipeTab — filter by EXACT date, not from date onwards
 // ═══════════════════════════════════════════════════════════════
-function EquipeTab({visible,token,plocs,orgs,dayBases}){
-  const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[sel,setSel]=useState(todayLocal());const[routeKm,setRouteKm]=useState(null);const[err,setErr]=useState("");
+function EquipeTab({sel,setSel,token,plocs,orgs,dayBases}){
+  const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[routeKm,setRouteKm]=useState(null);const[err,setErr]=useState("");
   const getCoord=(oid)=>{if(plocs[oid])return[plocs[oid].lat,plocs[oid].lng];const o=orgs.find(x=>x.id===oid);if(o){const g=geoEstimate(o);if(g)return g;}return null;};
   const load=async()=>{setLo(true);setRouteKm(null);setErr("");try{
     // FIX: use both createdDateGt AND createdDateLt for EXACT day
@@ -603,13 +603,13 @@ function EquipeTab({visible,token,plocs,orgs,dayBases}){
       if(endB&&lc)km+=hav(lc[0],lc[1],endB.lat,endB.lng)*1.3;
       setRouteKm(km);}
   }catch(e){setErr("ERRO: "+e.message);}setLo(false);};
-  useEffect(()=>{if(!visible)return;load();},[sel,visible]);
+  useEffect(()=>{load();},[sel]);
   const visitTasks=tasks.filter(t=>t.type==="Visita"||t.type==="VISITA");
   const firstTime=tasks.length?tasks.reduce((m,t)=>t.time<m?t.time:m,tasks[0].time):null;
   const lastTime=tasks.length?tasks.reduce((m,t)=>t.time>m?t.time:m,tasks[0].time):null;
   const workH=firstTime&&lastTime?Math.max(0,mins(firstTime,lastTime)-60):0;
   const withGps=tasks.filter(t=>plocs[t.orgId]).length;const withEst=tasks.filter(t=>getCoord(t.orgId)).length;
-  return(<div style={{display:visible?"block":"none"}}>
+  return(<div>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Produtividade — Alisson Henrique</p>
     <LB t="DATA"><input type="date" value={sel} onChange={e=>setSel(e.target.value)} style={{width:"100%",marginBottom:8}}/></LB>
     <button onClick={load} disabled={lo} style={{width:"100%",marginBottom:8,padding:12,background:S.pri,border:"none",fontWeight:500}}>{lo?"Carregando...":"Atualizar"}</button>
@@ -974,7 +974,7 @@ export default function App(){
   const[syncing,setSyncing]=useState(false);const[syncMsg,setSyncMsg]=useState("");const[ldId,setLdId]=useState(null);const[geoErr,setGeoErr]=useState("");
   const[coTarget,setCoTarget]=useState(null);const[personTarget,setPersonTarget]=useState(null);const[newClient,setNewClient]=useState(false);const[searchAdd,setSearchAdd]=useState(false);const[divTarget,setDivTarget]=useState(null);const[editTarget,setEditTarget]=useState(null);
   const[plocs,setPlocs]=useState(()=>sL("jc:pdvLocs",{}));const[dayBases,setDayBases]=useState(()=>sL("jc:dayBases",{}));
-  const[showDB,setShowDB]=useState(false);const[showEndDay,setShowEndDay]=useState(false);
+  const[showDB,setShowDB]=useState(false);const[showEndDay,setShowEndDay]=useState(false);const[equipeSel,setEquipeSel]=useState(todayLocal());
 
   useEffect(()=>{sS("jc:visits",visits);},[visits]);useEffect(()=>{sS("jc:active",active);},[active]);useEffect(()=>{sS("jc:pdvLocs",plocs);},[plocs]);useEffect(()=>{sS("jc:dayBases",dayBases);syncDayBasesSave(dayBases);},[dayBases]);
   // Auto-clear cache once after v13.5 upgrade to remove old corrupted cached responses
@@ -1122,7 +1122,7 @@ export default function App(){
       <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} focusReq={focusReq}/>
       {tab==="rotas"&&<RotasTab visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
       {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/>}
-      {user?.id===743088&&<EquipeTab visible={tab==="equipe"} token={token} plocs={plocs} orgs={orgs} dayBases={dayBases}/>}
+      {tab==="equipe"&&user?.id===743088&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} token={token} plocs={plocs} orgs={orgs} dayBases={dayBases}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs}/>
 
       {tab==="config"&&<ConfigTab user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
