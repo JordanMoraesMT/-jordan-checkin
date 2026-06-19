@@ -15,15 +15,39 @@
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
-      window.addEventListener('load', function () {
-        var r = document.getElementById('root');
-        if (r) {
-          window.scrollTo = function (a) {
-            try { if (typeof a === 'object') r.scrollTo(a); else r.scrollTop = 0; }
-            catch (e) { r.scrollTop = 0; }
-          };
+      (function () {
+        function fill() {
+          var r = document.getElementById('root');
+          if (!r) return;
+          r.style.position = 'fixed';
+          r.style.top = '0';
+          r.style.left = '0';
+          r.style.right = '0';
+          r.style.bottom = '0';
+          r.style.width = '100%';
+          r.style.maxWidth = 'none';
+          r.style.margin = '0';
+          r.style.overflowY = 'auto';
+          r.style.overflowX = 'hidden';
+          r.style.webkitOverflowScrolling = 'touch';
         }
-      });
+        function patchScroll() {
+          var r = document.getElementById('root');
+          if (r && !window.__sp) {
+            window.__sp = true;
+            window.scrollTo = function (a) {
+              try { if (typeof a === 'object') r.scrollTo(a); else r.scrollTop = 0; }
+              catch (e) { r.scrollTop = 0; }
+            };
+          }
+        }
+        window.addEventListener('load', function () {
+          fill();
+          patchScroll();
+          window.addEventListener('resize', fill);
+          window.addEventListener('orientationchange', function () { setTimeout(fill, 200); });
+        });
+      })();
     </script>
   </body>
 </html>
