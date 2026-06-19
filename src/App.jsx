@@ -577,7 +577,7 @@ function BaseEditInline({day,dayBases,userId,plocs,lastVisitCoord,onSave,onCance
 // ═══════════════════════════════════════════════════════════════
 // FIX: EquipeTab — filter by EXACT date, not from date onwards
 // ═══════════════════════════════════════════════════════════════
-function EquipeTab({token,plocs,orgs,dayBases}){
+function EquipeTab({visible,token,plocs,orgs,dayBases}){
   const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[sel,setSel]=useState(todayLocal());const[routeKm,setRouteKm]=useState(null);const[err,setErr]=useState("");
   const getCoord=(oid)=>{if(plocs[oid])return[plocs[oid].lat,plocs[oid].lng];const o=orgs.find(x=>x.id===oid);if(o){const g=geoEstimate(o);if(g)return g;}return null;};
   const load=async()=>{setLo(true);setRouteKm(null);setErr("");try{
@@ -603,13 +603,13 @@ function EquipeTab({token,plocs,orgs,dayBases}){
       if(endB&&lc)km+=hav(lc[0],lc[1],endB.lat,endB.lng)*1.3;
       setRouteKm(km);}
   }catch(e){setErr("ERRO: "+e.message);}setLo(false);};
-  useEffect(()=>{load();},[sel]);
+  useEffect(()=>{if(!visible)return;load();},[sel,visible]);
   const visitTasks=tasks.filter(t=>t.type==="Visita"||t.type==="VISITA");
   const firstTime=tasks.length?tasks.reduce((m,t)=>t.time<m?t.time:m,tasks[0].time):null;
   const lastTime=tasks.length?tasks.reduce((m,t)=>t.time>m?t.time:m,tasks[0].time):null;
   const workH=firstTime&&lastTime?Math.max(0,mins(firstTime,lastTime)-60):0;
   const withGps=tasks.filter(t=>plocs[t.orgId]).length;const withEst=tasks.filter(t=>getCoord(t.orgId)).length;
-  return(<div>
+  return(<div style={{display:visible?"block":"none"}}>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Produtividade — Alisson Henrique</p>
     <LB t="DATA"><input type="date" value={sel} onChange={e=>setSel(e.target.value)} style={{width:"100%",marginBottom:8}}/></LB>
     <button onClick={load} disabled={lo} style={{width:"100%",marginBottom:8,padding:12,background:S.pri,border:"none",fontWeight:500}}>{lo?"Carregando...":"Atualizar"}</button>
@@ -647,7 +647,7 @@ function AgendaTab({visible,token,user,allOrgs}){
   const[addType,setAddType]=useState("VISITA");const[addText,setAddText]=useState("");const[addDate,setAddDate]=useState("");const[addTime,setAddTime]=useState("09:00");const[addLo,setAddLo]=useState(false);
   const load=async()=>{setLo(true);setErr("");try{
     const now=new Date();let all=[];
-    for(let w=0;w<6;w++){const from=new Date(now);from.setDate(from.getDate()-30*(w+1));const to=new Date(now);to.setDate(to.getDate()-30*w);
+    for(let w=0;w<2;w++){const from=new Date(now);from.setDate(from.getDate()-30*(w+1));const to=new Date(now);to.setDate(to.getDate()-30*w);
       setErr(`${all.length} tasks (${w*30}d)...`);
       let pg=1;while(true){const d=await agF(`/tasks?createdDateGt=${from.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}}
     // ONLY tasks with due_date (tarefas agendadas), NOT activities (logs without schedule)
@@ -665,7 +665,7 @@ function AgendaTab({visible,token,user,allOrgs}){
   const addTask=async()=>{if(!addOrg||!addText.trim())return;setAddLo(true);try{const body={text:addText,type:addType,done:false};if(addDate)body.due_date=`${addDate}T${addTime}:00-04:00`;await agF(`/organizations/${addOrg.id}/tasks`,token,{method:"POST",body:JSON.stringify(body)});setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
   // Filters
   const today=todayLocal();const dow=new Date().getDay();const weekStart=toLocalDate(new Date(Date.now()-dow*86400000));const weekEnd=toLocalDate(new Date(Date.now()+(6-dow)*86400000));
-  const filtered=useMemo(()=>{let list=tasks.filter(t=>filter==="pending"?!t.done:t.done);
+  const filtered=useMemo(()=>{const doneCutoff=toLocalDate(new Date(Date.now()-30*86400000));let list=tasks.filter(t=>filter==="pending"?!t.done:(t.done&&((t.finished||t.created||"").slice(0,10)>=doneCutoff)));
     if(!isAdmin||userFilter!=="all"){const uid=userFilter==="alisson"?743347:userFilter==="jordan"?743088:user.id;list=list.filter(t=>isAdmin&&userFilter==="all"?true:t.userId===uid);}
     if(period==="today")list=list.filter(t=>(t.due&&t.due.slice(0,10)===today)||(t.created&&toLocalDate(t.created)===today));
     if(period==="week")list=list.filter(t=>{const d=t.due?t.due.slice(0,10):toLocalDate(t.created);return d>=weekStart&&d<=weekEnd;});
@@ -1122,7 +1122,7 @@ export default function App(){
       <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} focusReq={focusReq}/>
       {tab==="rotas"&&<RotasTab visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
       {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/>}
-      {tab==="equipe"&&user?.id===743088&&<EquipeTab token={token} plocs={plocs} orgs={orgs} dayBases={dayBases}/>}
+      {user?.id===743088&&<EquipeTab visible={tab==="equipe"} token={token} plocs={plocs} orgs={orgs} dayBases={dayBases}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs}/>
 
       {tab==="config"&&<ConfigTab user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
