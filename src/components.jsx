@@ -17,7 +17,7 @@ function Login({onLogin}){
   const linkStyle={background:"none",border:"none",color:S.pri,fontSize:13,cursor:"pointer",padding:0,textDecoration:"underline"};
   return(<div style={{padding:"3rem 1rem",textAlign:"center"}}>
     <img src="/logo-white.png" alt="" style={{height:90,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 16px"}} onError={e=>{e.target.src="/logo.png";e.target.style.filter="brightness(0) invert(1)";}}/>
-    <h1 style={{fontSize:20,fontWeight:600,margin:"0 0 4px"}}>TeamCheck</h1>
+    <h1 style={{fontSize:20,fontWeight:600,margin:"0 0 4px",display:"flex",alignItems:"baseline",justifyContent:"center",gap:8,flexWrap:"wrap"}}>TeamCheck<span style={{fontSize:11,fontWeight:500,color:S.ts}}>197 tentativas até dar certo 🏆</span></h1>
     <p style={{fontSize:13,color:S.ts,margin:"0 0 2rem"}}>Jordan Representações</p>
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1.25rem",textAlign:"left"}}>
       {mode==="login"&&<>
