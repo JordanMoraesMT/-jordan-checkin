@@ -29,8 +29,9 @@ const hourDec=d=>{const t=new Date(d);return t.getHours()+t.getMinutes()/60;};
 const hav=(a,b,c,d)=>{const R=6371,x=((c-a)*Math.PI)/180,y=((d-b)*Math.PI)/180;const z=Math.sin(x/2)**2+Math.cos((a*Math.PI)/180)*Math.cos((c*Math.PI)/180)*Math.sin(y/2)**2;return R*2*Math.atan2(Math.sqrt(z),Math.sqrt(1-z));};
 function sL(k,f){try{return JSON.parse(localStorage.getItem(k))||f;}catch{return f;}}
 function sS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("sync:",e);}}
+// 2º parâmetro carrega a SESSÃO (o Worker injeta o token do Agendor no servidor)
 async function agF(path,token,opts={}){const p=path.startsWith("/")?path.slice(1):path;const[base,qs]=p.split("?");let u=`${API}?path=${encodeURIComponent(base)}`;if(qs)u+="&"+qs;
-  const r=await fetch(u,{...opts,cache:"no-store",headers:{Authorization:`Token ${token}`,"Content-Type":"application/json; charset=utf-8","Accept":"application/json; charset=utf-8",...(opts.headers||{})}});
+  const r=await fetch(u,{...opts,cache:"no-store",headers:{"X-Session":token,"Content-Type":"application/json; charset=utf-8","Accept":"application/json; charset=utf-8",...(opts.headers||{})}});
   if(!r.ok){let _b="";try{_b=await r.text();}catch{}const _e=new Error(`${r.status}`);_e.body=_b;throw _e;}
   const buf=await r.arrayBuffer();
   const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);

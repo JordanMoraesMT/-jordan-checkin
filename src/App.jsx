@@ -11,7 +11,7 @@ import { ConfigTab } from "./tabs/ConfigTab";
 import { PdvsTab } from "./tabs/PdvsTab";
 
 export default function App(){
-  const[token,setToken]=useState(()=>sL("jc:token",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);
+  const[token,setToken]=useState(()=>sL("jc:session",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);
   const[visits,setVisits]=useState(()=>{const raw=sL("jc:visits",[]);const cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);const cut=cutoff.toISOString();const purged=raw.filter(v=>!v.checkinTime||v.checkinTime>=cut);if(purged.length<raw.length)console.log(`Purged ${raw.length-purged.length} visits >90d`);return purged;});const[active,setActive]=useState(()=>sL("jc:active",null));
   const[tab,setTab]=useState("pdvs");const[focusReq,setFocusReq]=useState(null);
   // (estado de filtros/proximidade de PDV movido para PdvsTab)
@@ -132,7 +132,7 @@ export default function App(){
     else if(next?.nextDate&&next?.nextDesc)setTimeout(()=>alert("Proximo passo agendado!"),100);
   };
 
-  if(!token||!user)return <Login onLogin={(t,u)=>{setToken(t);setUser(u);sS("jc:token",t);sS("jc:user",u);}}/>;
+  if(!token||!user)return <Login onLogin={(t,u)=>{setToken(t);setUser(u);sS("jc:session",t);sS("jc:user",u);}}/>;
   const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
   const tabs=user?.id===743088?[...baseTabs.slice(0,3),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(3)]:baseTabs;
 
@@ -184,7 +184,7 @@ export default function App(){
           syncPlocs(n);return n;});}}
         onClearVisits={(target)=>setVisits(prev=>prev.filter(v=>!v.checkinTime?.startsWith(target)))}
         onClearAllGPS={()=>{setPlocs({});sS("jc:pdvLocs",{});}}
-        onLogout={()=>{setToken("");setUser(null);setOrgs([]);sS("jc:token","");sS("jc:user",null);}}
+        onLogout={()=>{setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);}}
       />}
     </div>
     {/* Scroll to top — global, all tabs */}
