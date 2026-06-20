@@ -140,7 +140,7 @@ export default function App(){
     <div style={{padding:"14px 16px 12px",background:S.card,borderBottom:`1px solid ${S.brd}`,marginBottom:12}}>
       <div style={{display:"grid",gridTemplateColumns:"auto 1fr auto",alignItems:"center",gap:12}}>
         <img src="/logo-white.png" alt="" style={{height:60,width:"auto",objectFit:"contain",display:"block"}} onError={e=>{e.target.src="/logo.png";e.target.style.filter="brightness(0) invert(1)";}}/>
-        <p style={{fontSize:30,fontWeight:800,margin:0,letterSpacing:"1px",color:"#fff",textAlign:"center"}}>TeamCheck</p>
+        <p style={{fontSize:30,fontWeight:800,margin:0,letterSpacing:"1px",color:"#fff",textAlign:"center",display:"flex",alignItems:"baseline",justifyContent:"center",gap:8,flexWrap:"wrap"}}>TeamCheck<span style={{fontSize:12,fontWeight:500,letterSpacing:0,color:S.ts}}>197 tentativas até dar certo 🏆</span></p>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
           <div style={{display:"flex",gap:6}}>
             <button onClick={()=>setSearchAdd(true)} style={{width:44,height:44,borderRadius:50,fontSize:18,background:S.acc,border:"none",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 2px 10px ${S.acc}44`,cursor:"pointer"}}><Plus size={22} strokeWidth={2.5} color="#fff"/></button>
