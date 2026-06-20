@@ -4,7 +4,47 @@ import { BarChart3, LogIn, LogOut, MessageCircle, Phone, Navigation, Info, Penci
 import { API, HOMES, todayLocal, TYPES, BRANDS, SECTORS, CAT_IDS, ORIGINS, CC, S, fT, fD, mins, hrsMin, hav, sL, sS, agF, agErr, postTask, gps, fixMojibake, strip, fetchCNPJ, MIN_OBS } from "./lib";
 
 const LB=({t,children})=><div style={{marginBottom:6}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px",textTransform:"uppercase",letterSpacing:.5}}>{t}</p>{children}</div>;
-function Login({onLogin}){const[email,setEmail]=useState("");const[pw,setPw]=useState("");const[lo,setLo]=useState(false);const[er,setEr]=useState("");const go=async()=>{if(!email.trim()||!pw)return;setLo(true);setEr("");try{const r=await fetch(`${API}/login`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email.trim().toLowerCase(),password:pw})});const d=await r.json().catch(()=>({}));if(r.ok&&d.ok&&d.session){onLogin(d.session,{id:d.userId,name:d.name,role:d.role,email:d.email});}else setEr(d.error||"E-mail ou senha incorretos.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};return(<div style={{padding:"3rem 1rem",textAlign:"center"}}><img src="/logo-white.png" alt="" style={{height:90,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 16px"}} onError={e=>{e.target.src="/logo.png";e.target.style.filter="brightness(0) invert(1)";}}/><h1 style={{fontSize:20,fontWeight:600,margin:"0 0 4px"}}>TeamCheck</h1><p style={{fontSize:13,color:S.ts,margin:"0 0 2rem"}}>Jordan Representações</p><div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1.25rem",textAlign:"left"}}><LB t="E-MAIL"><input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&go()}/></LB><LB t="SENHA"><input type="password" autoComplete="current-password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Sua senha" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&go()}/></LB><button onClick={go} disabled={lo||!email.trim()||!pw} style={{width:"100%",background:S.pri,border:"none",fontWeight:600,fontSize:15,padding:12,marginTop:8}}>{lo?"Entrando...":"Entrar"}</button>{er&&<p style={{fontSize:13,color:S.dng,marginTop:12,textAlign:"center"}}>{er}</p>}</div></div>);}
+function Login({onLogin}){
+  const[mode,setMode]=useState("login");
+  const[email,setEmail]=useState("");const[pw,setPw]=useState("");
+  const[code,setCode]=useState("");const[np,setNp]=useState("");const[np2,setNp2]=useState("");
+  const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[ok,setOk]=useState("");
+  const post=async(ep,b)=>{const r=await fetch(`${API}/${ep}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});const d=await r.json().catch(()=>({}));return{r,d};};
+  const doLogin=async()=>{if(!email.trim()||!pw)return;setLo(true);setEr("");try{const{r,d}=await post("login",{email:email.trim().toLowerCase(),password:pw});if(r.ok&&d.ok&&d.session)onLogin(d.session,{id:d.userId,name:d.name,role:d.role,email:d.email});else setEr(d.error||"E-mail ou senha incorretos.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};
+  const doForgot=async()=>{if(!email.trim())return;setLo(true);setEr("");setOk("");try{const{r,d}=await post("forgot",{email:email.trim().toLowerCase()});if(r.ok&&d.ok){setMode("reset");setOk("Se o e-mail estiver cadastrado, enviamos um código de 6 dígitos.");}else setEr(d.error||"Não consegui enviar o código agora.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};
+  const doReset=async()=>{if(!code.trim()||!np)return;if(np!==np2){setEr("As senhas não conferem.");return;}if(np.length<8){setEr("A nova senha precisa ter ao menos 8 caracteres.");return;}setLo(true);setEr("");setOk("");try{const{r,d}=await post("reset",{email:email.trim().toLowerCase(),code:code.trim(),password:np});if(r.ok&&d.ok){setMode("login");setPw("");setCode("");setNp("");setNp2("");setOk("Senha redefinida! Entre com a nova senha.");}else setEr(d.error||"Não foi possível redefinir.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};
+  const nav=m=>{setEr("");setOk("");setMode(m);};
+  const linkStyle={background:"none",border:"none",color:S.pri,fontSize:13,cursor:"pointer",padding:0,textDecoration:"underline"};
+  return(<div style={{padding:"3rem 1rem",textAlign:"center"}}>
+    <img src="/logo-white.png" alt="" style={{height:90,width:"auto",objectFit:"contain",display:"block",margin:"0 auto 16px"}} onError={e=>{e.target.src="/logo.png";e.target.style.filter="brightness(0) invert(1)";}}/>
+    <h1 style={{fontSize:20,fontWeight:600,margin:"0 0 4px"}}>TeamCheck</h1>
+    <p style={{fontSize:13,color:S.ts,margin:"0 0 2rem"}}>Jordan Representações</p>
+    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1.25rem",textAlign:"left"}}>
+      {mode==="login"&&<>
+        <LB t="E-MAIL"><input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doLogin()}/></LB>
+        <LB t="SENHA"><input type="password" autoComplete="current-password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Sua senha" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doLogin()}/></LB>
+        <button onClick={doLogin} disabled={lo||!email.trim()||!pw} style={{width:"100%",background:S.pri,border:"none",fontWeight:600,fontSize:15,padding:12,marginTop:8}}>{lo?"Entrando...":"Entrar"}</button>
+        <div style={{textAlign:"center",marginTop:14}}><button onClick={()=>nav("forgot")} style={linkStyle}>Esqueci a senha</button></div>
+      </>}
+      {mode==="forgot"&&<>
+        <p style={{fontSize:13,color:S.ts,margin:"0 0 14px"}}>Digite seu e-mail que enviaremos um código de 6 dígitos para redefinir a senha.</p>
+        <LB t="E-MAIL"><input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doForgot()}/></LB>
+        <button onClick={doForgot} disabled={lo||!email.trim()} style={{width:"100%",background:S.pri,border:"none",fontWeight:600,fontSize:15,padding:12,marginTop:8}}>{lo?"Enviando...":"Enviar código"}</button>
+        <div style={{textAlign:"center",marginTop:14}}><button onClick={()=>nav("login")} style={linkStyle}>Voltar ao login</button></div>
+      </>}
+      {mode==="reset"&&<>
+        <p style={{fontSize:13,color:S.ts,margin:"0 0 14px"}}>Enviamos um código para <b style={{color:S.txt}}>{email}</b>. Digite o código e crie a nova senha.</p>
+        <LB t="CÓDIGO (6 DÍGITOS)"><input type="text" inputMode="numeric" maxLength={6} value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))} placeholder="000000" style={{width:"100%",letterSpacing:4,textAlign:"center",fontSize:18}}/></LB>
+        <LB t="NOVA SENHA"><input type="password" autoComplete="new-password" value={np} onChange={e=>setNp(e.target.value)} placeholder="Mínimo 8 caracteres" style={{width:"100%"}}/></LB>
+        <LB t="CONFIRMAR NOVA SENHA"><input type="password" autoComplete="new-password" value={np2} onChange={e=>setNp2(e.target.value)} placeholder="Repita a senha" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doReset()}/></LB>
+        <button onClick={doReset} disabled={lo||!code.trim()||!np||!np2} style={{width:"100%",background:S.pri,border:"none",fontWeight:600,fontSize:15,padding:12,marginTop:8}}>{lo?"Redefinindo...":"Redefinir senha"}</button>
+        <div style={{textAlign:"center",marginTop:14,display:"flex",justifyContent:"space-between"}}><button onClick={()=>nav("forgot")} style={linkStyle}>Reenviar código</button><button onClick={()=>nav("login")} style={linkStyle}>Voltar ao login</button></div>
+      </>}
+      {er&&<p style={{fontSize:13,color:S.dng,marginTop:12,textAlign:"center"}}>{er}</p>}
+      {ok&&<p style={{fontSize:13,color:S.ok||S.acc,marginTop:12,textAlign:"center"}}>{ok}</p>}
+    </div>
+  </div>);
+}
 const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,onQuick,onInfo,ldId,plocs,lastVisit,lastOrder,nearRoad}){
   const isA=active?.orgId===org.id;const a=org.addr||{};const addr=[a.street,a.number].filter(Boolean).join(", ");const loc=[a.district,a.city_name||a.city,a.state].filter(Boolean).join(" · ");
   const catColor=CC[org.cat]||S.ts;
