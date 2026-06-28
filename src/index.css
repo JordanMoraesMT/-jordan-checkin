@@ -5,11 +5,11 @@
 html, body {
   margin: 0;
   padding: 0;
-  background: #0F1B2D;
+  background: #CED5D9;
 }
 
 body {
-  color: #E8ECF1;
+  color: #1F2D38;
   font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
@@ -31,26 +31,26 @@ body {
 input, select, textarea {
   font-family: inherit;
   font-size: 14px;
-  color: #E8ECF1;
-  background: #0F1B2D;
-  border: 1px solid #243349;
+  color: #1F2D38;
+  background: #F3F6F9;
+  border: 1px solid #DCE3E7;
   border-radius: 8px;
   padding: 10px 12px;
   outline: none;
 }
 
 input, textarea { -webkit-appearance: none; appearance: none; }
-input::placeholder, textarea::placeholder { color: #5A6B7D; }
+input::placeholder, textarea::placeholder { color: #9AA6B0; }
 input:focus, select:focus, textarea:focus { border-color: #0578A6; }
 select { cursor: pointer; }
-option { background: #162236; color: #E8ECF1; }
+option { background: #FFFFFF; color: #1F2D38; }
 
 button {
   font-family: inherit;
   font-size: 14px;
-  color: #E8ECF1;
-  background: #1C2E47;
-  border: 1px solid #243349;
+  color: #1F2D38;
+  background: #E7EEF2;
+  border: 1px solid #DCE3E7;
   border-radius: 8px;
   padding: 9px 12px;
   cursor: pointer;
@@ -58,4 +58,4 @@ button {
 
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #243349; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #B9C4CC; border-radius: 4px; }

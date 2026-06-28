@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Store, Map as MapIcon, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp } from "lucide-react";
 import { API, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, agF, postTask, gps, fixMojibake, strip, isRealVisit } from "./lib";
-import { Login, Banner, NoteModal, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal } from "./components";
+import { Login, Banner, NoteModal, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 import { RelatorioTab } from "./tabs/RelatorioTab";
 import { EquipeTab } from "./tabs/EquipeTab";
@@ -137,16 +137,16 @@ export default function App(){
   const tabs=user?.id===743088?[...baseTabs.slice(0,3),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(3)]:baseTabs;
 
   return(<div style={{minHeight:"100vh",paddingBottom:70}}>
-    <div style={{padding:"14px 16px 12px",background:S.card,borderBottom:`1px solid ${S.brd}`,marginBottom:12}}>
+    <div style={{padding:"14px 16px 12px",background:`linear-gradient(180deg,${S.chromeTop},${S.chrome})`,borderBottom:`1px solid ${S.chromeTop}`,marginBottom:12}}>
       <div style={{display:"grid",gridTemplateColumns:"auto 1fr auto",alignItems:"center",gap:12}}>
-        <img src="/logo-white.png" alt="" style={{height:60,width:"auto",objectFit:"contain",display:"block"}} onError={e=>{e.target.src="/logo.png";e.target.style.filter="brightness(0) invert(1)";}}/>
-        <p style={{fontSize:30,fontWeight:800,margin:0,letterSpacing:"1px",color:"#fff",textAlign:"center",display:"flex",alignItems:"baseline",justifyContent:"center",gap:8,flexWrap:"wrap"}}>TeamCheck<span style={{fontSize:12,fontWeight:500,letterSpacing:0,color:S.ts}}>197 tentativas até dar certo 🏆</span></p>
+        <JordanLogo color="#fff" height={46}/>
+        <p style={{fontSize:30,fontWeight:800,margin:0,letterSpacing:"1px",color:"#fff",textAlign:"center",display:"flex",alignItems:"baseline",justifyContent:"center",gap:8,flexWrap:"wrap"}}>TeamCheck<span style={{fontSize:12,fontWeight:500,letterSpacing:0,color:"rgba(255,255,255,0.72)"}}>197 tentativas até dar certo 🏆</span></p>
         <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}}>
           <div style={{display:"flex",gap:6}}>
             <button onClick={()=>setSearchAdd(true)} style={{width:44,height:44,borderRadius:50,fontSize:18,background:S.acc,border:"none",fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 2px 10px ${S.acc}44`,cursor:"pointer"}}><Plus size={22} strokeWidth={2.5} color="#fff"/></button>
-            <button onClick={async()=>{await doSync();await loadHistory();syncVisitLoad();}} disabled={syncing} style={{width:44,height:44,borderRadius:50,fontSize:15,background:syncing?S.cl:S.pri,border:"none",fontWeight:500,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 2px 10px ${S.pri}44`,cursor:"pointer"}}><RefreshCw size={20} strokeWidth={2} color="#fff" className={syncing?"spin":""}/></button>
+            <button onClick={async()=>{await doSync();await loadHistory();syncVisitLoad();}} disabled={syncing} style={{width:44,height:44,borderRadius:50,fontSize:15,background:syncing?"rgba(255,255,255,0.22)":S.pl,border:"none",fontWeight:500,display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 2px 10px ${S.pri}44`,cursor:"pointer"}}><RefreshCw size={20} strokeWidth={2} color="#fff" className={syncing?"spin":""}/></button>
           </div>
-          <p style={{fontSize:11,color:S.ts,margin:0,textAlign:"right",lineHeight:1.2}}>{user?.name}<br/>{fD(new Date())}</p>
+          <p style={{fontSize:11,color:"rgba(255,255,255,0.85)",margin:0,textAlign:"right",lineHeight:1.2}}>{user?.name}<br/>{fD(new Date())}</p>
         </div>
       </div>
     </div>
@@ -189,7 +189,7 @@ export default function App(){
     </div>
     {/* Scroll to top — global, all tabs */}
     <button onClick={()=>window.scrollTo({top:0,behavior:"smooth"})} style={{position:"fixed",bottom:72,right:16,width:46,height:46,borderRadius:50,background:S.pri,border:"none",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 3px 12px ${S.pri}66`,zIndex:30,cursor:"pointer"}}><ChevronUp size={24} strokeWidth={2.5} color="#fff"/></button>
-    <div style={{position:"fixed",bottom:0,left:0,right:0,background:S.card,borderTop:`1px solid ${S.brd}`,display:"flex",justifyContent:"center",zIndex:40}}><div style={{display:"flex",width:"100%"}}>{tabs.map(t=><button key={t.id} onClick={()=>{setTab(t.id);}} style={{flex:1,border:"none",borderRadius:0,background:"transparent",padding:"8px 4px 6px",fontSize:10,fontWeight:tab===t.id?700:400,color:tab===t.id?S.pl:S.td,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={24} strokeWidth={tab===t.id?2.2:1.5}/>{t.l}</button>)}</div></div>
+    <div style={{position:"fixed",bottom:0,left:0,right:0,background:S.chrome,borderTop:`1px solid ${S.chromeTop}`,display:"flex",justifyContent:"center",zIndex:40}}><div style={{display:"flex",width:"100%"}}>{tabs.map(t=><button key={t.id} onClick={()=>{setTab(t.id);}} style={{flex:1,border:"none",borderRadius:0,background:"transparent",padding:"8px 4px 6px",fontSize:10,fontWeight:tab===t.id?700:400,color:tab===t.id?"#fff":"rgba(255,255,255,0.55)",display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={24} strokeWidth={tab===t.id?2.2:1.5}/>{t.l}</button>)}</div></div>
     {coTarget&&<NoteModal org={coTarget} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
     {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const n={...p,[k]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
     {showEndDay&&<DayEndModal user={user} onSave={b=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const cur=p[k]||{};const n={...p,[k]:{...cur,end:b}};sS("jc:dayBases",n);return n;});setShowEndDay(false);}} onCancel={()=>setShowEndDay(false)}/>}
