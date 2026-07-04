@@ -348,7 +348,7 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
   const abrePorFeed = (a) => { const o = (allOrgs || []).find(x => x.id === a.org_id) || (a.cnpj ? (allOrgs || []).find(x => soDig(x.cnpj) === a.cnpj) : null); if (o) { setSel(o); setQ(""); } else alert("Cliente não está na base sincronizada. Sincronize os clientes."); };
 
   if (!visible) return null;
-  if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} onBack={() = rfv={rfv} > { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} />;
+  if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} />;
 
   return (<div>
     {/* Busca de cliente */}
