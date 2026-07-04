@@ -4,11 +4,13 @@ import { MapPin, Trophy } from "lucide-react";
 import { PG, toLocalDate, todayLocal, CATS, CC, geoEstimate, S, fD, fDS, hav, agF, gps, roadKm, csv, fixMojibake, strip } from "../lib";
 import { OrgCard } from "../components";
 
-function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,focusReq}){
+function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,focusReq,rfv}){
   const[search,setSearch]=useState("");const[catFilters,setCatFilters]=useState([]);const[cityFilter,setCityFilter]=useState("Todas");const[stateFilter,setStateFilter]=useState("Todos");const[segFilter,setSegFilter]=useState("Todos");const[prodFilter,setProdFilter]=useState("Todos");const[ownerFilter,setOwnerFilter]=useState("Todos");const[grupoFilter,setGrupoFilter]=useState("Todos");
   const[visitMode,setVisitMode]=useState("all");const[visitFrom,setVisitFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return toLocalDate(d);});const[visitTo,setVisitTo]=useState(todayLocal);
   const[nearMe,setNearMe]=useState(null);const[nearLoading,setNearLoading]=useState(false);const[nearRoad,setNearRoad]=useState({});const[sortMode,setSortMode]=useState("alpha");
   const[vc,setVc]=useState(PG);
+  // Matriz RFV consolidada (D1): resolve por CNPJ (normalizado) ou org_id
+  const rfvDe=useCallback(o=>{if(!rfv)return null;const k=(o.cnpj||"").replace(/\D/g,"");if(k&&rfv.byCnpj[k.padStart(14,"0")])return rfv.byCnpj[k.padStart(14,"0")];return rfv.byOrg[o.id]||null;},[rfv]);
   const cities=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const c=o.addr?.city_name||o.addr?.city;if(c)s.add(c);});return["Todas",...[...s].sort()];},[orgs]);
   const states=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.addr?.state)s.add(o.addr.state);});return["Todos",...[...s].sort()];},[orgs]);
   const segments=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.sector)s.add(o.sector);});return["Todos",...[...s].sort()];},[orgs]);
@@ -41,10 +43,16 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
       withGPS.sort((a,b)=>a.dist-b.dist);noGPS.sort((a,b)=>a.dist-b.dist);
       list=[...withGPS,...noGPS];
     }else if(sortMode==="rfv"){
-      list=list.sort((a,b)=>{const la=lastVisits[a.id]?.time||"";const lb=lastVisits[b.id]?.time||"";return lb.localeCompare(la);});
+      // Ordena pela Matriz RFV real (D1): classe > score > faturamento; sem histórico de compra vai ao fim (A→Z)
+      const ORD={"Campeão":5,"Leal":4,"Em Crescimento":3,"Em Risco":2,"Inativo":1};
+      list=list.map(o=>({o,r:rfvDe(o)})).sort((a,b)=>{
+        if(!!a.r!==!!b.r)return a.r?-1:1;
+        if(!a.r&&!b.r)return (a.o.name||"").localeCompare(b.o.name||"");
+        return (ORD[b.r.rfv]||0)-(ORD[a.r.rfv]||0)||(b.r.score||0)-(a.r.score||0)||(b.r.total||0)-(a.r.total||0);
+      }).map(x=>x.o);
     }else{list=list.sort((a,b)=>(a.name||"").localeCompare(b.name||""));}
     return list;
-  },[orgs,search,catFilters,cityFilter,stateFilter,segFilter,prodFilter,ownerFilter,grupoFilter,visitMode,visitFrom,visitTo,visitsByOrg,lastVisits,nearMe,plocs,sortMode]);
+  },[orgs,search,catFilters,cityFilter,stateFilter,segFilter,prodFilter,ownerFilter,grupoFilter,visitMode,visitFrom,visitTo,visitsByOrg,lastVisits,nearMe,plocs,sortMode,rfvDe]);
 
   useEffect(()=>{
     if(sortMode!=="near"||!nearMe||!fo.length)return;
@@ -101,10 +109,10 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
         {geoErr&&<p style={{fontSize:12,color:S.dng,margin:"0 0 8px"}}>{geoErr}</p>}
         {syncing&&!orgs.length&&<div style={{textAlign:"center",padding:"3rem 0"}}><div style={{width:36,height:36,border:`3px solid ${S.brd}`,borderTopColor:S.pri,borderRadius:"50%",margin:"0 auto 12px",animation:"spin 1s linear infinite"}}/><p style={{color:S.ts}}>{syncMsg}</p><style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style></div>}
         {!syncing&&!orgs.length&&<div style={{textAlign:"center",padding:"2rem 0"}}><button onClick={()=>onSync()} style={{width:"100%",padding:16,fontSize:16,fontWeight:600,background:S.pri,border:"none",borderRadius:12}}>Sincronizar Clientes</button></div>}
-        {orgs.length>0&&<><p style={{fontSize:11,color:S.td,margin:"0 0 6px"}}>{fo.length} de {orgs.length}{visitMode==="not_visited"?` (sem visita ${fDS(visitFrom+"T12:00")}→${fDS(visitTo+"T12:00")})`:visitMode==="visited"?` (visitados ${fDS(visitFrom+"T12:00")}→${fDS(visitTo+"T12:00")})`:""}{sortMode==="near"?" — por proximidade":sortMode==="rfv"?" — por relevância":""}{syncing&&` (${syncMsg})`}</p>
-          <div style={{display:"flex",flexDirection:"column",gap:8}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={onCheckin} onOut={handleOut} onEdit={handleEdit} onPerson={handlePerson} onQuick={onQuick} onInfo={handleInfo} ldId={ldId} plocs={plocs} lastVisit={lastVisits[o.id]||null} lastOrder={null/*TODO: Dashboard Phase 2*/} nearRoad={nearRoad}/>)}</div>
+        {orgs.length>0&&<><p style={{fontSize:11,color:S.td,margin:"0 0 6px"}}>{fo.length} de {orgs.length}{visitMode==="not_visited"?` (sem visita ${fDS(visitFrom+"T12:00")}→${fDS(visitTo+"T12:00")})`:visitMode==="visited"?` (visitados ${fDS(visitFrom+"T12:00")}→${fDS(visitTo+"T12:00")})`:""}{sortMode==="near"?" — por proximidade":sortMode==="rfv"?(rfv?" — Matriz RFV (Campeão → Inativo)":" — Matriz RFV indisponível (A→Z)"):""}{syncing&&` (${syncMsg})`}</p>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={onCheckin} onOut={handleOut} onEdit={handleEdit} onPerson={handlePerson} onQuick={onQuick} onInfo={handleInfo} ldId={ldId} plocs={plocs} lastVisit={lastVisits[o.id]||null} rfvInfo={rfvDe(o)} lastOrder={null/*TODO: Dashboard Phase 2*/} nearRoad={nearRoad}/>)}</div>
           {vc<fo.length&&<button onClick={()=>setVc(p=>p+PG)} style={{width:"100%",marginTop:12,padding:14,fontSize:14,fontWeight:500}}>Ver mais ({fo.length-vc})</button>}
-          <button onClick={()=>{const rows=[["Nome","CNPJ","Endereço","Bairro","Cidade","UF","Categoria","Segmento","Produtos","Responsável","Grupo","Dt Última Visita","Visitado por","Dias s/ Visita"]];fo.forEach(o=>{const lv=lastVisits[o.id];const dias=lv?Math.floor((Date.now()-new Date(lv.time))/86400000):"";rows.push([o.name,o.cnpj||"",`${o.addr?.street||""} ${o.addr?.number||""}`.trim(),o.addr?.district||"",o.addr?.city_name||o.addr?.city||"",o.addr?.state||"",o.cat||"",o.sector||"",o.products||"",o.owner||"",o.grupo?.replace("Grupo: ","")||"",lv?fD(lv.time):"Sem visita",lv?lv.who:"",dias]);});csv(rows,`clientes-filtrados-${fD(new Date())}.csv`);}} style={{width:"100%",marginTop:8,padding:12,fontSize:13,background:S.pri+"22",border:`1px solid ${S.pri}55`,color:S.pl,fontWeight:500}}>📊 Exportar {fo.length} clientes (Excel)</button>
+          <button onClick={()=>{const rows=[["Nome","CNPJ","Endereço","Bairro","Cidade","UF","Categoria","Segmento","Produtos","Responsável","Grupo","Dt Última Visita","Visitado por","Dias s/ Visita","Classe RFV","Status Recompra","Última Compra","Fat. 12m"]];fo.forEach(o=>{const lv=lastVisits[o.id];const dias=lv?Math.floor((Date.now()-new Date(lv.time))/86400000):"";const rv=rfvDe(o);rows.push([o.name,o.cnpj||"",`${o.addr?.street||""} ${o.addr?.number||""}`.trim(),o.addr?.district||"",o.addr?.city_name||o.addr?.city||"",o.addr?.state||"",o.cat||"",o.sector||"",o.products||"",o.owner||"",o.grupo?.replace("Grupo: ","")||"",lv?fD(lv.time):"Sem visita",lv?lv.who:"",dias,rv?rv.rfv:"",rv?rv.status:"",rv&&rv.ultima?fD(rv.ultima+"T12:00"):"",rv?rv.fat12m:""]);});csv(rows,`clientes-filtrados-${fD(new Date())}.csv`);}} style={{width:"100%",marginTop:8,padding:12,fontSize:13,background:S.pri+"22",border:`1px solid ${S.pri}55`,color:S.pl,fontWeight:500}}>📊 Exportar {fo.length} clientes (Excel)</button>
           {search.replace(/[.\-\/]/g,"").length>=11&&fo.length===0&&<button onClick={async()=>{try{const d=await agF(`/organizations?cnpj=${search.replace(/[.\-\/]/g,"")}`,token);if(d.data?.length)setOrgs(p=>{const ids=new Set(p.map(o=>o.id));return[...d.data.map(strip).filter(f=>!ids.has(f.id)),...p];});}catch(e){console.warn("cnpjSearch:",e);}}} style={{width:"100%",marginTop:8,padding:14,background:S.acc,border:"none",fontWeight:500}}>Buscar CNPJ no Agendor</button>}
         </>}
       </div>);
