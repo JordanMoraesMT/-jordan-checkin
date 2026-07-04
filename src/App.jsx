@@ -1,6 +1,6 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo } from "react";
-import { Store, Map as MapIcon, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp } from "lucide-react";
+import { Store, Map as MapIcon, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser } from "lucide-react";
 import { API, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, agF, postTask, gps, fixMojibake, strip, isRealVisit } from "./lib";
 import { Login, Banner, NoteModal, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
@@ -9,6 +9,10 @@ import { EquipeTab } from "./tabs/EquipeTab";
 import { AgendaTab } from "./tabs/AgendaTab";
 import { ConfigTab } from "./tabs/ConfigTab";
 import { PdvsTab } from "./tabs/PdvsTab";
+import { CrmTab } from "./tabs/CrmTab";
+
+// ─── CRM próprio (D1 via Worker do Dashboard) — registro em segundo plano ───
+const DASH_CRM = "https://dashboard.jordanmt.com";
 
 export default function App(){
   const[token,setToken]=useState(()=>sL("jc:session",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);
@@ -33,6 +37,10 @@ export default function App(){
   const syncDayBasesSave=async(bases)=>{if(!bases||!Object.keys(bases).length)return;try{await fetch(`${API}?sync=dayBases`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:bases})});}catch(e){console.warn("syncBases:",e);}};
   const syncDayBasesLoad=async()=>{try{const r=await fetch(`${API}?sync=dayBases`);const d=await r.json();if(d.active&&Object.keys(d.active).length){setDayBases(prev=>{const merged={...prev};for(const k in d.active){merged[k]={...(d.active[k]||{}),...(prev[k]||{})};}sS("jc:dayBases",merged);return merged;});}}catch(e){console.warn("syncBasesLoad:",e);}};
   const[teamActive,setTeamActive]=useState(null);
+  // ─── Matriz RFV (D1, consolidada por CNPJ) — badges e ordenação da lista de visitas ───
+  const[rfvMap,setRfvMap]=useState(null);
+  const loadRfv=async()=>{try{const r=await fetch(`${DASH_CRM}/api/crm/rfv`,{headers:{"X-Session":token}});const d=await r.json();if(d&&d.ok&&d.clientes){const byOrg={};for(const k in d.clientes){const x=d.clientes[k];if(x.org_id)byOrg[x.org_id]=x;}setRfvMap({byCnpj:d.clientes,byOrg,ref:d.ref});}}catch(e){console.warn("rfv:",e);}};
+  useEffect(()=>{if(token&&user)loadRfv();},[token,user]);
   const[syncStatus,setSyncStatus]=useState("");
   const syncPull=async()=>{try{
     const r=await fetch(`${API}?sync=${user.id}`);const d=await r.json();
@@ -106,9 +114,12 @@ export default function App(){
   const usersList=useMemo(()=>{const m={};orgs.forEach(o=>{if(o.ownerId&&o.owner)m[o.ownerId]=o.owner;});return Object.entries(m).map(([id,n])=>({id:parseInt(id),n}));},[orgs]);
 
   // (lastVisits/visitsByOrg/fo/proximidade/toggleCat movidos para PdvsTab)
-  const quickAction=async(org,type)=>{const note=prompt(`Registrar ${type==="WHATSAPP"?"WhatsApp":"Ligacao"} com ${org.name}:`);if(!note?.trim())return;try{await postTask(token,org.id,note,type,true);alert("Registrado no Agendor!");}catch(e){alert("Erro: "+e.message);}};
+  // Grava atividade no CRM próprio (D1) em segundo plano — nunca bloqueia o fluxo.
+  const crmLog=(payload)=>{try{fetch(`${DASH_CRM}/api/crm/atividades`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(payload)}).catch(()=>{});}catch{}};
+  const crmGps=(orgId,cnpj,g)=>{try{fetch(`${DASH_CRM}/api/crm/gps`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:orgId,cnpj:cnpj||null,lat:g.lat,lng:g.lng,precisao:g.acc})}).catch(()=>{});}catch{}};
+  const quickAction=async(org,type)=>{const note=prompt(`Registrar ${type==="WHATSAPP"?"WhatsApp":"Ligacao"} com ${org.name}:`);if(!note?.trim())return;try{await postTask(token,org.id,note,type,true);crmLog({org_id:org.id,cnpj:(org.cnpj||"").replace(/\D/g,"")||null,org_nome:org.nickname||org.name,tipo:type,texto:note});alert("Registrado no Agendor!");}catch(e){alert("Erro: "+e.message);}};
 
-  const checkin=async(org)=>{ensureBase();if(org.cat==="Online - B2B"&&!confirm(`${org.name} e Online/B2B.\nRegistrar visita?`))return;if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\nContinuar?`))return;if(org.cat==="Excluido"&&!confirm(`${org.name} esta Excluido.\nContinuar?`))return;setLdId(org.id);setGeoErr("");try{const g=await gps();if(plocs[org.id]){const d=hav(plocs[org.id].lat,plocs[org.id].lng,g.lat,g.lng)*1000;if(d>500){setDivTarget({org,dist:Math.round(d),geo:g});setLdId(null);return;}}else{const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);}const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}catch{setGeoErr("GPS indisponivel.");}setLdId(null);};
+  const checkin=async(org)=>{ensureBase();if(org.cat==="Online - B2B"&&!confirm(`${org.name} e Online/B2B.\nRegistrar visita?`))return;if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\nContinuar?`))return;if(org.cat==="Excluido"&&!confirm(`${org.name} esta Excluido.\nContinuar?`))return;setLdId(org.id);setGeoErr("");try{const g=await gps();if(plocs[org.id]){const d=hav(plocs[org.id].lat,plocs[org.id].lng,g.lat,g.lng)*1000;if(d>500){setDivTarget({org,dist:Math.round(d),geo:g});setLdId(null);return;}}else{const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);crmGps(org.id,(org.cnpj||"").replace(/\D/g,""),g);}const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}catch{setGeoErr("GPS indisponivel.");}setLdId(null);};
   const handleDivAction=(action,type)=>{if(!divTarget)return;const{org,geo}=divTarget;if(action==="checkin"){const v={orgId:org.id,orgName:org.name,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:geo.lat,lng:geo.lng,accuracy:geo.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}else if(action==="remote"&&type)setCoTarget({...org,remoteType:type});setDivTarget(null);};
   const checkout=async(note,type="VISITA",next=null,sale=null)=>{if(!active||ldId)return;setLdId(active.orgId);let g=null;try{g=await gps();}catch{}
     // Detect divergent checkout: GPS far from registered client location
@@ -121,6 +132,8 @@ export default function App(){
     // Only register in Agendor + KV if NOT divergent
     if(!divergent){
       try{await postTask(token,active.orgId,note,type,true);done.synced=true;}catch(e){console.warn("task:",e);done.synced=false;}
+      // CRM próprio: histórico durável no D1 (não bloqueia; Agendor segue como espelho)
+      {const oRef=(allOrgs||[]).find(o=>o.id===active.orgId);crmLog({org_id:active.orgId,cnpj:oRef?(oRef.cnpj||"").replace(/\D/g,""):null,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:""),lat:g?.lat,lng:g?.lng,origem:"checkout"});}
       if(next?.nextDate&&next?.nextDesc){try{await postTask(token,active.orgId,next.nextDesc,next.nextType||"VISITA",false,`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`);}catch(e){console.warn("nextStep:",e);}}
       if(sale?.brand&&sale?.value){try{await agF(`/organizations/${active.orgId}/deals`,token,{method:"POST",body:JSON.stringify({title:`Venda ${sale.brand}`,value:sale.value})});}catch(e){console.warn("deal:",e);}}
       syncVisitSave(done);
@@ -133,7 +146,7 @@ export default function App(){
   };
 
   if(!token||!user)return <Login onLogin={(t,u)=>{setToken(t);setUser(u);sS("jc:session",t);sS("jc:user",u);}}/>;
-  const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
+  const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"crm",I:BookUser,l:"CRM"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
   const tabs=user?.id===743088?[...baseTabs.slice(0,3),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(3)]:baseTabs;
 
   return(<div style={{minHeight:"100vh",paddingBottom:70}}>
@@ -163,7 +176,8 @@ export default function App(){
 
       <div style={{display:"flex",gap:3,marginBottom:12,background:S.cl,borderRadius:8,padding:3}}>{tabs.map(t=><button key={t.id} onClick={()=>{setTab(t.id);}} style={{flex:1,border:"none",background:tab===t.id?S.pri:"transparent",borderRadius:6,padding:"7px 2px",fontSize:10,fontWeight:tab===t.id?700:400,color:tab===t.id?"#fff":S.ts,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={20} strokeWidth={tab===t.id?2.2:1.5}/>{t.l}</button>)}</div>
 
-      <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} focusReq={focusReq}/>
+      <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} focusReq={focusReq} rfv={rfvMap}/>
+      <CrmTab visible={tab==="crm"} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap}/>
       {tab==="rotas"&&<RotasTab sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
       {tab==="relatorio"&&<RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/>}
       {tab==="equipe"&&user?.id===743088&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} token={token} plocs={plocs} orgs={orgs} dayBases={dayBases}/>}

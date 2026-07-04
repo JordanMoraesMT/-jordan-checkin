@@ -48,7 +48,10 @@ function Login({onLogin}){
     </div>
   </div>);
 }
-const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,onQuick,onInfo,ldId,plocs,lastVisit,lastOrder,nearRoad}){
+// Cores da Matriz RFV (mesmas classes da tela RFV do Dashboard)
+const RFVC={"Campeão":S.gold,"Leal":S.ok,"Em Crescimento":S.pri,"Em Risco":"#E76F51","Inativo":S.td};
+const SRC_={"Em Dia":S.ok,"Momento de Recompra":S.gold,"Atrasado":S.dng};
+const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,onQuick,onInfo,ldId,plocs,lastVisit,lastOrder,nearRoad,rfvInfo}){
   const isA=active?.orgId===org.id;const a=org.addr||{};const addr=[a.street,a.number].filter(Boolean).join(", ");const loc=[a.district,a.city_name||a.city,a.state].filter(Boolean).join(" · ");
   const catColor=CC[org.cat]||S.ts;
   return(<div id={"org-"+org.id} style={{background:isA?S.cl:S.card,border:`${isA?2:1}px solid ${isA?S.pri:S.brd}`,borderRadius:12,padding:"12px 14px"}}>
@@ -61,9 +64,11 @@ const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,o
         <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:2}}>
           {org.cat&&<span style={{fontSize:10,color:"#fff",background:catColor,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{org.cat}</span>}
           {org.sector&&<span style={{fontSize:9,color:S.ts,background:S.bg,padding:"1px 6px",borderRadius:4}}>{org.sector}</span>}
+          {rfvInfo&&<span style={{fontSize:10,color:RFVC[rfvInfo.rfv]||S.ts,border:`1px solid ${(RFVC[rfvInfo.rfv]||S.ts)}66`,background:(RFVC[rfvInfo.rfv]||S.ts)+"18",padding:"1px 7px",borderRadius:4,fontWeight:700}}>{rfvInfo.rfv}</span>}
         </div>
         {lastVisit&&<p style={{fontSize:10,color:S.td,margin:"4px 0 0"}}>📋 Visita: {fD(lastVisit.time)} — {lastVisit.who} ({Math.floor((Date.now()-new Date(lastVisit.time))/86400000)}d)</p>}
         {lastOrder&&<p style={{fontSize:10,color:S.gold,margin:"2px 0 0"}}>📦 Pedido: {fD(lastOrder.time)} — {lastOrder.source||"Dashboard"}</p>}
+        {rfvInfo&&rfvInfo.ultima&&<p style={{fontSize:10,margin:"2px 0 0",color:SRC_[rfvInfo.status]||S.ts}}>🛒 Compra: {fD(rfvInfo.ultima+"T12:00")} ({rfvInfo.dias}d) · {rfvInfo.status}</p>}
         {!lastVisit&&<p style={{fontSize:10,color:S.dng,margin:"4px 0 0",fontStyle:"italic"}}>Sem visita registrada</p>}
         {org.dist!=null&&org.dist<9999&&<p style={{fontSize:10,color:org.distType==="gps"?S.acc:S.ts,margin:"2px 0 0",fontWeight:org.distType==="gps"?500:400}}>📍 {nearRoad[org.id]!=null?`${nearRoad[org.id].toFixed(1)}km (estrada)`:org.dist<1?`${(org.dist*1000).toFixed(0)}m`:`${org.dist.toFixed(1)}km`}{org.distType==="bairro"?" (estimado)":""}</p>}
         {org.distType==="sem_ref"&&<p style={{fontSize:10,color:S.td,margin:"2px 0 0",fontStyle:"italic"}}>Sem referencia de localização</p>}
