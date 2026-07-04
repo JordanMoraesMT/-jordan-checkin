@@ -50,7 +50,7 @@ function comprime(file) {
   });
 }
 
-const Crd = ({ children, style }) => <div style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", marginBottom: 10, ...style }}>{children}</div>;
+const Crd = ({ children, style }) => <div style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", marginBottom: 10, boxShadow: S.shadow, ...style }}>{children}</div>;
 const Chip = ({ on, onClick, children, color }) => <button onClick={onClick} style={{ border: `1px solid ${on ? (color || S.pri) : S.brd}`, background: on ? (color || S.pri) : S.card, color: on ? "#fff" : S.ts, borderRadius: 20, padding: "5px 12px", fontSize: 12, fontWeight: on ? 700 : 400, cursor: "pointer", whiteSpace: "nowrap" }}>{children}</button>;
 const inp = { width: "100%", boxSizing: "border-box", background: "#fff", border: `1px solid ${S.brd}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, color: S.txt };
 
