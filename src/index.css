@@ -1,61 +1,62 @@
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700;800&display=swap');
-
-* { box-sizing: border-box; }
-
-html, body {
-  margin: 0;
-  padding: 0;
-  background: #CED5D9;
+/* ============================================================
+   TeamCheck — temas claro/escuro espelhados do Dashboard
+   (theme.js): superfícies e textos por variáveis CSS; acentos
+   vívidos ficam em HEX fixo no lib.js (permitem concatenar).
+   Padrão: ESCURO. Troca por [data-theme] no <html> (Config).
+   ============================================================ */
+:root, :root[data-theme="dark"]{
+  --bg:#0B1B2C; --card:#122B43; --alt:#1A3148; --bdr:#1E3A57;
+  --inp:#0C2236; --inp-bdr:#294763;
+  --t1:#E6EFF6; --t2:#8DA4B8; --t3:#7C92A6; --t4:#5E7488;
+  --link:#0AAEE8; --scroll:#294763;
+  --card-shadow:0 12px 32px -18px rgba(0,0,0,.55);
 }
-
-body {
-  color: #1F2D38;
-  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
+:root[data-theme="light"]{
+  --bg:#CED5D9; --card:#FBFCFD; --alt:#EEF2F5; --bdr:#DCE3E7;
+  --inp:#FFFFFF; --inp-bdr:#D3DBE1;
+  --t1:#14202B; --t2:#2E3A45; --t3:#54616C; --t4:#9AA6B0;
+  --link:#0578A6; --scroll:#B9C4CC;
+  --card-shadow:0 12px 30px -14px rgba(14,41,66,.20);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  background: var(--bg);
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 15px;
+  color: var(--t1);
+  overscroll-behavior-y: contain;
   -webkit-tap-highlight-color: transparent;
 }
-
 #root {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  width: 100%;
-  max-width: 1200px;
+  max-width: 640px;
   margin: 0 auto;
-  overflow-y: auto;
-  overflow-x: hidden;
-  -webkit-overflow-scrolling: touch;
+  min-height: 100vh;
+  padding-bottom: 70px;
 }
 input, select, textarea {
   font-family: inherit;
   font-size: 14px;
-  color: #1F2D38;
-  background: #F3F6F9;
-  border: 1px solid #DCE3E7;
+  color: var(--t1);
+  background: var(--inp);
+  border: 1px solid var(--inp-bdr);
   border-radius: 8px;
-  padding: 10px 12px;
+  padding: 9px 10px;
   outline: none;
+  width: auto;
 }
-
-input, textarea { -webkit-appearance: none; appearance: none; }
-input::placeholder, textarea::placeholder { color: #9AA6B0; }
-input:focus, select:focus, textarea:focus { border-color: #0578A6; }
-select { cursor: pointer; }
-option { background: #FFFFFF; color: #1F2D38; }
-
+input::placeholder, textarea::placeholder { color: var(--t4); }
+input:focus, select:focus, textarea:focus { border-color: #0AAEE8; }
+option { background: var(--inp); color: var(--t1); }
 button {
   font-family: inherit;
   font-size: 14px;
-  color: #1F2D38;
-  background: #E7EEF2;
-  border: 1px solid #DCE3E7;
+  cursor: pointer;
+  color: var(--t1);
+  background: var(--alt);
+  border: 1px solid var(--bdr);
   border-radius: 8px;
   padding: 9px 12px;
-  cursor: pointer;
 }
-
-::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #B9C4CC; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 4px; }
