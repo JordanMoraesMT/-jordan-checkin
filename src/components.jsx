@@ -54,7 +54,7 @@ const SRC_={"Em Dia":S.ok,"Momento de Recompra":S.gold,"Atrasado":S.dng};
 const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,onQuick,onInfo,ldId,plocs,lastVisit,lastOrder,nearRoad,rfvInfo}){
   const isA=active?.orgId===org.id;const a=org.addr||{};const addr=[a.street,a.number].filter(Boolean).join(", ");const loc=[a.district,a.city_name||a.city,a.state].filter(Boolean).join(" · ");
   const catColor=CC[org.cat]||S.ts;
-  return(<div id={"org-"+org.id} style={{background:isA?S.cl:S.card,border:`${isA?2:1}px solid ${isA?S.pri:S.brd}`,borderRadius:12,padding:"12px 14px"}}>
+  return(<div id={"org-"+org.id} style={{background:isA?S.cl:S.card,border:`${isA?2:1}px solid ${isA?S.pri:S.brd}`,borderRadius:12,padding:"12px 14px",boxShadow:S.shadow}}>
     <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
       <div style={{flex:1,minWidth:0}}>
         <p style={{fontWeight:500,fontSize:14,margin:"0 0 2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{plocs[org.id]?<span style={{color:S.ok,fontSize:10,marginRight:4}}>●</span>:null}{org.name||org.nickname}</p>
