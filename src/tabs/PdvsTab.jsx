@@ -4,11 +4,12 @@ import { MapPin, Trophy } from "lucide-react";
 import { PG, toLocalDate, todayLocal, CATS, CC, geoEstimate, S, fD, fDS, hav, agF, gps, roadKm, csv, fixMojibake, strip } from "../lib";
 import { OrgCard } from "../components";
 
-function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,focusReq,rfv}){
+function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,focusReq,rfv,excl}){
   const[search,setSearch]=useState("");const[catFilters,setCatFilters]=useState([]);const[cityFilter,setCityFilter]=useState("Todas");const[stateFilter,setStateFilter]=useState("Todos");const[segFilter,setSegFilter]=useState("Todos");const[prodFilter,setProdFilter]=useState("Todos");const[ownerFilter,setOwnerFilter]=useState("Todos");const[grupoFilter,setGrupoFilter]=useState("Todos");
   const[visitMode,setVisitMode]=useState("all");const[visitFrom,setVisitFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return toLocalDate(d);});const[visitTo,setVisitTo]=useState(todayLocal);
   const[nearMe,setNearMe]=useState(null);const[nearLoading,setNearLoading]=useState(false);const[nearRoad,setNearRoad]=useState({});const[sortMode,setSortMode]=useState("alpha");
   const[vc,setVc]=useState(PG);
+  const[fRfv,setFRfv]=useState("");const[fAbc,setFAbc]=useState("");const[fSr,setFSr]=useState("");const[fInd,setFInd]=useState("");
   // Matriz RFV consolidada (D1): resolve por CNPJ (normalizado) ou org_id
   const rfvDe=useCallback(o=>{if(!rfv)return null;const k=(o.cnpj||"").replace(/\D/g,"");if(k&&rfv.byCnpj[k.padStart(14,"0")])return rfv.byCnpj[k.padStart(14,"0")];return rfv.byOrg[o.id]||null;},[rfv]);
   const cities=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const c=o.addr?.city_name||o.addr?.city;if(c)s.add(c);});return["Todas",...[...s].sort()];},[orgs]);
@@ -36,7 +37,8 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
     if(visitMode==="not_visited"){list=list.filter(o=>{const vl=visitsByOrg[o.id];if(!vl)return true;return !vl.some(v=>{const d=toLocalDate(v.time);return d>=visitFrom&&d<=visitTo;});});
       // Sem visita: oldest first (most neglected on top)
       list=list.sort((a,b)=>{const la=lastVisits[a.id]?.time||"0";const lb=lastVisits[b.id]?.time||"0";return la.localeCompare(lb);});}
-    if(search.trim()){const q=search.toLowerCase().replace(/[.\-\/]/g,"");list=list.filter(o=>[o.name,o.nickname,o.legalName,o.cnpj?.replace(/[.\-\/]/g,""),o.addr?.city,o.addr?.city_name,o.addr?.district,o.addr?.state,o.cat,o.sector,o.products,o.people].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g,"").includes(q));}
+    if(fRfv||fAbc||fSr||fInd){list=list.filter(o=>{const r=rfvDe(o);if(!r)return false;if(fRfv&&r.rfv!==fRfv)return false;if(fAbc&&r.abc!==fAbc)return false;if(fSr&&r.status!==fSr)return false;if(fInd&&!(r.inds||"").split(",").includes(fInd))return false;return true;});}
+    if(search.trim()){const q=search.toLowerCase().replace(/[.\-\/]/g,"");const casa=o=>[o.name,o.nickname,o.legalName,o.cnpj?.replace(/[.\-\/]/g,""),o.addr?.city,o.addr?.city_name,o.addr?.district,o.addr?.state,o.cat,o.sector,o.products,o.people].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g,"").includes(q);list=[...list.filter(casa),...(excl||[]).filter(casa)];/* v19: excluídos aparecem SÓ na busca */}
     if(sortMode==="near"&&nearMe){
       const withGPS=list.filter(o=>plocs[o.id]).map(o=>({...o,dist:hav(nearMe.lat,nearMe.lng,plocs[o.id].lat,plocs[o.id].lng),distType:"gps"}));
       const noGPS=list.filter(o=>!plocs[o.id]).map(o=>{const geo=geoEstimate(o);if(geo)return{...o,dist:hav(nearMe.lat,nearMe.lng,geo[0],geo[1]),distType:"bairro"};return{...o,dist:9999,distType:"sem_ref"};});
@@ -52,7 +54,7 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
       }).map(x=>x.o);
     }else{list=list.sort((a,b)=>(a.name||"").localeCompare(b.name||""));}
     return list;
-  },[orgs,search,catFilters,cityFilter,stateFilter,segFilter,prodFilter,ownerFilter,grupoFilter,visitMode,visitFrom,visitTo,visitsByOrg,lastVisits,nearMe,plocs,sortMode,rfvDe]);
+  },[orgs,search,catFilters,cityFilter,stateFilter,segFilter,prodFilter,ownerFilter,grupoFilter,visitMode,visitFrom,visitTo,visitsByOrg,lastVisits,nearMe,plocs,sortMode,rfvDe,fRfv,fAbc,fSr,fInd,excl]);
 
   useEffect(()=>{
     if(sortMode!=="near"||!nearMe||!fo.length)return;
@@ -73,7 +75,7 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
         <input value={search} onChange={e=>{setSearch(e.target.value);setVc(PG);}} placeholder="Nome, razão social, CNPJ, cidade, segmento..." style={{width:"100%",marginBottom:6}}/>
         <div style={{display:"flex",gap:3,marginBottom:6,overflowX:"auto",paddingBottom:2,flexWrap:"wrap"}}>{CATS.map(c=><button key={c} onClick={()=>toggleCat(c)} style={{padding:"3px 8px",fontSize:10,whiteSpace:"nowrap",border:catFilters.includes(c)?`2px solid ${CC[c]||S.pri}`:`1px solid ${S.brd}`,background:catFilters.includes(c)?`${CC[c]}22`:"transparent",color:catFilters.includes(c)?CC[c]||S.pri:S.ts,borderRadius:20,fontWeight:catFilters.includes(c)?600:400}}>{c}</button>)}
           <button onClick={()=>setCatFilters([])} style={{padding:"3px 8px",fontSize:10,border:`1px solid ${S.brd}`,color:!catFilters.length?S.pl:S.td,borderRadius:20,background:!catFilters.length?S.pri+"22":"transparent"}}>Todos</button>
-          <button onClick={()=>{setCatFilters([]);setCityFilter("Todas");setStateFilter("Todos");setSegFilter("Todos");setProdFilter("Todos");setOwnerFilter("Todos");setGrupoFilter("Todos");setVisitMode("all");setSearch("");setSortMode("alpha");setNearMe(null);setVc(PG);}} style={{padding:"3px 8px",fontSize:10,border:`1px solid ${S.dng}44`,color:S.dng,borderRadius:20,background:"transparent"}}>✕ Limpar</button>
+          <button onClick={()=>{setCatFilters([]);setCityFilter("Todas");setStateFilter("Todos");setSegFilter("Todos");setProdFilter("Todos");setOwnerFilter("Todos");setGrupoFilter("Todos");setVisitMode("all");setSearch("");setSortMode("alpha");setNearMe(null);setFRfv("");setFAbc("");setFSr("");setFInd("");setVc(PG);}} style={{padding:"3px 8px",fontSize:10,border:`1px solid ${S.dng}44`,color:S.dng,borderRadius:20,background:"transparent"}}>✕ Limpar</button>
         </div>
         <div style={{display:"flex",gap:4,marginBottom:4}}>
           <select value={stateFilter} onChange={e=>{setStateFilter(e.target.value);setCityFilter("Todas");setVc(PG);}} style={{width:60,fontSize:11,padding:"4px"}}>{states.map(s=><option key={s} value={s}>{s==="Todos"?"UF":s}</option>)}</select>
@@ -86,6 +88,12 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
         <div style={{display:"flex",gap:4,marginBottom:8}}>
           <select value={ownerFilter} onChange={e=>{setOwnerFilter(e.target.value);setVc(PG);}} style={{flex:1,fontSize:11,padding:"4px"}}>{owners.map(o=><option key={o} value={o}>{o==="Todos"?"Responsável":o}</option>)}</select>
           <select value={grupoFilter} onChange={e=>{setGrupoFilter(e.target.value);setVc(PG);}} style={{flex:1,fontSize:11,padding:"4px"}}>{grupos.map(g=><option key={g} value={g}>{g==="Todos"?"Grupo":g}</option>)}</select>
+        </div>
+        <div style={{display:"flex",gap:4,marginBottom:8}}>
+          <select value={fRfv} onChange={e=>{setFRfv(e.target.value);setVc(PG);}} style={{flex:1,fontSize:11,padding:"4px"}}><option value="">Classe RFV</option>{["Campeão","Leal","Em Crescimento","Em Risco","Inativo"].map(x=><option key={x} value={x}>{x}</option>)}</select>
+          <select value={fAbc} onChange={e=>{setFAbc(e.target.value);setVc(PG);}} style={{width:70,fontSize:11,padding:"4px"}}><option value="">ABC</option>{["A","B","C"].map(x=><option key={x} value={x}>{x}</option>)}</select>
+          <select value={fSr} onChange={e=>{setFSr(e.target.value);setVc(PG);}} style={{flex:1,fontSize:11,padding:"4px"}}><option value="">Recompra</option>{["Em Dia","Momento de Recompra","Atrasado"].map(x=><option key={x} value={x}>{x}</option>)}</select>
+          <select value={fInd} onChange={e=>{setFInd(e.target.value);setVc(PG);}} style={{flex:1,fontSize:11,padding:"4px"}}><option value="">Indústria</option>{["TRAMONTINA","PADO","Zagonel","Ruvolo","Santana","Festcolor","Plastilit","Hiper Têxtil"].map(x=><option key={x} value={x}>{x}</option>)}</select>
         </div>
         {/* Visit date range filter */}
         <div style={{display:"flex",gap:3,marginBottom:4}}>

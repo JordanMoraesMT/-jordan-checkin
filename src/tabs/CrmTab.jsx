@@ -3,7 +3,7 @@
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar } from "lucide-react";
-import { S, CC, fT, fD, gps, postTask, sL, sS, agF, CATS } from "../lib";
+import { S, CC, fT, fD, gps, postTask, sL, sS, agF, CATS, crmFire, csv } from "../lib";
 import { AgendaTab } from "./AgendaTab";
 
 const DASH = "https://dashboard.jordanmt.com";
@@ -159,7 +159,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const [agTipo, setAgTipo] = useState("VISITA"); const [agTxt, setAgTxt] = useState("");
   const [agData, setAgData] = useState(""); const [agHora, setAgHora] = useState("09:00"); const [agLo, setAgLo] = useState(false);
   const salvaTarefa = async () => { if (!agTxt.trim() || !agData) { alert("Preencha descrição e data."); return; } setAgLo(true);
-    try { await agF(`/organizations/${org.id}/tasks`, token, { method: "POST", body: JSON.stringify({ text: agTxt, type: agTipo, done: false, due_date: `${agData}T${agHora}:00-04:00` }) });
+    try { const rT = await agF(`/organizations/${org.id}/tasks`, token, { method: "POST", body: JSON.stringify({ text: agTxt, type: agTipo, done: false, due_date: `${agData}T${agHora}:00-04:00` }) });
+      crmFire(token, "/api/crm/atividades", { org_id: org.id, cnpj: cnpjN || null, org_nome: org.nickname || org.name, tipo: agTipo, texto: agTxt, origem: "tarefa", due_em: `${agData}T${agHora}:00-04:00`, agendor_id: rT?.data?.id || null });
       alert("Tarefa agendada no Agendor!"); setAgTask(false); setAgTxt(""); setAgData("");
     } catch (e) { alert("Erro: " + (e.message || e)); } setAgLo(false); };
   const catCor = CC[org.cat] || S.ts;
@@ -363,20 +364,30 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
 //  tabela Nome | Categoria | Responsável | E-mail | Telefone |
 //  Ranking | Editar, com busca, filtros e "Exibindo X de N".
 // ─────────────────────────────────────────────────────────────
-function EmpresasView({ allOrgs, onOpen, onEdit, onNovaEmpresa }) {
+function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
+  const rfvDe = (o) => { if (!rfv) return null; const k = soDig(o.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; };
+  const PREF = "jc:empresas-prefs";
+  const p0 = sL(PREF, {});
   const [q, setQ] = useState("");
-  const [fCat, setFCat] = useState(""); const [fResp, setFResp] = useState("");
+  const [fCat, setFCat] = useState(p0.fCat || ""); const [fResp, setFResp] = useState(p0.fResp || "");
+  const [fRfv, setFRfv] = useState(p0.fRfv || ""); const [fAbc, setFAbc] = useState(p0.fAbc || ""); const [fSr, setFSr] = useState(p0.fSr || ""); const [fCid, setFCid] = useState(p0.fCid || "");
+  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fAbc, fSr, fCid }); }, [fCat, fResp, fRfv, fAbc, fSr, fCid]);
   const [ordem, setOrdem] = useState(1); // 1 = A→Z, -1 = Z→A
   const [vc, setVc] = useState(60);
   const resps = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
+  const cidades = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const c = o.addr?.city_name || o.addr?.city; if (c) s.add(c); }); return [...s].sort(); }, [allOrgs]);
   const lista = useMemo(() => {
     let l = allOrgs || [];
+    if (q.trim()) { const n = q.toLowerCase().replace(/[.\-\/]/g, "");
+      const casa = o => [o.name, o.nickname, o.legalName, soDig(o.cnpj), o.addr?.city_name, o.email, o.phone].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(n);
+      l = [ ...l.filter(casa), ...(excl || []).filter(casa) ]; /* excluídos aparecem SÓ quando buscados */ }
     if (fCat) l = l.filter(o => o.cat === fCat);
     if (fResp) l = l.filter(o => o.owner === fResp);
-    if (q.trim()) { const n = q.toLowerCase().replace(/[.\-\/]/g, "");
-      l = l.filter(o => [o.name, o.nickname, o.legalName, soDig(o.cnpj), o.addr?.city_name, o.email, o.phone].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(n)); }
+    if (fCid) l = l.filter(o => (o.addr?.city_name || o.addr?.city) === fCid);
+    if (fRfv || fAbc || fSr) l = l.filter(o => { const r = rfvDe(o); if (!r) return false;
+      if (fRfv && r.rfv !== fRfv) return false; if (fAbc && r.abc !== fAbc) return false; if (fSr && r.status !== fSr) return false; return true; });
     return [...l].sort((a, b) => ordem * (a.nickname || a.name || "").localeCompare(b.nickname || b.name || ""));
-  }, [allOrgs, q, fCat, fResp, ordem]);
+  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fAbc, fSr, ordem, rfv]);
   const th = { textAlign: "left", padding: "8px 10px", fontSize: 10.5, fontWeight: 800, color: S.ts, textTransform: "uppercase", letterSpacing: .4, whiteSpace: "nowrap", borderBottom: `2px solid ${S.brd}` };
   const td = { padding: "9px 10px", fontSize: 12, color: S.txt, borderBottom: `1px solid ${S.cl}`, whiteSpace: "nowrap", verticalAlign: "middle" };
   return (<div>
@@ -396,11 +407,28 @@ function EmpresasView({ allOrgs, onOpen, onEdit, onNovaEmpresa }) {
         <option value="">Responsável: todos</option>{resps.map(r => <option key={r} value={r}>{r}</option>)}
       </select>
     </div>
+    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+      <select value={fRfv} onChange={e => { setFRfv(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
+        <option value="">Classe RFV: todas</option>{["Campeão","Leal","Em Crescimento","Em Risco","Inativo"].map(x => <option key={x} value={x}>{x}</option>)}
+      </select>
+      <select value={fAbc} onChange={e => { setFAbc(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
+        <option value="">Curva ABC: todas</option>{["A","B","C"].map(x => <option key={x} value={x}>{x}</option>)}
+      </select>
+    </div>
+    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+      <select value={fSr} onChange={e => { setFSr(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
+        <option value="">Status Recompra: todos</option>{["Em Dia","Momento de Recompra","Atrasado"].map(x => <option key={x} value={x}>{x}</option>)}
+      </select>
+      <select value={fCid} onChange={e => { setFCid(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
+        <option value="">Cidade: todas</option>{cidades.map(x => <option key={x} value={x}>{x}</option>)}
+      </select>
+      <button onClick={() => { setFCat(""); setFResp(""); setFRfv(""); setFAbc(""); setFSr(""); setFCid(""); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
+    </div>
     <div style={{ overflowX: "auto", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: S.shadow }}>
       <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 720 }}>
         <thead><tr>
           <th style={{ ...th, cursor: "pointer" }} onClick={() => setOrdem(o => -o)}>Nome {ordem === 1 ? "▲" : "▼"}</th>
-          <th style={th}>Categoria</th><th style={th}>Responsável</th><th style={th}>E-mail</th><th style={th}>Telefone</th><th style={th}>Ranking</th><th style={th}></th>
+          <th style={th}>Categoria</th><th style={th}>RFV</th><th style={th}>Responsável</th><th style={th}>E-mail</th><th style={th}>Telefone</th><th style={th}>Ranking</th><th style={th}></th>
         </tr></thead>
         <tbody>
           {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id}>
@@ -410,6 +438,7 @@ function EmpresasView({ allOrgs, onOpen, onEdit, onNovaEmpresa }) {
                 <span style={{ display: "block", fontSize: 10.5, color: S.td }}>{[o.addr?.city_name || o.addr?.city, o.cnpj].filter(Boolean).join(" · ")}</span>
               </button></td>
             <td style={td}>{o.cat && <span style={{ fontSize: 10.5, color: "#fff", background: cor, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{o.cat}</span>}</td>
+            <td style={td}>{(() => { const r = rfvDe(o); if (!r) return "—"; const rc = { "Campeão": S.gold, "Leal": S.ok, "Em Crescimento": S.pri, "Em Risco": "#E76F51", "Inativo": S.td }[r.rfv] || S.ts; return <span style={{ fontSize: 10.5, color: rc, border: `1px solid ${rc}66`, background: rc + "18", padding: "2px 7px", borderRadius: 4, fontWeight: 700 }}>{r.rfv}</span>; })()}</td>
             <td style={{ ...td, fontSize: 11.5 }}>{o.owner || "—"}</td>
             <td style={{ ...td, fontSize: 11.5 }}>{o.email ? <a href={`mailto:${o.email}`} style={{ color: S.pl, textDecoration: "none" }}>{o.email}</a> : "—"}</td>
             <td style={{ ...td, fontSize: 11.5 }}>{o.phone ? <a href={`https://wa.me/55${String(o.phone).replace(/\D/g, "")}`} target="_blank" rel="noreferrer" style={{ color: S.ok, textDecoration: "none", fontWeight: 600 }}>{o.phone}</a> : "—"}</td>
@@ -419,6 +448,9 @@ function EmpresasView({ allOrgs, onOpen, onEdit, onNovaEmpresa }) {
         </tbody>
       </table>
     </div>
+    <button onClick={() => { const rows = [["Nome","CNPJ","Cidade","Categoria","Classe RFV","Curva ABC","Status Recompra","Responsável","E-mail","Telefone","Ranking"]];
+      lista.forEach(o => { const r = rfvDe(o); rows.push([o.nickname || o.name, o.cnpj || "", o.addr?.city_name || o.addr?.city || "", o.cat || "", r ? r.rfv : "", r ? r.abc : "", r ? r.status : "", o.owner || "", o.email || "", o.phone || "", o.ranking || ""]); });
+      csv(rows, `empresas-${new Date().toISOString().slice(0,10)}.csv`); }} style={{ width: "100%", marginTop: 10, padding: 12, fontSize: 13, background: S.pri + "22", border: `1px solid ${S.pri}55`, color: S.pl, fontWeight: 600, borderRadius: 10 }}>📊 Exportar {lista.length} empresas (Excel)</button>
     {vc < lista.length && <button onClick={() => setVc(v => v + 60)} style={{ width: "100%", marginTop: 10, padding: 12, fontSize: 13, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.txt, cursor: "pointer" }}>Ver mais ({lista.length - vc})</button>}
   </div>);
 }
@@ -426,7 +458,7 @@ function EmpresasView({ allOrgs, onOpen, onEdit, onNovaEmpresa }) {
 // ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa }) {
+export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl }) {
   const [secao, setSecao] = useState("inicio"); // inicio | tarefas | empresas (menu fiel ao Agendor)
   const [sel, setSel] = useState(null);
   const [q, setQ] = useState("");
@@ -445,8 +477,9 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
   useEffect(() => { if (visible && token) carregaFeed(); }, [visible, fTipo, fUser, fDias]);
 
   const achados = useMemo(() => { const t = q.trim().toLowerCase(); if (t.length < 2) return [];
-    return (allOrgs || []).filter(o => (o.nickname || o.name || "").toLowerCase().includes(t) || soDig(o.cnpj).includes(soDig(t)) || (o.addr?.city_name || "").toLowerCase().includes(t)).slice(0, 12);
-  }, [q, allOrgs]);
+    const casa = o => (o.nickname || o.name || "").toLowerCase().includes(t) || soDig(o.cnpj).includes(soDig(t)) || (o.addr?.city_name || "").toLowerCase().includes(t);
+    return [ ...(allOrgs || []).filter(casa), ...(excl || []).filter(casa) ].slice(0, 12);
+  }, [q, allOrgs, excl]);
 
   const abrePorFeed = (a) => { const o = (allOrgs || []).find(x => x.id === a.org_id) || (a.cnpj ? (allOrgs || []).find(x => soDig(x.cnpj) === a.cnpj) : null); if (o) { setSel(o); setQ(""); } else alert("Cliente não está na base sincronizada. Sincronize os clientes."); };
 
@@ -460,7 +493,7 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
       {secoes.map(([id, l]) => <button key={id} onClick={() => setSecao(id)} style={{ flex: 1, border: "none", background: secao === id ? S.pri : "transparent", borderRadius: 8, padding: "9px 2px", fontSize: 12.5, fontWeight: secao === id ? 700 : 500, color: secao === id ? "#fff" : S.ts, cursor: "pointer" }}>{l}</button>)}
     </div>
     {secao === "tarefas" && <AgendaTab visible={true} token={token} user={user} allOrgs={allOrgs} />}
-    {secao === "empresas" && <EmpresasView allOrgs={allOrgs} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
+    {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
     {secao === "inicio" && <div>
     {/* Busca de cliente */}
     <div style={{ position: "relative", marginBottom: 10 }}>

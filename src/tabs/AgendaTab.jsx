@@ -1,6 +1,6 @@
 // TeamCheck — aba AgendaTab
 import { useState, useEffect, useMemo, useRef } from "react";
-import { API, toLocalDate, todayLocal, TYPES, S, fT, fD, agF } from "../lib";
+import { API, toLocalDate, todayLocal, TYPES, S, fT, fD, agF, crmFire } from "../lib";
 import { LB } from "../components";
 
 function AgendaTab({visible,token,user,allOrgs}){
@@ -28,9 +28,9 @@ function AgendaTab({visible,token,user,allOrgs}){
     // Agendor API ignores done:true on PUT — use DELETE + POST activity
     await agF(`/organizations/${t.orgId}/tasks/${t.id}`,token,{method:"DELETE"});
     await agF(`/organizations/${t.orgId}/tasks`,token,{method:"POST",body:JSON.stringify({text:"[CONCLUIDA] "+t.text,type:t.type,done:true})});
-    setTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true,finished:new Date().toISOString()}:x));setErr("Finalizada!");
+    crmFire(token,"/api/crm/tarefa-concluir",{agendor_id:t.id},"PUT");setTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true,finished:new Date().toISOString()}:x));setErr("Finalizada!");
   }catch(e){console.warn("markDone:",e);alert("Erro: "+e.message);}};
-  const addTask=async()=>{if(!addOrg||!addText.trim())return;setAddLo(true);try{const body={text:addText,type:addType,done:false};if(addDate)body.due_date=`${addDate}T${addTime}:00-04:00`;await agF(`/organizations/${addOrg.id}/tasks`,token,{method:"POST",body:JSON.stringify(body)});setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
+  const addTask=async()=>{if(!addOrg||!addText.trim())return;setAddLo(true);try{const body={text:addText,type:addType,done:false};if(addDate)body.due_date=`${addDate}T${addTime}:00-04:00`;const rT=await agF(`/organizations/${addOrg.id}/tasks`,token,{method:"POST",body:JSON.stringify(body)});crmFire(token,"/api/crm/atividades",{org_id:addOrg.id,cnpj:(addOrg.cnpj||"").replace(/\D/g,"")||null,org_nome:addOrg.nickname||addOrg.name,tipo:addType,texto:addText,origem:"tarefa",due_em:body.due_date||null,agendor_id:rT?.data?.id||null});setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
   // Filters
   const today=todayLocal();const dow=new Date().getDay();const weekStart=toLocalDate(new Date(Date.now()-dow*86400000));const weekEnd=toLocalDate(new Date(Date.now()+(6-dow)*86400000));
   const filtered=useMemo(()=>{const doneCutoff=toLocalDate(new Date(Date.now()-30*86400000));let list=tasks.filter(t=>filter==="pending"?!t.done:(t.done&&((t.finished||t.created||"").slice(0,10)>=doneCutoff)));
