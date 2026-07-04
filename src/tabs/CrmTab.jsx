@@ -2,8 +2,9 @@
 // CRM próprio: histórico de atividades, contatos, fotos/arquivos da loja e GPS.
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation } from "lucide-react";
-import { S, CC, fT, fD, gps, postTask, sL, sS } from "../lib";
+import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar } from "lucide-react";
+import { S, CC, fT, fD, gps, postTask, sL, sS, agF, CATS } from "../lib";
+import { AgendaTab } from "./AgendaTab";
 
 const DASH = "https://dashboard.jordanmt.com";
 const TIPOS = [
@@ -153,6 +154,14 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       carregaInfo(); alert(`GPS salvo (±${g.acc}m).`);
     } catch (e) { alert("GPS: " + (e.message || e)); } };
 
+  // Agendar tarefa (fiel ao Agendor): cria tarefa com prazo no Agendor via proxy
+  const [agTask, setAgTask] = useState(false);
+  const [agTipo, setAgTipo] = useState("VISITA"); const [agTxt, setAgTxt] = useState("");
+  const [agData, setAgData] = useState(""); const [agHora, setAgHora] = useState("09:00"); const [agLo, setAgLo] = useState(false);
+  const salvaTarefa = async () => { if (!agTxt.trim() || !agData) { alert("Preencha descrição e data."); return; } setAgLo(true);
+    try { await agF(`/organizations/${org.id}/tasks`, token, { method: "POST", body: JSON.stringify({ text: agTxt, type: agTipo, done: false, due_date: `${agData}T${agHora}:00-04:00` }) });
+      alert("Tarefa agendada no Agendor!"); setAgTask(false); setAgTxt(""); setAgData("");
+    } catch (e) { alert("Erro: " + (e.message || e)); } setAgLo(false); };
   const catCor = CC[org.cat] || S.ts;
   // Matriz RFV consolidada (mesma régua do Dashboard)
   const rfvInfo = useMemo(() => { if (!rfv) return null; const k = soDig(org.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[org.id] || null; }, [rfv, org.id, org.cnpj]);
@@ -160,6 +169,16 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const SRC_ = { "Em Dia": S.ok, "Momento de Recompra": S.gold, "Atrasado": S.dng };
   const ultimaVisita = useMemo(() => (visits || []).filter(v => v.orgId === org.id && v.checkoutTime).sort((a, b) => b.checkinTime.localeCompare(a.checkinTime))[0], [visits, org.id]);
   const subs = [["hist", "Histórico"], ["ctt", "Contatos"], ["arq", "Fotos & Arquivos"], ["dados", "Dados"]];
+  const infoContato = (
+    <Crd>
+      <p style={{ margin: "0 0 8px", fontSize: 12.5, fontWeight: 800, color: S.txt }}>Informações para contato</p>
+      {(org.addr?.street||org.addr?.city_name) && <p style={{ margin: "0 0 4px", fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"flex-start" }}><MapPin size={13} style={{marginTop:2, flexShrink:0}}/>{[ [org.addr?.street, org.addr?.number].filter(Boolean).join(", "), org.addr?.district, [org.addr?.city_name||org.addr?.city, org.addr?.state].filter(Boolean).join("/") ].filter(Boolean).join(" · ")}</p>}
+      {org.phone && <p style={{ margin: "0 0 4px", fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"center" }}><Phone size={13}/>{org.phone}
+        <a href={`https://wa.me/55${String(org.phone).replace(/\D/g,"")}`} target="_blank" rel="noreferrer" style={{color:S.ok, fontWeight:700, textDecoration:"none"}}>WhatsApp</a>
+        <a href={`tel:${String(org.phone).replace(/\D/g,"")}`} style={{color:S.pl, fontWeight:700, textDecoration:"none"}}>Ligar</a></p>}
+      {org.email && <p style={{ margin: 0, fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"center" }}><Mail size={13}/><a href={`mailto:${org.email}`} style={{color:S.pl, textDecoration:"none"}}>{org.email}</a></p>}
+      {!org.phone && !org.email && !(org.addr?.street||org.addr?.city_name) && <p style={{margin:0, fontSize:12, color:S.td}}>Sem contato no cadastro — use Editar para preencher.</p>}
+    </Crd>);
 
   return (<div>
     <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: S.pri, fontSize: 13, fontWeight: 700, padding: "2px 0 10px", cursor: "pointer" }}><ArrowLeft size={16} />Voltar ao CRM</button>
@@ -169,6 +188,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 17, fontWeight: 800, color: S.txt, lineHeight: 1.2 }}>{org.nickname || org.name}</p>
+          {(org.ranking||0)>0 && <p style={{ margin: "2px 0 0", fontSize: 12, color: S.gold, letterSpacing: 1 }}>{"★".repeat(org.ranking)}{"☆".repeat(Math.max(0,5-org.ranking))}</p>}
           {org.legalName && <p style={{ margin: "2px 0 0", fontSize: 11.5, color: S.ts }}>{org.legalName}</p>}
           <p style={{ margin: "4px 0 0", fontSize: 12, color: S.ts, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
             <MapPin size={12} />{org.addr?.city_name || org.addr?.city || "—"}{org.addr?.state ? "/" + org.addr.state : ""}
@@ -180,6 +200,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
           {org.cat && <span style={{ background: catCor + "22", color: catCor, border: `1px solid ${catCor}55`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{org.cat}</span>}
           {rfvInfo && <span style={{ background: (RFVC[rfvInfo.rfv] || S.ts) + "18", color: RFVC[rfvInfo.rfv] || S.ts, border: `1px solid ${(RFVC[rfvInfo.rfv] || S.ts)}55`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>RFV: {rfvInfo.rfv}</span>}
           {rfvInfo && rfvInfo.status && <span style={{ fontSize: 10, color: SRC_[rfvInfo.status] || S.ts, whiteSpace: "nowrap" }}>{rfvInfo.status}</span>}
+          <button onClick={() => setAgTask(v=>!v)} style={{ display:"flex", alignItems:"center", gap:5, background:S.pri, color:"#fff", border:"none", borderRadius:20, padding:"5px 11px", fontSize:11, fontWeight:700, cursor:"pointer" }}><Calendar size={13}/>Agendar tarefa</button>
         </div>
       </div>
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
@@ -204,6 +225,21 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
 
     {/* Sub-abas */}
     <div style={{ display: "flex", gap: 3, marginBottom: 12, background: S.cl, borderRadius: 8, padding: 3 }}>
+    {agTask && <Crd style={{ borderColor: S.pri + "66" }}>
+      <p style={{ margin: "0 0 8px", fontSize: 12.5, fontWeight: 800, color: S.txt }}>Agendar tarefa</p>
+      <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
+        {TIPOS.filter(x=>x.id!=="NOTA").map(x => <Chip key={x.id} on={agTipo===x.id} color={x.c} onClick={()=>setAgTipo(x.id)}>{x.l}</Chip>)}
+      </div>
+      <textarea value={agTxt} onChange={e=>setAgTxt(e.target.value)} placeholder="Descrição da tarefa..." rows={2} style={{ ...inp, resize: "vertical", marginBottom: 8 }}/>
+      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+        <input type="date" value={agData} onChange={e=>setAgData(e.target.value)} style={{ ...inp, flex: 2 }}/>
+        <input type="time" value={agHora} onChange={e=>setAgHora(e.target.value)} style={{ ...inp, flex: 1 }}/>
+      </div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <button onClick={salvaTarefa} disabled={agLo} style={{ flex: 1, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{agLo ? "Salvando..." : "Agendar no Agendor"}</button>
+        <button onClick={()=>setAgTask(false)} style={{ background: "transparent", color: S.dng, border: `1px solid ${S.dng}55`, borderRadius: 10, padding: "10px 14px", fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+      </div>
+    </Crd>}
       {subs.map(([id, l]) => <button key={id} onClick={() => setSub(id)} style={{ flex: 1, border: "none", background: sub === id ? S.pri : "transparent", borderRadius: 6, padding: "8px 2px", fontSize: 11.5, fontWeight: sub === id ? 700 : 400, color: sub === id ? "#fff" : S.ts, cursor: "pointer" }}>{l}</button>)}
     </div>
 
@@ -298,6 +334,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
 
     {/* ── DADOS ── */}
     {sub === "dados" && <div>
+    {infoContato}
       <Crd>
         <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 800, color: S.txt }}>Cadastro</p>
         {[["Razão social", org.legalName], ["CNPJ", org.cnpj && fCnpj(org.cnpj)], ["Categoria", org.cat], ["Setor", org.sector], ["Responsável", org.owner], ["Grupo", org.grupo], ["Marcas", org.products],
@@ -322,9 +359,75 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
 }
 
 // ─────────────────────────────────────────────────────────────
+//  EMPRESAS — relação de clientes fiel à tela do Agendor:
+//  tabela Nome | Categoria | Responsável | E-mail | Telefone |
+//  Ranking | Editar, com busca, filtros e "Exibindo X de N".
+// ─────────────────────────────────────────────────────────────
+function EmpresasView({ allOrgs, onOpen, onEdit, onNovaEmpresa }) {
+  const [q, setQ] = useState("");
+  const [fCat, setFCat] = useState(""); const [fResp, setFResp] = useState("");
+  const [ordem, setOrdem] = useState(1); // 1 = A→Z, -1 = Z→A
+  const [vc, setVc] = useState(60);
+  const resps = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
+  const lista = useMemo(() => {
+    let l = allOrgs || [];
+    if (fCat) l = l.filter(o => o.cat === fCat);
+    if (fResp) l = l.filter(o => o.owner === fResp);
+    if (q.trim()) { const n = q.toLowerCase().replace(/[.\-\/]/g, "");
+      l = l.filter(o => [o.name, o.nickname, o.legalName, soDig(o.cnpj), o.addr?.city_name, o.email, o.phone].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(n)); }
+    return [...l].sort((a, b) => ordem * (a.nickname || a.name || "").localeCompare(b.nickname || b.name || ""));
+  }, [allOrgs, q, fCat, fResp, ordem]);
+  const th = { textAlign: "left", padding: "8px 10px", fontSize: 10.5, fontWeight: 800, color: S.ts, textTransform: "uppercase", letterSpacing: .4, whiteSpace: "nowrap", borderBottom: `2px solid ${S.brd}` };
+  const td = { padding: "9px 10px", fontSize: 12, color: S.txt, borderBottom: `1px solid ${S.cl}`, whiteSpace: "nowrap", verticalAlign: "middle" };
+  return (<div>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
+      <p style={{ margin: 0, fontSize: 12.5, color: S.ts }}>Exibindo <b style={{ color: S.txt }}>{Math.min(vc, lista.length)}</b> de <b style={{ color: S.txt }}>{lista.length}</b> empresas</p>
+      <button onClick={onNovaEmpresa} style={{ display: "flex", alignItems: "center", gap: 5, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}><Plus size={14}/>Adicionar empresa</button>
+    </div>
+    <div style={{ position: "relative", marginBottom: 8 }}>
+      <Search size={15} color={S.td} style={{ position: "absolute", left: 12, top: 12 }} />
+      <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Buscar por nome, CNPJ, cidade, e-mail ou telefone..." style={{ ...inp, paddingLeft: 34 }} />
+    </div>
+    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+      <select value={fCat} onChange={e => { setFCat(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
+        <option value="">Categoria: todas</option>{CATS.map(c => <option key={c} value={c}>{c}</option>)}
+      </select>
+      <select value={fResp} onChange={e => { setFResp(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
+        <option value="">Responsável: todos</option>{resps.map(r => <option key={r} value={r}>{r}</option>)}
+      </select>
+    </div>
+    <div style={{ overflowX: "auto", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: S.shadow }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 720 }}>
+        <thead><tr>
+          <th style={{ ...th, cursor: "pointer" }} onClick={() => setOrdem(o => -o)}>Nome {ordem === 1 ? "▲" : "▼"}</th>
+          <th style={th}>Categoria</th><th style={th}>Responsável</th><th style={th}>E-mail</th><th style={th}>Telefone</th><th style={th}>Ranking</th><th style={th}></th>
+        </tr></thead>
+        <tbody>
+          {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id}>
+            <td style={{ ...td, maxWidth: 230, overflow: "hidden", textOverflow: "ellipsis" }}>
+              <button onClick={() => onOpen(o)} style={{ background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer" }}>
+                <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: S.pl }}>{o.nickname || o.name}</span>
+                <span style={{ display: "block", fontSize: 10.5, color: S.td }}>{[o.addr?.city_name || o.addr?.city, o.cnpj].filter(Boolean).join(" · ")}</span>
+              </button></td>
+            <td style={td}>{o.cat && <span style={{ fontSize: 10.5, color: "#fff", background: cor, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{o.cat}</span>}</td>
+            <td style={{ ...td, fontSize: 11.5 }}>{o.owner || "—"}</td>
+            <td style={{ ...td, fontSize: 11.5 }}>{o.email ? <a href={`mailto:${o.email}`} style={{ color: S.pl, textDecoration: "none" }}>{o.email}</a> : "—"}</td>
+            <td style={{ ...td, fontSize: 11.5 }}>{o.phone ? <a href={`https://wa.me/55${String(o.phone).replace(/\D/g, "")}`} target="_blank" rel="noreferrer" style={{ color: S.ok, textDecoration: "none", fontWeight: 600 }}>{o.phone}</a> : "—"}</td>
+            <td style={{ ...td, color: S.gold, fontSize: 11, letterSpacing: 1 }}>{(o.ranking || 0) > 0 ? "★".repeat(o.ranking) : "—"}</td>
+            <td style={td}><button onClick={() => onEdit(o)} title="Editar empresa" style={{ background: "transparent", border: `1px solid ${S.gold}66`, color: S.gold, borderRadius: 8, padding: "5px 8px", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={14}/></button></td>
+          </tr>); })}
+        </tbody>
+      </table>
+    </div>
+    {vc < lista.length && <button onClick={() => setVc(v => v + 60)} style={{ width: "100%", marginTop: 10, padding: 12, fontSize: 13, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.txt, cursor: "pointer" }}>Ver mais ({lista.length - vc})</button>}
+  </div>);
+}
+
+// ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv }) {
+export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa }) {
+  const [secao, setSecao] = useState("inicio"); // inicio | tarefas | empresas (menu fiel ao Agendor)
   const [sel, setSel] = useState(null);
   const [q, setQ] = useState("");
   const [feed, setFeed] = useState([]); const [ld, setLd] = useState(false); const [erro, setErro] = useState("");
@@ -350,7 +453,15 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
   if (!visible) return null;
   if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} />;
 
+  const secoes = [["inicio", "Início"], ["tarefas", "Tarefas"], ["empresas", "Empresas"]];
   return (<div>
+    {/* Menu do CRM — fiel ao topo do Agendor (Início | Tarefas | Empresas) */}
+    <div style={{ display: "flex", gap: 3, marginBottom: 12, background: S.cl, borderRadius: 10, padding: 3 }}>
+      {secoes.map(([id, l]) => <button key={id} onClick={() => setSecao(id)} style={{ flex: 1, border: "none", background: secao === id ? S.pri : "transparent", borderRadius: 8, padding: "9px 2px", fontSize: 12.5, fontWeight: secao === id ? 700 : 500, color: secao === id ? "#fff" : S.ts, cursor: "pointer" }}>{l}</button>)}
+    </div>
+    {secao === "tarefas" && <AgendaTab visible={true} token={token} user={user} allOrgs={allOrgs} />}
+    {secao === "empresas" && <EmpresasView allOrgs={allOrgs} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
+    {secao === "inicio" && <div>
     {/* Busca de cliente */}
     <div style={{ position: "relative", marginBottom: 10 }}>
       <Search size={16} color={S.td} style={{ position: "absolute", left: 12, top: 12 }} />
@@ -382,5 +493,6 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
     {erro && <Crd style={{ borderColor: S.dng + "66" }}><p style={{ margin: 0, fontSize: 12.5, color: S.dng }}>Erro ao carregar o feed: {erro}</p><p style={{ margin: "4px 0 0", fontSize: 11.5, color: S.ts }}>Verifique se o Dashboard está na v185+ (rotas CRM) e se você está logado.</p></Crd>}
     {!ld && !erro && !feed.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Sem atividades no período. Elas aparecem aqui a cada check-out, ligação, WhatsApp ou registro manual na tela do cliente.</p></Crd>}
     {feed.map(a => <AtvCard key={a.id} a={a} onOrg={abrePorFeed} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={async (x) => { if (!confirm("Excluir esta atividade do CRM?")) return; try { await crm(token, `/api/crm/atividades?id=${x.id}`, { method: "DELETE" }); setFeed(p => p.filter(y => y.id !== x.id)); } catch (e) { alert("Erro: " + e.message); } }} />)}
+  </div>}
   </div>);
 }
