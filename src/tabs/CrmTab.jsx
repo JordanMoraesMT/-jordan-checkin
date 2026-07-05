@@ -418,10 +418,10 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
   const resps = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
   const cidades = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const c = o.addr?.city_name || o.addr?.city; if (c) s.add(c); }); return [...s].sort(); }, [allOrgs]);
   const lista = useMemo(() => {
-    let l = allOrgs || [];
+    let l = (q.trim() || fCat === "Excluido") ? [ ...(allOrgs || []), ...(excl || []) ] : (allOrgs || []);
     if (q.trim()) { const n = q.toLowerCase().replace(/[.\-\/]/g, "");
       const casa = o => [o.name, o.nickname, o.legalName, soDig(o.cnpj), o.addr?.city_name, o.email, o.phone].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(n);
-      l = [ ...l.filter(casa), ...(excl || []).filter(casa) ]; /* excluídos aparecem SÓ quando buscados */ }
+      l = l.filter(casa); /* v27: excluídos entram só na busca OU ao filtrar categoria Excluido */ }
     if (fCat) l = l.filter(o => o.cat === fCat);
     if (fResp) l = l.filter(o => o.owner === fResp);
     if (fCid) l = l.filter(o => (o.addr?.city_name || o.addr?.city) === fCid);
@@ -442,7 +442,7 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
       <select value={fCat} onChange={e => { setFCat(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
-        <option value="">Categoria: todas</option>{CATS.map(c => <option key={c} value={c}>{c}</option>)}
+        <option value="">Categoria: todas</option>{[...CATS, "Excluido"].map(c => <option key={c} value={c}>{c}</option>)}
       </select>
       <select value={fResp} onChange={e => { setFResp(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
         <option value="">Responsável: todos</option>{resps.map(r => <option key={r} value={r}>{r}</option>)}
