@@ -236,7 +236,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
         <input type="time" value={agHora} onChange={e=>setAgHora(e.target.value)} style={{ ...inp, flex: 1 }}/>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={salvaTarefa} disabled={agLo} style={{ flex: 1, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{agLo ? "Salvando..." : "Agendar no Agendor"}</button>
+        <button onClick={salvaTarefa} disabled={agLo} style={{ flex: 1, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{agLo ? "Salvando..." : "Agendar"}</button>
         <button onClick={()=>setAgTask(false)} style={{ background: "transparent", color: S.dng, border: `1px solid ${S.dng}55`, borderRadius: 10, padding: "10px 14px", fontSize: 13, cursor: "pointer" }}>Cancelar</button>
       </div>
     </Crd>}
@@ -249,9 +249,6 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
         <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6 }}>{TIPOS.map(t => <Chip key={t.id} on={nTipo === t.id} color={t.c} onClick={() => setNTipo(t.id)}>{t.l}</Chip>)}</div>
         <textarea value={nTxt} onChange={e => setNTxt(e.target.value)} rows={3} placeholder="Escreva a atividade / observação..." style={{ ...inp, resize: "vertical", marginTop: 4 }} />
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, color: nTipo === "NOTA" ? S.td : S.ts }}>
-            <input type="checkbox" checked={espelha && nTipo !== "NOTA"} disabled={nTipo === "NOTA"} onChange={e => setEspelha(e.target.checked)} />Espelhar no Agendor
-          </label>
           <button onClick={salvaAtv} disabled={salvando || !nTxt.trim()} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: nTxt.trim() ? S.acc : S.cl, color: nTxt.trim() ? "#fff" : S.td, border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Send size={14} />{salvando ? "Salvando..." : "Registrar"}</button>
         </div>
       </Crd>
@@ -295,7 +292,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
           </div>
         </div>
       </Crd>)}
-      {org.people && <p style={{ fontSize: 11.5, color: S.td, margin: "4px 2px" }}>Pessoas no Agendor: {org.people}</p>}
+      {org.people && <p style={{ fontSize: 11.5, color: S.td, margin: "4px 2px" }}>Pessoas: {org.people}</p>}
     </div>}
 
     {/* ── FOTOS & ARQUIVOS ── */}
@@ -386,7 +383,7 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg }) {
       <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Buscar pessoa, empresa, cargo, telefone ou e-mail..." style={{ ...inp, paddingLeft: 34 }} />
     </div>
     {lista === null && <p style={{ color: S.ts, textAlign: "center", padding: "1.5rem 0" }}>Carregando pessoas...</p>}
-    {lista !== null && filtrada.length === 0 && <Crd><p style={{ margin: 0, fontSize: 12.5, color: S.ts, textAlign: "center" }}>Nenhuma pessoa encontrada.{!q && " A lista enche com os contatos criados no CRM e com a importação do backup do Agendor."}</p></Crd>}
+    {lista !== null && filtrada.length === 0 && <Crd><p style={{ margin: 0, fontSize: 12.5, color: S.ts, textAlign: "center" }}>Nenhuma pessoa encontrada.{!q && " A lista enche com os contatos criados no CRM e com a importação inicial."}</p></Crd>}
     {filtrada.slice(0, vc).map(c => { const o = achaOrg(c); return (<Crd key={c.id} style={{ padding: "10px 12px" }}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
         <div style={{ minWidth: 0 }}>

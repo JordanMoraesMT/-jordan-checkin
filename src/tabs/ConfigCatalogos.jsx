@@ -146,7 +146,7 @@ function ConfigCatalogos({ token }) {
                   {!it.ativo && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 5, background: S.td + "33", color: S.td, fontWeight: 700 }}>INATIVO</span>}
                 </div>
                 <div style={{ fontSize: 11.5, color: S.td, marginTop: 2 }}>
-                  {ex.email ? ex.email + " · " : ""}{it.agendor_id ? `Agendor #${it.agendor_id}` : "só no TeamCheck"}
+                  {ex.email ? ex.email + " · " : ""}{it.agendor_id ? `ID origem #${it.agendor_id}` : "cadastro próprio"}
                 </div>
               </div>
               <button onClick={() => abrirEdit(it)} title="Editar" style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: S.inp, cursor: "pointer", fontSize: 13, padding: 0 }}>✏️</button>
@@ -157,8 +157,8 @@ function ConfigCatalogos({ token }) {
       </div>
 
       <p style={{ fontSize: 11, color: S.td, marginTop: 16, lineHeight: 1.6 }}>
-        Estes cadastros vivem no banco do TeamCheck (D1) e substituem os catálogos fixos do Agendor.
-        Desativar preserva o histórico — nada é apagado. Itens marcados "Agendor #" espelham o ID de origem.
+        Estes cadastros vivem no banco do TeamCheck (D1) e são a base de catálogos do CRM.
+        Desativar preserva o histórico — nada é apagado. Itens com "ID origem #" vieram da importação inicial.
       </p>
     </div>
   );

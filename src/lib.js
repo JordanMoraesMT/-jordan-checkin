@@ -1,4 +1,4 @@
-// TeamCheck — biblioteca: constantes, utilitários e API Agendor
+// TeamCheck — biblioteca: constantes e utilitários
 const API="https://agendor-proxy.administrativo-fc3.workers.dev";
 const OSRM="https://router.project-osrm.org/route/v1/driving";
 let HOMES={743088:{lat:-15.677694,lng:-55.954778,label:"Casa Jordan"},743347:{lat:-15.653611,lng:-56.026833,label:"Casa Alisson"}};
@@ -8,7 +8,7 @@ const TZ="America/Cuiaba";
 const toLocalDate=(d)=>{const dt=new Date(d);return dt.toLocaleDateString("en-CA",{timeZone:TZ});};// YYYY-MM-DD
 const todayLocal=()=>toLocalDate(new Date());
 const TYPES=[{id:"VISITA",l:"Visita"},{id:"LIGACAO",l:"Ligação"},{id:"EMAIL",l:"E-mail"},{id:"REUNIAO",l:"Reunião"},{id:"WHATSAPP",l:"WhatsApp"},{id:"PROPOSTA",l:"Proposta"}];
-// Backend próprio (D1 via Worker do Dashboard) — fase de transição: gravar em AMBOS (Agendor + D1)
+// Backend próprio: D1 via Worker do Dashboard (fonte de verdade)
 const DASH="https://dashboard.jordanmt.com";
 const crmFire=(token,path,body,method="POST")=>{try{fetch(DASH+path,{method,headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(body)}).catch(()=>{});}catch{}};
 let CATS=["Ativo","Prospecção","Perdido","Prospectar","Somente Visita","Inativo","Online - B2B"]; // v28: default; sobrescrito por loadCatalogos(). Excluído fica fora do PDV
@@ -39,7 +39,7 @@ const hourDec=d=>{const t=new Date(d);return t.getHours()+t.getMinutes()/60;};
 const hav=(a,b,c,d)=>{const R=6371,x=((c-a)*Math.PI)/180,y=((d-b)*Math.PI)/180;const z=Math.sin(x/2)**2+Math.cos((a*Math.PI)/180)*Math.cos((c*Math.PI)/180)*Math.sin(y/2)**2;return R*2*Math.atan2(Math.sqrt(z),Math.sqrt(1-z));};
 function sL(k,f){try{return JSON.parse(localStorage.getItem(k))||f;}catch{return f;}}
 function sS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("sync:",e);}}
-// 2º parâmetro carrega a SESSÃO (o Worker injeta o token do Agendor no servidor)
+// 2º parâmetro carrega a SESSÃO (autenticação no Worker)
 // Config (catálogos no D1 via Worker /api/config): usuários, segmentos, status, indústrias, origens
 async function cfgApi(token, method="GET", body=null){
   const r=await fetch(`${API}/api/config`,{method,cache:"no-store",
@@ -73,7 +73,7 @@ async function loadCatalogos(token){
     return true;
   }catch(e){console.warn("catalogos:",e);return false;}
 }
-function trAg(m){const s=String(m||"").trim();const map=[[/contact email is invalid|email is invalid/i,"E-mail inválido (precisa ter @ e domínio)"],[/name is missing|name can't be blank/i,"Nome é obrigatório"],[/cnpj is invalid/i,"CNPJ inválido"],[/cnpj has already been taken/i,"CNPJ já cadastrado (pode estar na lixeira do Agendor)"],[/cpf is invalid/i,"CPF inválido"],[/cpf has already been taken/i,"CPF já cadastrado"],[/whatsapp.*invalid/i,"WhatsApp inválido"],[/(mobile|phone).*invalid/i,"Telefone inválido"],[/organization.*(missing|blank|required)/i,"Empresa é obrigatória"],[/has already been taken/i,"Já cadastrado no Agendor"],[/is missing|can't be blank|is required/i,"Campo obrigatório não preenchido"],[/is invalid/i,"Campo com formato inválido"]];for(const[re,pt]of map){if(re.test(s))return pt;}return s;}
+function trAg(m){const s=String(m||"").trim();const map=[[/contact email is invalid|email is invalid/i,"E-mail inválido (precisa ter @ e domínio)"],[/name is missing|name can't be blank/i,"Nome é obrigatório"],[/cnpj is invalid/i,"CNPJ inválido"],[/cnpj has already been taken/i,"CNPJ já cadastrado"],[/cpf is invalid/i,"CPF inválido"],[/cpf has already been taken/i,"CPF já cadastrado"],[/whatsapp.*invalid/i,"WhatsApp inválido"],[/(mobile|phone).*invalid/i,"Telefone inválido"],[/organization.*(missing|blank|required)/i,"Empresa é obrigatória"],[/has already been taken/i,"Já cadastrado"],[/is missing|can't be blank|is required/i,"Campo obrigatório não preenchido"],[/is invalid/i,"Campo com formato inválido"]];for(const[re,pt]of map){if(re.test(s))return pt;}return s;}
 function agErr(e){let arr=[];if(e&&e.body){try{const j=JSON.parse(e.body);if(Array.isArray(j.errors))arr=j.errors.map(x=>typeof x==="string"?x:(x.message||x.field||JSON.stringify(x)));else if(j.message)arr=[j.message];else if(j.error)arr=[j.error];}catch{if(e.body)arr=[e.body];}}if(!arr.length){const m=(e&&e.message)||"Erro";arr=[/^\d{3}$/.test(m)?("Erro "+m+" (dados inválidos)"):m];}const pt=[...new Set(arr.map(trAg).filter(Boolean))];return pt.join(" · ");}
 function gps(){return new Promise((r,j)=>{if(!navigator.geolocation)return j(new Error("GPS"));navigator.geolocation.getCurrentPosition(p=>r({lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)}),j,{enableHighAccuracy:true,timeout:15000,maximumAge:0});});}
 async function roadKm(a,b,c,d){try{const r=await fetch(`${OSRM}/${b},${a};${d},${c}?overview=false`);const j=await r.json();if(j.code==="Ok"&&j.routes?.[0])return{km:j.routes[0].distance/1000,dur:Math.round(j.routes[0].duration/60)};}catch{}return{km:hav(a,b,c,d)*1.3,dur:0};}

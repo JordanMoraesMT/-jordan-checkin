@@ -49,8 +49,8 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:9,marginBottom:16}}>
-      <ARow emo="🔄" t={syncing?syncMsg:"Sincronizar clientes"} d="Baixa a carteira completa do Agendor" onClick={onSync} disabled={syncing}/>
-      <ARow emo="📥" t={histLoading?"Carregando histórico...":"Carregar histórico do Agendor"} d="Últimos 90 dias de visitas registradas" onClick={async()=>{setHistLoading(true);await onLoadHistory();setHistLoading(false);}} disabled={histLoading}/>
+      <ARow emo="🔄" t={syncing?syncMsg:"Sincronizar clientes"} d="Baixa a carteira completa de clientes (D1)" onClick={onSync} disabled={syncing}/>
+      <ARow emo="📥" t={histLoading?"Carregando histórico...":"Carregar histórico"} d="Últimos 90 dias de visitas registradas" onClick={async()=>{setHistLoading(true);await onLoadHistory();setHistLoading(false);}} disabled={histLoading}/>
       <ARow emo="⚡" t="Forçar sincronização" d="Puxa agora o estado da equipe e GPS" onClick={onSyncPull}/>
       <ARow emo="📡" t={shareLoading?"Enviando GPS...":`Compartilhar ${Object.keys(plocs).length} GPS com equipe`} d="Publica as localizações salvas neste aparelho" onClick={async()=>{if(!confirm("Compartilhar GPS com equipe?"))return;setShareLoading(true);await onShareGPS();setShareLoading(false);}} disabled={shareLoading}/>
       <ARow emo="🗺️" t="Definir jornada" d="Origem e destino do dia (casa, hotel...)" onClick={onShowDB}/>
