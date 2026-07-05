@@ -364,6 +364,48 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
 //  tabela Nome | Categoria | Responsável | E-mail | Telefone |
 //  Ranking | Editar, com busca, filtros e "Exibindo X de N".
 // ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+//  PESSOAS — lista global de contatos (menu Pessoas do Agendor):
+//  todos os contatos do CRM (D1), com empresa, cargo e ações
+//  WhatsApp/Ligar/E-mail. Enche de vez com a importação do backup.
+// ─────────────────────────────────────────────────────────────
+function PessoasView({ token, allOrgs, excl, onOpenOrg }) {
+  const [lista, setLista] = useState(null); const [q, setQ] = useState(""); const [vc, setVc] = useState(60);
+  const carrega = async () => { try { const d = await crm(token, "/api/crm/contatos-todos"); setLista(d.contatos || []); } catch (e) { setLista([]); console.warn("pessoas:", e); } };
+  useEffect(() => { carrega(); }, []);
+  const achaOrg = (c) => { const k = soDig(c.cnpj); const tudo = [ ...(allOrgs || []), ...(excl || []) ];
+    return tudo.find(o => (c.org_id && o.id === c.org_id) || (k && soDig(o.cnpj) === k)) || null; };
+  const filtrada = useMemo(() => { if (!lista) return []; const n = q.trim().toLowerCase(); if (!n) return lista;
+    return lista.filter(c => [c.nome, c.empresa, c.cargo, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ").toLowerCase().includes(n)); }, [lista, q]);
+  return (<div>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+      <p style={{ margin: 0, fontSize: 12.5, color: S.ts }}>Exibindo <b style={{ color: S.txt }}>{Math.min(vc, filtrada.length)}</b> de <b style={{ color: S.txt }}>{filtrada.length}</b> pessoas</p>
+      <button onClick={carrega} style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: `1px solid ${S.brd}`, borderRadius: 10, padding: "7px 10px", fontSize: 12, color: S.ts }}><RefreshCw size={13}/>Atualizar</button>
+    </div>
+    <div style={{ position: "relative", marginBottom: 10 }}>
+      <Search size={15} color={S.td} style={{ position: "absolute", left: 12, top: 12 }} />
+      <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Buscar pessoa, empresa, cargo, telefone ou e-mail..." style={{ ...inp, paddingLeft: 34 }} />
+    </div>
+    {lista === null && <p style={{ color: S.ts, textAlign: "center", padding: "1.5rem 0" }}>Carregando pessoas...</p>}
+    {lista !== null && filtrada.length === 0 && <Crd><p style={{ margin: 0, fontSize: 12.5, color: S.ts, textAlign: "center" }}>Nenhuma pessoa encontrada.{!q && " A lista enche com os contatos criados no CRM e com a importação do backup do Agendor."}</p></Crd>}
+    {filtrada.slice(0, vc).map(c => { const o = achaOrg(c); return (<Crd key={c.id} style={{ padding: "10px 12px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: S.txt }}>{c.nome}{c.cargo && <span style={{ fontWeight: 400, color: S.ts, fontSize: 11.5 }}> · {c.cargo}</span>}</p>
+          {(c.empresa || o) && <button onClick={() => o && onOpenOrg(o)} disabled={!o} style={{ background: "transparent", border: "none", padding: 0, margin: "2px 0 0", fontSize: 11.5, color: o ? S.pl : S.td, cursor: o ? "pointer" : "default", display: "flex", alignItems: "center", gap: 4, textAlign: "left" }}><Building2 size={12}/>{c.empresa || (o && (o.nickname || o.name))}</button>}
+          <p style={{ margin: "3px 0 0", fontSize: 11, color: S.td }}>{[c.telefone, c.whatsapp, c.email].filter(Boolean).join(" · ") || "sem contato"}</p>
+        </div>
+        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          {(c.whatsapp || c.telefone) && <a href={`https://wa.me/55${soDig(c.whatsapp || c.telefone)}`} target="_blank" rel="noreferrer" style={{ background: S.ok + "18", border: `1px solid ${S.ok}55`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><MessageCircle size={14} color={S.ok}/></a>}
+          {c.telefone && <a href={`tel:${soDig(c.telefone)}`} style={{ background: S.pri + "18", border: `1px solid ${S.pri}55`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><Phone size={14} color={S.pri}/></a>}
+          {c.email && <a href={`mailto:${c.email}`} style={{ background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><Mail size={14} color={S.ts}/></a>}
+        </div>
+      </div>
+    </Crd>); })}
+    {vc < filtrada.length && <button onClick={() => setVc(v => v + 60)} style={{ width: "100%", marginTop: 4, padding: 12, fontSize: 13, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.txt }}>Ver mais ({filtrada.length - vc})</button>}
+  </div>);
+}
+
 function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
   const rfvDe = (o) => { if (!rfv) return null; const k = soDig(o.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; };
   const PREF = "jc:empresas-prefs";
@@ -486,7 +528,7 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
   if (!visible) return null;
   if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} />;
 
-  const secoes = [["inicio", "Início"], ["tarefas", "Tarefas"], ["empresas", "Empresas"]];
+  const secoes = [["inicio", "Início"], ["tarefas", "Tarefas"], ["empresas", "Empresas"], ["pessoas", "Pessoas"]];
   return (<div>
     {/* Menu do CRM — fiel ao topo do Agendor (Início | Tarefas | Empresas) */}
     <div style={{ display: "flex", gap: 3, marginBottom: 12, background: S.cl, borderRadius: 10, padding: 3 }}>
@@ -494,6 +536,7 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
     </div>
     {secao === "tarefas" && <AgendaTab visible={true} token={token} user={user} allOrgs={allOrgs} />}
     {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
+    {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} />}
     {secao === "inicio" && <div>
     {/* Busca de cliente */}
     <div style={{ position: "relative", marginBottom: 10 }}>
