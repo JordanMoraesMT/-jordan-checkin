@@ -117,7 +117,6 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const salvaAtv = async () => { if (!nTxt.trim() || salvando) return; setSalvando(true); setMsg("");
     try {
       await crm(token, "/api/crm/atividades", { method: "POST", body: JSON.stringify({ org_id: org.id, cnpj: cnpjN || null, org_nome: org.nickname || org.name, tipo: nTipo, texto: nTxt.trim() }) });
-      if (espelha && nTipo !== "NOTA") { try { await postTask(token, org.id, nTxt.trim(), nTipo, true); } catch (e) { setMsg("Gravado no CRM; espelho Agendor falhou: " + e.message); } }
       setNTxt(""); carregaAtvs();
     } catch (e) { setMsg("Erro ao salvar: " + e.message); }
     setSalvando(false); };
@@ -154,14 +153,14 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       carregaInfo(); alert(`GPS salvo (±${g.acc}m).`);
     } catch (e) { alert("GPS: " + (e.message || e)); } };
 
-  // Agendar tarefa (fiel ao Agendor): cria tarefa com prazo no Agendor via proxy
+  // Agendar tarefa: cria tarefa com prazo no D1 (aparece na Agenda)
   const [agTask, setAgTask] = useState(false);
   const [agTipo, setAgTipo] = useState("VISITA"); const [agTxt, setAgTxt] = useState("");
   const [agData, setAgData] = useState(""); const [agHora, setAgHora] = useState("09:00"); const [agLo, setAgLo] = useState(false);
   const salvaTarefa = async () => { if (!agTxt.trim() || !agData) { alert("Preencha descrição e data."); return; } setAgLo(true);
-    try { const rT = await agF(`/organizations/${org.id}/tasks`, token, { method: "POST", body: JSON.stringify({ text: agTxt, type: agTipo, done: false, due_date: `${agData}T${agHora}:00-04:00` }) });
-      crmFire(token, "/api/crm/atividades", { org_id: org.id, cnpj: cnpjN || null, org_nome: org.nickname || org.name, tipo: agTipo, texto: agTxt, origem: "tarefa", due_em: `${agData}T${agHora}:00-04:00`, agendor_id: rT?.data?.id || null });
-      alert("Tarefa agendada no Agendor!"); setAgTask(false); setAgTxt(""); setAgData("");
+    try {
+      crmFire(token, "/api/crm/atividades", { org_id: org.id, cnpj: cnpjN || null, org_nome: org.nickname || org.name, tipo: agTipo, texto: agTxt, origem: "tarefa", due_em: `${agData}T${agHora}:00-04:00`, agendor_id: null });
+      alert("Tarefa agendada!"); setAgTask(false); setAgTxt(""); setAgData("");
     } catch (e) { alert("Erro: " + (e.message || e)); } setAgLo(false); };
   const catCor = CC[org.cat] || S.ts;
   // Matriz RFV consolidada (mesma régua do Dashboard)
