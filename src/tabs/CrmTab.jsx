@@ -3,7 +3,7 @@
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar } from "lucide-react";
-import { S, CC, fT, fD, gps, postTask, sL, sS, agF, CATS, crmFire, csv } from "../lib";
+import { S, CC, fT, fD, gps, sL, sS, CATS, crmFire, csv } from "../lib";
 import { AgendaTab } from "./AgendaTab";
 
 const DASH = "https://dashboard.jordanmt.com";

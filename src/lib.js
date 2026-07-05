@@ -48,17 +48,8 @@ async function cfgApi(token, method="GET", body=null){
   if(!r.ok){let b="";try{b=await r.text();}catch{}const e=new Error(`config ${r.status}`);e.body=b;throw e;}
   return r.json();
 }
-async function agF(path,token,opts={}){const p=path.startsWith("/")?path.slice(1):path;const[base,qs]=p.split("?");let u=`${API}?path=${encodeURIComponent(base)}`;if(qs)u+="&"+qs;
-  const r=await fetch(u,{...opts,cache:"no-store",headers:{"X-Session":token,"Content-Type":"application/json; charset=utf-8","Accept":"application/json; charset=utf-8",...(opts.headers||{})}});
-  if(r.status===401){try{localStorage.removeItem("jc:session");localStorage.removeItem("jc:user");}catch{}location.reload();throw new Error("Sessão expirada");}
-  if(!r.ok){let _b="";try{_b=await r.text();}catch{}const _e=new Error(`${r.status}`);_e.body=_b;throw _e;}
-  const buf=await r.arrayBuffer();
-  const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);
-  return JSON.parse(txt);
-}
 function trAg(m){const s=String(m||"").trim();const map=[[/contact email is invalid|email is invalid/i,"E-mail inválido (precisa ter @ e domínio)"],[/name is missing|name can't be blank/i,"Nome é obrigatório"],[/cnpj is invalid/i,"CNPJ inválido"],[/cnpj has already been taken/i,"CNPJ já cadastrado (pode estar na lixeira do Agendor)"],[/cpf is invalid/i,"CPF inválido"],[/cpf has already been taken/i,"CPF já cadastrado"],[/whatsapp.*invalid/i,"WhatsApp inválido"],[/(mobile|phone).*invalid/i,"Telefone inválido"],[/organization.*(missing|blank|required)/i,"Empresa é obrigatória"],[/has already been taken/i,"Já cadastrado no Agendor"],[/is missing|can't be blank|is required/i,"Campo obrigatório não preenchido"],[/is invalid/i,"Campo com formato inválido"]];for(const[re,pt]of map){if(re.test(s))return pt;}return s;}
 function agErr(e){let arr=[];if(e&&e.body){try{const j=JSON.parse(e.body);if(Array.isArray(j.errors))arr=j.errors.map(x=>typeof x==="string"?x:(x.message||x.field||JSON.stringify(x)));else if(j.message)arr=[j.message];else if(j.error)arr=[j.error];}catch{if(e.body)arr=[e.body];}}if(!arr.length){const m=(e&&e.message)||"Erro";arr=[/^\d{3}$/.test(m)?("Erro "+m+" (dados inválidos)"):m];}const pt=[...new Set(arr.map(trAg).filter(Boolean))];return pt.join(" · ");}
-async function postTask(token,oid,text,type="VISITA",done=true,due=null){const b={text,type,done};if(due)b.due_date=due;return agF(`/organizations/${oid}/tasks`,token,{method:"POST",body:JSON.stringify(b)});}
 function gps(){return new Promise((r,j)=>{if(!navigator.geolocation)return j(new Error("GPS"));navigator.geolocation.getCurrentPosition(p=>r({lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)}),j,{enableHighAccuracy:true,timeout:15000,maximumAge:0});});}
 async function roadKm(a,b,c,d){try{const r=await fetch(`${OSRM}/${b},${a};${d},${c}?overview=false`);const j=await r.json();if(j.code==="Ok"&&j.routes?.[0])return{km:j.routes[0].distance/1000,dur:Math.round(j.routes[0].duration/60)};}catch{}return{km:hav(a,b,c,d)*1.3,dur:0};}
 function csv(rows,fn){const b="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");Object.assign(document.createElement("a"),{href:URL.createObjectURL(new Blob([b],{type:"text/csv;charset=utf-8"})),download:fn}).click();}
@@ -137,4 +128,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, mins, hrsMin, hourDec, hav, sL, sS, agF, cfgApi, agErr, trAg, postTask, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };
+export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, agErr, trAg, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };

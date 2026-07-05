@@ -1,7 +1,7 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser } from "lucide-react";
-import { API, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, agF, gps, fixMojibake, strip, isRealVisit } from "./lib";
+import { API, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit } from "./lib";
 import { Login, Banner, NoteModal, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 const RelatorioTab=lazy(()=>import("./tabs/RelatorioTab").then(m=>({default:m.RelatorioTab})));// recharts só carrega ao abrir o Relatório
@@ -106,7 +106,7 @@ export default function App(){
   const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{
     const tk=t||token;
     let all=[],exc=[],fonteD1=false;
-    // v23: fonte primaria = D1 (dashboard.jordanmt.com). Chave de vinculo = CNPJ.
+    // Fonte única = D1 (dashboard.jordanmt.com). Chave de vinculo = CNPJ.
     try{
       setSyncMsg("Carregando clientes...");
       const r=await fetch(`${DASH_CRM}/api/crm/clientes?limit=5000`,{headers:{"X-Session":tk},cache:"no-store"});
@@ -117,24 +117,24 @@ export default function App(){
         }
       }
     }catch(e){console.warn("clientes D1:",e);}
-    if(!fonteD1){
-      setSyncMsg("D1 indisponivel, usando Agendor...");
-      let pg=1;while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,tk);if(!d.data?.length)break;const pg_=d.data.map(strip);all.push(...pg_.filter(o=>!/exclu/i.test(o.cat||"")));exc.push(...pg_.filter(o=>/exclu/i.test(o.cat||"")));if(d.data.length<100)break;pg++;}
-    }
-    setAllOrgs(all);setOrgs(all);setExclOrgs(exc);setSyncMsg(`${all.length} clientes${fonteD1?" (D1)":" (Agendor)"}`);
+    if(!fonteD1){setSyncMsg("Erro ao carregar clientes. Tente novamente.");setSyncing(false);return;}
+    setAllOrgs(all);setOrgs(all);setExclOrgs(exc);setSyncMsg(`${all.length} clientes (D1)`);
     await loadHistoryInner(tk);
   }catch(e){setSyncMsg("Erro");}setSyncing(false);};
 
-  const loadHistoryInner=async(tk)=>{setSyncMsg("Carregando historico...");const now=new Date();let allTasks=[];
-    for(let w=0;w<3;w++){const from=new Date(now);from.setDate(from.getDate()-30*(w+1));const to=new Date(now);to.setDate(to.getDate()-30*w);
-      setSyncMsg(`${allTasks.length} atividades (${w*30}d)...`);
-      let pg=1;while(true){const d=await agF(`/tasks?createdDateGt=${from.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,tk||token);if(!d.data?.length)break;allTasks.push(...d.data);if(d.data.length<100)break;pg++;}}
-    // Only activities (no due_date) of type Visita = real visit logs
-    const apiVisits=allTasks.filter(t=>(t.type==="Visita"||t.type==="VISITA")&&!t.due_date&&!t.dueDate);
-    // Dedup API by orgId+userId+date (keep first occurrence)
+  const loadHistoryInner=async(tk)=>{setSyncMsg("Carregando historico...");
+    let raw=[];
+    try{const desde=new Date(Date.now()-90*86400000).toISOString().slice(0,10);
+      for(const tp of ["Visita","VISITA"]){
+        const r=await fetch(`${DASH_CRM}/api/crm/atividades?tipo=${tp}&desde=${desde}&limit=2000`,{headers:{"X-Session":tk||token},cache:"no-store"});
+        if(r.ok){const d=await r.json();if(d&&d.ok&&Array.isArray(d.atividades))raw.push(...d.atividades);}
+      }
+    }catch(e){console.warn("historico D1:",e);}
+    // visita REGISTRADA = tipo Visita sem prazo (com prazo = visita agendada)
+    const apiVisits=raw.filter(t=>!t.due_em);
     const seen=new Set();const deduped=[];
-    for(const t of apiVisits){const key=t.organization?.id+"|"+(t.user?.id||"")+"|"+t.createdAt?.slice(0,10);if(seen.has(key))continue;seen.add(key);deduped.push(t);}
-    const remote=deduped.map(t=>({orgId:t.organization?.id,orgName:t.organization?.name||"?",city:"",checkinTime:t.createdAt,checkoutTime:t.createdAt,note:t.text||"",taskType:"VISITA",synced:true,fromAgendor:true,userName:t.user?.name||""}));
+    for(const t of apiVisits){const key=(t.org_id||"")+"|"+(t.user_id||"")+"|"+(t.criado_em||"").slice(0,10);if(seen.has(key))continue;seen.add(key);deduped.push(t);}
+    const remote=deduped.map(t=>({orgId:t.org_id,orgName:t.org_nome||"?",city:"",checkinTime:t.criado_em,checkoutTime:t.criado_em,note:t.texto||"",taskType:"VISITA",synced:true,userName:t.user_nome||""}));
     // Merge: KV/local visits take priority (have real timestamps)
     const existing=new Set(visits.map(v=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime)));
     const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+(r.userName||"")+"|"+toLocalDate(r.checkinTime)));

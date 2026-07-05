@@ -1,7 +1,7 @@
 // TeamCheck — aba PdvsTab
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { MapPin, Trophy, Search } from "lucide-react";
-import { PG, toLocalDate, todayLocal, CATS, CC, geoEstimate, S, fD, fDS, hav, agF, gps, roadKm, csv, fixMojibake, strip } from "../lib";
+import { PG, toLocalDate, todayLocal, CATS, CC, geoEstimate, S, fD, fDS, hav, DASH, gps, roadKm, csv, fixMojibake } from "../lib";
 import { OrgCard } from "../components";
 
 function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,focusReq,rfv,excl}){
@@ -124,7 +124,7 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
           <div style={{display:"flex",flexDirection:"column",gap:12}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={onCheckin} onOut={handleOut} onEdit={handleEdit} onPerson={handlePerson} onQuick={onQuick} onInfo={handleInfo} ldId={ldId} plocs={plocs} lastVisit={lastVisits[o.id]||null} rfvInfo={rfvDe(o)} lastOrder={null/*TODO: Dashboard Phase 2*/} nearRoad={nearRoad}/>)}</div>
           {vc<fo.length&&<button onClick={()=>setVc(p=>p+PG)} style={{width:"100%",marginTop:12,padding:14,fontSize:14,fontWeight:500}}>Ver mais ({fo.length-vc})</button>}
           <button onClick={()=>{const rows=[["Nome","CNPJ","Endereço","Bairro","Cidade","UF","Categoria","Segmento","Produtos","Responsável","Grupo","Dt Última Visita","Visitado por","Dias s/ Visita","Classe RFV","Status Recompra","Última Compra","Fat. 12m"]];fo.forEach(o=>{const lv=lastVisits[o.id];const dias=lv?Math.floor((Date.now()-new Date(lv.time))/86400000):"";const rv=rfvDe(o);rows.push([o.name,o.cnpj||"",`${o.addr?.street||""} ${o.addr?.number||""}`.trim(),o.addr?.district||"",o.addr?.city_name||o.addr?.city||"",o.addr?.state||"",o.cat||"",o.sector||"",o.products||"",o.owner||"",o.grupo?.replace("Grupo: ","")||"",lv?fD(lv.time):"Sem visita",lv?lv.who:"",dias,rv?rv.rfv:"",rv?rv.status:"",rv&&rv.ultima?fD(rv.ultima+"T12:00"):"",rv?rv.fat12m:""]);});csv(rows,`clientes-filtrados-${fD(new Date())}.csv`);}} style={{width:"100%",marginTop:8,padding:12,fontSize:13,background:S.pri+"22",border:`1px solid ${S.pri}55`,color:S.pl,fontWeight:500}}>📊 Exportar {fo.length} clientes (Excel)</button>
-          {search.replace(/[.\-\/]/g,"").length>=11&&fo.length===0&&<button onClick={async()=>{try{const d=await agF(`/organizations?cnpj=${search.replace(/[.\-\/]/g,"")}`,token);if(d.data?.length)setOrgs(p=>{const ids=new Set(p.map(o=>o.id));return[...d.data.map(strip).filter(f=>!ids.has(f.id)),...p];});}catch(e){console.warn("cnpjSearch:",e);}}} style={{width:"100%",marginTop:8,padding:14,background:S.acc,border:"none",fontWeight:500}}>Buscar CNPJ no Agendor</button>}
+          {search.replace(/[.\-\/]/g,"").length>=11&&fo.length===0&&<button onClick={async()=>{try{const r=await fetch(`${DASH}/api/crm/clientes?q=${search.replace(/[.\-\/]/g,"")}&limit=20`,{headers:{"X-Session":token},cache:"no-store"});const d=await r.json();if(d&&d.ok&&d.clientes?.length)setOrgs(p=>{const ids=new Set(p.map(o=>o.id));return[...d.clientes.filter(f=>!ids.has(f.id)),...p];});}catch(e){console.warn("cnpjSearch:",e);}}} style={{width:"100%",marginTop:8,padding:14,background:S.acc,border:"none",fontWeight:500}}>Buscar CNPJ no cadastro</button>}
         </>}
       </div>);
 }

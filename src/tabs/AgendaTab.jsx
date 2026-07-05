@@ -1,6 +1,6 @@
 // TeamCheck — aba AgendaTab
 import { useState, useEffect, useMemo, useRef } from "react";
-import { API, DASH, toLocalDate, todayLocal, TYPES, S, fT, fD, agF, crmFire } from "../lib";
+import { DASH, toLocalDate, todayLocal, TYPES, S, fT, fD, crmFire } from "../lib";
 import { LB, SegTabs, Chip } from "../components";
 
 function AgendaTab({visible,token,user,allOrgs}){
@@ -14,21 +14,13 @@ function AgendaTab({visible,token,user,allOrgs}){
   const[showAdd,setShowAdd]=useState(false);const[addQ,setAddQ]=useState("");const[addOrg,setAddOrg]=useState(null);
   const[addType,setAddType]=useState("VISITA");const[addText,setAddText]=useState("");const[addDate,setAddDate]=useState("");const[addTime,setAddTime]=useState("09:00");const[addLo,setAddLo]=useState(false);
   const load=async()=>{setLo(true);setErr("");try{
-    // v23: fonte primaria = D1 (tarefas com prazo). Fallback = Agendor.
-    let mapped=null;
+    // Fonte única = D1 (tarefas com prazo).
+    let mapped=[];
     try{
       const desde=new Date(Date.now()-90*86400000).toISOString().slice(0,10);
       const r=await fetch(`${DASH}/api/crm/tarefas?desde=${desde}&limit=2000`,{headers:{"X-Session":token},cache:"no-store"});
       if(r.ok){const d=await r.json();if(d&&d.ok&&Array.isArray(d.tarefas))mapped=d.tarefas;}
     }catch(e){console.warn("tarefas D1:",e);}
-    if(mapped===null){
-      // Fallback Agendor (rede de seguranca da transicao)
-      const now=new Date();let all=[];
-      for(let w=0;w<2;w++){const from=new Date(now);from.setDate(from.getDate()-30*(w+1));const to=new Date(now);to.setDate(to.getDate()-30*w);
-        setErr(`${all.length} tasks (${w*30}d)...`);
-        let pg=1;while(true){const d=await agF(`/tasks?createdDateGt=${from.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}}
-      mapped=all.filter(t=>t.due_date||t.dueDate).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt,done:!!(t.finishedAt||t.done),finished:t.finishedAt||null,userName:t.user?.name||"?",userId:t.user?.id}));
-    }
     setTasks(mapped);setErr(`${mapped.length} tarefas · atualizado ${fT(new Date())}`);
   }catch(e){console.warn("agenda:",e);setErr("Erro: "+e.message);}setLo(false);};
   useEffect(()=>{if(!visible)return;if(!loadedRef.current){loadedRef.current=true;load();}const iv=setInterval(()=>{load();},300000);return()=>clearInterval(iv);},[visible]);// carrega só na 1ª abertura; auto-refresh 5min enquanto visível

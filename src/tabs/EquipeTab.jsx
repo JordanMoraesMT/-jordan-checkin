@@ -1,6 +1,6 @@
 // TeamCheck — aba EquipeTab
 import { useState, useEffect } from "react";
-import { toLocalDate, geoEstimate, S, fT, fD, mins, hrsMin, hav, agF, csv, getBase, getEnd } from "../lib";
+import { toLocalDate, geoEstimate, S, fT, fD, mins, hrsMin, hav, DASH, csv, getBase, getEnd } from "../lib";
 import { LB, Kpi } from "../components";
 
 function EquipeTab({sel,setSel,token,plocs,orgs,dayBases}){
@@ -12,15 +12,14 @@ function EquipeTab({sel,setSel,token,plocs,orgs,dayBases}){
     const nextDay=new Date(sel+"T12:00:00");nextDay.setDate(nextDay.getDate()+1);
     const dtEnd=toLocalDate(nextDay)+"T00:00:00Z";
     setErr("Buscando...");
-    const d=await agF(`/tasks?createdDateGt=${dtStart}&createdDateLt=${dtEnd}&per_page=100`,token);
-    const all=d.data||[];
-    // FIX: only Visita activities (no due_date = visit log, not scheduled task)
-    const visitas=all.filter(t=>t.user?.id===743347&&(t.type==="Visita"||t.type==="VISITA")&&!t.due_date&&!t.dueDate);
-    // DEDUP: max 1 per orgId+date (eliminates checkout+next-step duplicates)
+    const r=await fetch(`${DASH}/api/crm/atividades?user_id=743347&desde=${sel}&limit=2000`,{headers:{"X-Session":token},cache:"no-store"});
+    const d=await r.json();const all=(d&&d.atividades)||[];
+    // visita REGISTRADA do dia = tipo Visita, sem prazo, criada em 'sel'
+    const visitas=all.filter(t=>(t.tipo==="Visita"||t.tipo==="VISITA")&&!t.due_em&&(t.criado_em||"").slice(0,10)===sel);
     const seen=new Set();const deduped=[];
-    for(const t of visitas){const key=t.organization?.id+"|"+t.createdAt?.slice(0,10);if(seen.has(key))continue;seen.add(key);deduped.push(t);}
-    const alisson=deduped.map(t=>({type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",time:t.createdAt,done:t.done}));
-    setTasks(alisson);setErr(`${alisson.length} visitas (${all.length} total)`);
+    for(const t of visitas){const key=(t.org_id||"")+"|"+(t.criado_em||"").slice(0,10);if(seen.has(key))continue;seen.add(key);deduped.push(t);}
+    const alisson=deduped.map(t=>({type:t.tipo||"?",org:t.org_nome||"?",orgId:t.org_id,text:t.texto||"",time:t.criado_em,done:t.concluida}));
+    setTasks(alisson);setErr(`${alisson.length} visitas`);
     if(alisson.length>=1){const sorted=[...alisson].sort((a,b)=>a.time.localeCompare(b.time));let km=0;const startB=getBase(dayBases,sel,743347);const endB=getEnd(dayBases,sel,743347);const fc=getCoord(sorted[0].orgId),lc=getCoord(sorted[sorted.length-1].orgId);
       if(startB&&fc)km+=hav(startB.lat,startB.lng,fc[0],fc[1])*1.3;
       for(let i=0;i<sorted.length-1;i++){
