@@ -207,7 +207,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
         {cnpjN && <button onClick={() => window.open(`${DASH}/?cliente=${cnpjN}`, "_blank", "noopener")} style={{ flex: 1, minWidth: 120, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "9px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><BarChart3 size={15} />Dashboard</button>}
         <button onClick={() => onEdit && onEdit(org)} style={{ flex: 1, minWidth: 100, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.card, color: S.txt, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "9px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Pencil size={14} />Editar</button>
-        <button onClick={() => onPerson && onPerson(org)} style={{ flex: 1, minWidth: 100, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.card, color: S.txt, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "9px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Users2 size={14} />Agendor</button>
+        <button onClick={() => onPerson && onPerson(org)} style={{ flex: 1, minWidth: 100, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.card, color: S.txt, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "9px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Users2 size={14} />Pessoas</button>
       </div>
     </Crd>
 

@@ -2,6 +2,7 @@
 import { useState } from "react";
 import { HOMES, TZ, S, agF, csv, getBase, getEnd, sL, sS } from "../lib";
 import { HotelGeoInput, ProgressBar } from "../components";
+import { ConfigCatalogos } from "./ConfigCatalogos";
 
 const ARow=({emo,t,d,onClick,disabled,color})=><div onClick={disabled?undefined:onClick} style={{display:"flex",alignItems:"center",gap:12,background:S.card,border:`1px solid ${S.brd}`,borderRadius:11,padding:"13px 16px",cursor:disabled?"default":"pointer",opacity:disabled?.6:1}}>
   <span style={{width:34,height:34,borderRadius:9,background:S.cl,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}}>{emo}</span>
@@ -18,7 +19,14 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
   const gpsAddResults=gpsAddSearch.trim().length>=2?orgs.filter(o=>{const q=gpsAddSearch.toLowerCase().replace(/[.\-\/]/g,"");return[o.name,o.nickname,o.cnpj?.replace(/[.\-\/]/g,"")].filter(Boolean).join(" ").toLowerCase().includes(q);}).slice(0,10):[];
   const[tema,setTema]=useState(()=>sL("jc:theme","dark"));
   const trocaTema=(t)=>{setTema(t);sS("jc:theme",t);document.documentElement.dataset.theme=t;};
+  const isAdmin=user?.id===743088;
+  const[sub,setSub]=useState("acoes"); // acoes | cadastros
   return(<div>
+    {isAdmin&&<div style={{display:"flex",gap:5,background:S.cl,border:`1px solid ${S.brd}`,borderRadius:11,padding:4,marginBottom:16,maxWidth:420}}>
+      {[["acoes","⚙️ Ações & Sync"],["cadastros","🗂️ Cadastros"]].map(([id,l])=>
+        <button key={id} onClick={()=>setSub(id)} style={{flex:1,textAlign:"center",padding:"9px 6px",borderRadius:8,fontSize:13,fontWeight:sub===id?600:500,background:sub===id?"var(--card-solid)":"transparent",color:sub===id?S.pl:S.ts,boxShadow:sub===id?"0 1px 2px rgba(3,73,100,.14)":"none",border:"none",cursor:"pointer"}}>{l}</button>)}
+    </div>}
+    {isAdmin&&sub==="cadastros"?<ConfigCatalogos token={token}/>:<div>
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12,boxShadow:S.shadow}}>
       <p style={{fontSize:13,fontWeight:700,color:S.txt,margin:"0 0 8px"}}>🎨 Tema</p>
       <div style={{display:"flex",gap:8}}>
@@ -100,6 +108,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
       </>}
       <button onClick={()=>{if(confirm("Deseja realmente desconectar?\nVoce precisara inserir o token novamente."))onLogout();}} style={{color:S.dng,marginTop:8}}>🚪 Desconectar</button>
     </div>
+    </div>}
   </div>);}
 
 export { ConfigTab };

@@ -40,6 +40,14 @@ const hav=(a,b,c,d)=>{const R=6371,x=((c-a)*Math.PI)/180,y=((d-b)*Math.PI)/180;c
 function sL(k,f){try{return JSON.parse(localStorage.getItem(k))||f;}catch{return f;}}
 function sS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("sync:",e);}}
 // 2º parâmetro carrega a SESSÃO (o Worker injeta o token do Agendor no servidor)
+// Config (catálogos no D1 via Worker /api/config): usuários, segmentos, status, indústrias, origens
+async function cfgApi(token, method="GET", body=null){
+  const r=await fetch(`${API}/api/config`,{method,cache:"no-store",
+    headers:{"X-Session":token,"Content-Type":"application/json; charset=utf-8"},
+    ...(body?{body:JSON.stringify(body)}:{})});
+  if(!r.ok){let b="";try{b=await r.text();}catch{}const e=new Error(`config ${r.status}`);e.body=b;throw e;}
+  return r.json();
+}
 async function agF(path,token,opts={}){const p=path.startsWith("/")?path.slice(1):path;const[base,qs]=p.split("?");let u=`${API}?path=${encodeURIComponent(base)}`;if(qs)u+="&"+qs;
   const r=await fetch(u,{...opts,cache:"no-store",headers:{"X-Session":token,"Content-Type":"application/json; charset=utf-8","Accept":"application/json; charset=utf-8",...(opts.headers||{})}});
   if(r.status===401){try{localStorage.removeItem("jc:session");localStorage.removeItem("jc:user");}catch{}location.reload();throw new Error("Sessão expirada");}
@@ -129,4 +137,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, mins, hrsMin, hourDec, hav, sL, sS, agF, agErr, trAg, postTask, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };
+export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, mins, hrsMin, hourDec, hav, sL, sS, agF, cfgApi, agErr, trAg, postTask, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };

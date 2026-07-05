@@ -1,6 +1,6 @@
 {
   "name": "jordan-checkin",
-  "version": "21.0.0",
+  "version": "22.0.0",
   "description": "App de check-in/checkout para vendedores externos integrado ao Agendor CRM",
   "private": true,
   "type": "module",
