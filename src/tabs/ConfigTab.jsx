@@ -3,6 +3,14 @@ import { useState } from "react";
 import { HOMES, TZ, S, agF, csv, getBase, getEnd, sL, sS } from "../lib";
 import { HotelGeoInput, ProgressBar } from "../components";
 
+const ARow=({emo,t,d,onClick,disabled,color})=><div onClick={disabled?undefined:onClick} style={{display:"flex",alignItems:"center",gap:12,background:S.card,border:`1px solid ${S.brd}`,borderRadius:11,padding:"13px 16px",cursor:disabled?"default":"pointer",opacity:disabled?.6:1}}>
+  <span style={{width:34,height:34,borderRadius:9,background:S.cl,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}}>{emo}</span>
+  <div style={{flex:1,minWidth:0}}>
+    <div style={{fontSize:13.5,fontWeight:600,color:color||S.txt}}>{t}</div>
+    {d&&<div style={{fontSize:11.5,color:S.td,marginTop:1}}>{d}</div>}
+  </div>
+  <span style={{color:S.td,fontSize:14,flexShrink:0}}>›</span>
+</div>;
 function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStatus,syncing,syncMsg,onSync,onLoadHistory,onSyncPull,onShareGPS,onShowDB,onShowEnd,onDeleteGPS,onSaveGPS,onClearVisits,onClearAllGPS,onLogout,doSync}){
   const[gpsSearch,setGpsSearch]=useState("");const[histLoading,setHistLoading]=useState(false);const[shareLoading,setShareLoading]=useState(false);
   const[gpsAddSearch,setGpsAddSearch]=useState("");const[gpsAddTarget,setGpsAddTarget]=useState(null);const[gpsAddLat,setGpsAddLat]=useState(null);const[gpsAddLng,setGpsAddLng]=useState(null);
@@ -19,27 +27,27 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
       </div>
       <p style={{fontSize:11,color:S.td,margin:"8px 0 0"}}>Mesmo sistema de temas do Dashboard. A escolha fica salva neste aparelho.</p>
     </div>
-    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
-      <p style={{fontSize:15,fontWeight:600,margin:"0 0 4px"}}>{user?.name}</p>
-      {HOMES[user?.id]&&<p style={{fontSize:12,color:S.ok}}>Casa: {HOMES[user.id].label}</p>}
-      {getBase(dayBases,today,user?.id)&&<p style={{fontSize:11,color:S.ts,margin:"2px 0 0"}}>Base hoje: {getBase(dayBases,today,user?.id)?.label||"Casa"}{getEnd(dayBases,today,user?.id)!==getBase(dayBases,today,user?.id)?` → ${getEnd(dayBases,today,user?.id)?.label||"Casa"}`:""}</p>}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12,marginBottom:12}}>
+    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
+      <p style={{fontSize:14,fontWeight:700,margin:"0 0 6px",color:S.txt}}>{user?.name}</p>
+      {HOMES[user?.id]&&<p style={{fontSize:12,color:S.pl,margin:0}}>Casa: <b>{HOMES[user.id].label}</b></p>}
+      {getBase(dayBases,today,user?.id)&&<p style={{fontSize:12,color:S.ts,margin:"2px 0 0"}}>Base hoje: {getBase(dayBases,today,user?.id)?.label||"Casa"}{getEnd(dayBases,today,user?.id)!==getBase(dayBases,today,user?.id)?` → ${getEnd(dayBases,today,user?.id)?.label||"Casa"}`:""}</p>}
     </div>
-    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12}}>
-      <p style={{fontSize:12,color:S.ts}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
-      <p style={{fontSize:11,color:syncStatus.startsWith?.("Erro")?S.dng:S.acc,margin:"4px 0 0"}}>Sync: {syncStatus||"aguardando..."}</p>
-      <p style={{fontSize:10,color:S.td,margin:"2px 0 0"}}>User ID: {user?.id} | Polling: 15s | TZ: Cuiabá | v17</p>
+    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
+      <p style={{fontSize:12.5,color:S.t2,margin:0}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
+      <p className="mono" style={{fontSize:11.5,color:syncStatus.startsWith?.("Erro")?S.dng:S.pl,margin:"6px 0 0"}}>Sync {syncStatus||"aguardando..."}</p>
+      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v21</p>
+    </div>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
-    <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:16}}>
-      <button onClick={onSync} disabled={syncing} style={{padding:14,fontSize:14,fontWeight:500,background:S.pri,border:"none",position:"relative",overflow:"hidden"}}>{syncing?syncMsg:"🔄 Sincronizar Clientes"}</button>
-      <button onClick={async()=>{setHistLoading(true);await onLoadHistory();setHistLoading(false);}} disabled={histLoading} style={{padding:12,fontSize:13,background:S.acc+"22",border:`1px solid ${S.acc}`,color:S.acc,fontWeight:500}}>{histLoading?"⏳ Carregando...":"📥 Carregar historico do Agendor"}</button>
-      <button onClick={onSyncPull} style={{padding:12,fontSize:13,background:S.gold+"22",border:`1px solid ${S.gold}`,color:S.gold,fontWeight:500}}>⚡ Forçar sincronização</button>
-      <button onClick={async()=>{if(!confirm("Compartilhar GPS com equipe?"))return;setShareLoading(true);await onShareGPS();setShareLoading(false);}} disabled={shareLoading} style={{padding:12,fontSize:13,background:S.ok+"22",border:`1px solid ${S.ok}`,color:S.ok,fontWeight:500}}>{shareLoading?"⏳ Enviando...":"📡 Compartilhar "+Object.keys(plocs).length+" GPS com equipe"}</button>
-      <button onClick={onShowDB} style={{padding:12}}>🗺️ Definir jornada (origem e destino)</button>
-      <button onClick={onShowEnd} style={{padding:12}}>🏨 Fechar roteiro do dia</button>
-      <button onClick={()=>{if(!("Notification"in window)){alert("Navegador nao suporta notificacoes");return;}Notification.requestPermission().then(p=>{if(p==="granted")alert("Notificacoes ativadas! Voce recebera lembretes de tarefas agendadas.");else alert("Notificacoes bloqueadas. Ative nas configuracoes do navegador.");});}} style={{padding:12,background:("Notification"in window&&Notification.permission==="granted")?S.ok+"22":S.gold+"22",border:`1px solid ${("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold}`,color:("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold}}>
-        {("Notification"in window&&Notification.permission==="granted")?"🔔 Notificações ativadas":"🔕 Ativar notificações"}
-      </button>
+    <div style={{display:"flex",flexDirection:"column",gap:9,marginBottom:16}}>
+      <ARow emo="🔄" t={syncing?syncMsg:"Sincronizar clientes"} d="Baixa a carteira completa do Agendor" onClick={onSync} disabled={syncing}/>
+      <ARow emo="📥" t={histLoading?"Carregando histórico...":"Carregar histórico do Agendor"} d="Últimos 90 dias de visitas registradas" onClick={async()=>{setHistLoading(true);await onLoadHistory();setHistLoading(false);}} disabled={histLoading}/>
+      <ARow emo="⚡" t="Forçar sincronização" d="Puxa agora o estado da equipe e GPS" onClick={onSyncPull}/>
+      <ARow emo="📡" t={shareLoading?"Enviando GPS...":`Compartilhar ${Object.keys(plocs).length} GPS com equipe`} d="Publica as localizações salvas neste aparelho" onClick={async()=>{if(!confirm("Compartilhar GPS com equipe?"))return;setShareLoading(true);await onShareGPS();setShareLoading(false);}} disabled={shareLoading}/>
+      <ARow emo="🗺️" t="Definir jornada" d="Origem e destino do dia (casa, hotel...)" onClick={onShowDB}/>
+      <ARow emo="🏨" t="Fechar roteiro do dia" d="Define o ponto final e conclui o dia" onClick={onShowEnd}/>
+      <ARow emo={("Notification"in window&&Notification.permission==="granted")?"🔔":"🔕"} t={("Notification"in window&&Notification.permission==="granted")?"Notificações ativadas":"Ativar notificações"} d="Lembretes de tarefas agendadas" color={("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold} onClick={()=>{if(!("Notification"in window)){alert("Navegador nao suporta notificacoes");return;}Notification.requestPermission().then(p=>{if(p==="granted")alert("Notificacoes ativadas! Voce recebera lembretes de tarefas agendadas.");else alert("Notificacoes bloqueadas. Ative nas configuracoes do navegador.");});}}/>
 
       {/* Admin area (Jordan only) */}
       {user?.id===743088&&<>

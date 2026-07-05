@@ -1,7 +1,8 @@
 // TeamCheck — aba RelatorioTab
 import { useState, useMemo } from "react";
-import { HOMES, toLocalDate, todayLocal, USERS, S, fT, fD, fDS, mins, hrsMin, hav, csv, getBase, getEnd, getVCoord, getVEndCoord } from "../lib";
-import { BaseEditInline } from "../components";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { HOMES, toLocalDate, todayLocal, USERS, S, PC, fT, fD, fDS, mins, hrsMin, hav, csv, getBase, getEnd, getVCoord, getVEndCoord } from "../lib";
+import { BaseEditInline, Kpi, SegTabs } from "../components";
 
 function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const[sd,setSd]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return toLocalDate(d);});
@@ -65,22 +66,54 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
     const firstCheckin=pv.length&&pv[0]?.checkinTime?fT(pv[0].checkinTime):"-";
     const lastCheckout=pv.length&&pv[pv.length-1]?.checkoutTime?fT(pv[pv.length-1].checkoutTime):"-";
     return(<div>
-    {user?.id===743088&&<div style={{display:"flex",gap:4,marginBottom:8}}><button onClick={()=>setSelUser("me")} style={{flex:1,padding:8,fontSize:12,border:selUser==="me"?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:selUser==="me"?S.pri+"22":"transparent",color:selUser==="me"?S.pri:S.ts,fontWeight:selUser==="me"?600:400}}>Meus dados</button><button onClick={()=>setSelUser("team")} style={{flex:1,padding:8,fontSize:12,border:selUser==="team"?`2px solid ${S.acc}`:`1px solid ${S.brd}`,background:selUser==="team"?S.acc+"22":"transparent",color:selUser==="team"?S.acc:S.ts,fontWeight:selUser==="team"?600:400}}>Alisson Henrique</button></div>}
-    <div style={{display:"flex",gap:6,marginBottom:12,alignItems:"center"}}><input type="date" value={sd} onChange={e=>setSd(e.target.value)} style={{flex:1,fontSize:12}}/><span style={{color:S.td}}>ate</span><input type="date" value={ed} onChange={e=>setEd(e.target.value)} style={{flex:1,fontSize:12}}/></div>
-    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>{[["Visitas",pv.length],["Dias",bd.length],["Jornada",hrsMin(workH)],["Km",totKm.toFixed(0)],["1º Check-in",firstCheckin],["Último",lastCheckout]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:16,fontWeight:600,margin:0}}>{v}</p></div>)}</div>
-    {bd.length>0&&(selUser==="me"||user?.id===743088)&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"10px 14px",marginBottom:12}}>
-      <p style={{fontWeight:500,fontSize:12,margin:"0 0 8px",color:S.ts}}>Origem / Destino {selUser==="team"?"(Alisson)":""} por dia (toque para corrigir)</p>
+    {user?.id===743088&&<div style={{display:"flex",gap:10,marginBottom:14}}>
+      <button onClick={()=>setSelUser("me")} style={{flex:1,textAlign:"center",padding:11,borderRadius:11,fontSize:13.5,fontWeight:selUser==="me"?600:500,background:S.card,border:selUser==="me"?`1.5px solid var(--chrome)`:`1px solid ${S.brd}`,color:selUser==="me"?S.pl:S.ts,cursor:"pointer"}}>Meus dados</button>
+      <button onClick={()=>setSelUser("team")} style={{flex:1,textAlign:"center",padding:11,borderRadius:11,fontSize:13.5,fontWeight:selUser==="team"?600:500,background:S.card,border:selUser==="team"?`1.5px solid ${S.acc}`:`1px solid ${S.brd}`,color:selUser==="team"?S.acc:S.ts,cursor:"pointer"}}>Alisson Henrique</button>
+    </div>}
+    <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center"}}>
+      <input type="date" value={sd} onChange={e=>setSd(e.target.value)} className="mono" style={{flex:1,fontSize:13,padding:"9px 12px"}}/>
+      <span style={{color:S.ts,fontSize:13}}>até</span>
+      <input type="date" value={ed} onChange={e=>setEd(e.target.value)} className="mono" style={{flex:1,fontSize:13,padding:"9px 12px"}}/>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
+      <Kpi k="Visitas" v={pv.length}/>
+      <Kpi k="Dias" v={bd.length}/>
+      <Kpi k="Jornada" v={hrsMin(workH)}/>
+      <Kpi k="Km" v={totKm.toFixed(0)} u="km"/>
+      <Kpi k="1º Check-in" v={firstCheckin}/>
+      <Kpi k="Último check-out" v={lastCheckout}/>
+    </div>
+    {/* Gráfico "Visitas por dia" — recharts, mesmo padrão do Overview do Dashboard */}
+    {bd.length>0&&(()=>{const chartData=[...bd].reverse().map(([dt,dvs])=>({d:fDS(dt+"T12:00"),v:dvs.length}));return(
+      <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px 8px",marginBottom:16}}>
+        <div style={{fontSize:14,fontWeight:600,color:S.txt,marginBottom:10}}>Visitas por dia</div>
+        <div style={{width:"100%",height:Math.max(180,Math.min(280,chartData.length*14+80))}}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{top:4,right:8,bottom:4,left:-22}}>
+              <CartesianGrid stroke={"rgba(var(--t3-rgb),.15)"} vertical={false}/>
+              <XAxis dataKey="d" tick={{fontSize:10,fill:"var(--t3)",fontFamily:"'IBM Plex Mono',monospace"}} axisLine={false} tickLine={false}/>
+              <YAxis allowDecimals={false} tick={{fontSize:10,fill:"var(--t3)",fontFamily:"'IBM Plex Mono',monospace"}} axisLine={false} tickLine={false}/>
+              <Tooltip cursor={{fill:"rgba(var(--t3-rgb),.08)"}} contentStyle={{background:"var(--card-solid)",border:`1px solid var(--bdr)`,borderRadius:10,fontSize:12,color:"var(--t1)"}} labelStyle={{color:"var(--t1)",fontWeight:600}} formatter={(v)=>[v,"Visitas"]}/>
+              <Bar dataKey="v" fill={PC[0]} radius={[4,4,0,0]} maxBarSize={34}/>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>);})()}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(340px,1fr))",gap:16,alignItems:"start"}}>
+    <div>
+{bd.length>0&&(selUser==="me"||user?.id===743088)&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"10px 14px",marginBottom:12}}>
+      <div style={{fontSize:14,fontWeight:600,color:S.txt,marginBottom:10}}>Origem / Destino {selUser==="team"?"(Alisson)":""} por dia <span style={{fontSize:11,fontWeight:400,color:S.td}}>· toque para corrigir</span></div>
       {bd.map(([dt])=>{const sb=getRepBase(dt);const eb=getRepEnd(dt);return(
-        <div key={dt} onClick={()=>setEditDay(editDay===dt?null:dt)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:`1px solid ${S.brd}`,cursor:"pointer"}}>
-          <span style={{fontSize:11,color:S.ts}}>{fDS(dt+"T12:00")}</span>
-          <span style={{fontSize:11,color:S.pl}}>{sb?.label||"Casa"} → {eb?.label||"Casa"}</span>
-          <span style={{fontSize:10,color:S.acc}}>✏️</span>
+        <div key={dt} className="hr" onClick={()=>setEditDay(editDay===dt?null:dt)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"9px 8px",borderRadius:8,cursor:"pointer"}}>
+          <span className="mono" style={{fontSize:12.5,fontWeight:600,color:S.t2}}>{fDS(dt+"T12:00")}</span>
+          <span style={{fontSize:12.5,color:S.pl,flex:1,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sb?.label||"Casa"} → {eb?.label||"Casa"}</span>
+          <span style={{width:28,height:28,borderRadius:7,border:`1px solid ${S.inpBdr}`,background:S.inp,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>✏️</span>
         </div>);})}
     </div>}
     {editDay&&<BaseEditInline day={editDay} dayBases={dayBases} userId={repUserId} dayKey={selUser==="team"?repUserId+"_"+editDay:editDay} plocs={plocs} lastVisitCoord={bd.find(([d])=>d===editDay)?getVEndCoord([...bd.find(([d])=>d===editDay)[1]].sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime))[0],plocs):null} onSave={(d,start,end)=>{onEditBase(d,start,end,selUser==="team"?repUserId:null);setEditDay(null);}} onCancel={()=>setEditDay(null)}/>}
     <div style={{display:"flex",gap:6,marginBottom:12}}>
       {/* FIX: Export with correct user name and bases */}
-      <button onClick={()=>{const rows=[["Data","Vendedor","Origem","Destino","Visitas","Km","Jornada","Clientes"]];bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));if(!sr.length)return;const b2=getRepBase(dt);const eb=getRepEnd(dt);const dk=calcDayKm(dvs,dt);rows.push([fD(dt+"T12:00"),repUserName,b2?.label||"Casa",eb?.label||"Casa",dvs.length,dk.toFixed(1),hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)),dvs.map(v=>v.orgName).join(", ")]);});rows.push([],["TOTAL","","","",pv.length,totKm.toFixed(1),hrsMin(workH),""]);csv(rows,`km-${repUserName}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Resumo</button>
+      <button onClick={()=>{const rows=[["Data","Vendedor","Origem","Destino","Visitas","Km","Jornada","Clientes"]];bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));if(!sr.length)return;const b2=getRepBase(dt);const eb=getRepEnd(dt);const dk=calcDayKm(dvs,dt);rows.push([fD(dt+"T12:00"),repUserName,b2?.label||"Casa",eb?.label||"Casa",dvs.length,dk.toFixed(1),hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)),dvs.map(v=>v.orgName).join(", ")]);});rows.push([],["TOTAL","","","",pv.length,totKm.toFixed(1),hrsMin(workH),""]);csv(rows,`km-${repUserName}-${sd}-${ed}.csv`);}} style={{flex:1,textAlign:"center",padding:9,borderRadius:8,fontSize:12.5,fontWeight:500,border:`1px solid ${S.inpBdr}`,color:S.t2,background:"transparent"}}>Exportar resumo</button>
       {/* FIX: Detailed export with Km column */}
       <button onClick={()=>{const rows=[["Data","In","Out","Min","Cliente","Cidade","Km Trecho","Tipo","Obs","Venda"]];
         bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const segs=calcSegKm(sr,dt);const b2=getRepBase(dt);const eb=getRepEnd(dt);
@@ -89,10 +122,11 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
           const last=sr[sr.length-1];const lc=getVEndCoord(last,plocs);const endB=eb||b2;
           if(endB&&lc){const retKm=hav(lc.lat,lc.lng,endB.lat,endB.lng)*1.3;rows.push([fD(dt+"T12:00"),"","","","→ "+(endB?.label||"Casa"),"",retKm.toFixed(1),"RETORNO","",""]);}
         });
-        csv(rows,`visitas-${repUserName}-${sd}-${ed}.csv`);}} style={{flex:1,fontSize:11}}>Exportar Detalhado</button>
+        csv(rows,`visitas-${repUserName}-${sd}-${ed}.csv`);}} style={{flex:1,textAlign:"center",padding:9,borderRadius:8,fontSize:12.5,fontWeight:500,background:"var(--chrome)",color:"#fff",border:"none"}}>Exportar detalhado</button>
     </div>
-    {bd.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
-      <p style={{fontWeight:500,marginBottom:8,fontSize:13}}>Visitas/dia</p>
+    </div>
+{bd.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+      <div style={{fontSize:14,fontWeight:600,color:S.txt,marginBottom:12}}>Rotas por dia</div>
       {bd.map(([dt,dvs])=>{
         const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
         const sb=getRepBase(dt);const eb=getRepEnd(dt);
@@ -105,12 +139,12 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
         const dayKm=calcDayKm(dvs,dt);
         return(<div key={dt} style={{marginBottom:10,paddingBottom:8,borderBottom:`1px solid ${S.brd}`}}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
-            <span style={{fontSize:11,color:S.ts,width:42,textAlign:"right",flexShrink:0}}>{fDS(dt+"T12:00")}</span>
-            <div style={{flex:1,height:14,background:S.bg,borderRadius:3}}><div style={{height:"100%",width:`${(dvs.length/mx)*100}%`,background:S.pri,borderRadius:3,minWidth:3}}/></div>
-            <span style={{fontSize:11,fontWeight:600,width:16,textAlign:"right",flexShrink:0}}>{dvs.length}</span>
+            <span className="mono" style={{fontSize:12,fontWeight:600,color:S.t2,width:46,textAlign:"right",flexShrink:0}}>{fDS(dt+"T12:00")}</span>
+            <div style={{flex:1,height:9,background:"var(--track)",borderRadius:6,overflow:"hidden"}}><div style={{height:"100%",width:`${(dvs.length/mx)*100}%`,background:"linear-gradient(90deg,#38C6F5,#0578A6)",borderRadius:6,minWidth:4}}/></div>
+            <span style={{fontSize:12.5,fontWeight:700,color:S.txt,width:18,textAlign:"right",flexShrink:0}}>{dvs.length}</span>
           </div>
           <div style={{display:"flex",gap:4,marginLeft:48}}>
-            <span style={{fontSize:10,color:S.acc,fontWeight:500}}>{sr[0]?fT(sr[0].checkinTime):"-"}</span>
+            <span className="mono" style={{fontSize:10.5,color:S.acc,fontWeight:500}}>{sr[0]?fT(sr[0].checkinTime):"-"}</span>
             <span style={{fontSize:10,color:S.ts}}>{dayKm>0?`· ${dayKm.toFixed(0)}km`:""} · {sr.length>=1?hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)):"-"}</span>
             {hasRoute&&<a href={mapsUrl} target="_blank" rel="noopener" style={{fontSize:10,color:S.acc,textDecoration:"none",fontWeight:600,marginLeft:"auto"}}>📍 Ver Rota</a>}
           </div>
@@ -125,6 +159,7 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
         </div>);
       })}
     </div>}
+  </div>
   </div>);}
 
 export { RelatorioTab };

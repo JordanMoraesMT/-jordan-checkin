@@ -1,7 +1,7 @@
 // TeamCheck — aba AgendaTab
 import { useState, useEffect, useMemo, useRef } from "react";
 import { API, toLocalDate, todayLocal, TYPES, S, fT, fD, agF, crmFire } from "../lib";
-import { LB } from "../components";
+import { LB, SegTabs, Chip } from "../components";
 
 function AgendaTab({visible,token,user,allOrgs}){
   const loadedRef=useRef(false);
@@ -47,37 +47,46 @@ function AgendaTab({visible,token,user,allOrgs}){
   const doneT=filtered.filter(t=>t.done);
   // Add task: search orgs
   const addResults=addQ.trim().length>=2?allOrgs.filter(o=>[o.name,o.nickname,o.legalName,o.cnpj].filter(Boolean).some(f=>f.toLowerCase().includes(addQ.toLowerCase()))).slice(0,8):[];
-  const renderTask=(t)=><div key={t.id} style={{background:S.cl,borderRadius:8,padding:"10px 12px",marginBottom:4,display:"flex",gap:8,alignItems:"flex-start"}}>
+  const renderTask=(t)=><div key={t.id} style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:13,padding:"14px 16px",marginBottom:11,display:"flex",gap:16,alignItems:"center"}}>
     <div style={{flex:1,minWidth:0}}>
-      <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-        <span style={{fontSize:10,color:"#fff",background:t.type==="Visita"?S.acc:t.type==="WhatsApp"?S.ok:S.pri,padding:"1px 6px",borderRadius:4}}>{t.type}</span>
-        <p style={{fontSize:12,fontWeight:500,margin:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.org}</p>
-        {isAdmin&&<span style={{fontSize:9,color:S.acc,background:S.acc+"18",padding:"1px 6px",borderRadius:4}}>{t.userName?.split(" ")[0]}</span>}
+      <div style={{display:"flex",gap:9,alignItems:"center",flexWrap:"wrap",marginBottom:5}}>
+        <span style={{fontSize:10,letterSpacing:".05em",textTransform:"uppercase",fontWeight:700,color:"#fff",background:t.type==="Visita"?"var(--chrome)":t.type==="WhatsApp"?S.ok:t.type==="Ligação"||t.type==="LIGACAO"?S.cyan:S.purple,padding:"3px 8px",borderRadius:6}}>{t.type}</span>
+        <span style={{fontSize:14,fontWeight:700,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.org}</span>
+        {isAdmin&&<span style={{fontSize:10,color:S.acc,background:S.acc+"18",border:`1px solid ${S.acc}44`,padding:"2px 7px",borderRadius:6,fontWeight:600}}>{t.userName?.split(" ")[0]}</span>}
       </div>
-      <p style={{fontSize:11,color:S.ts,margin:"3px 0",wordBreak:"break-word"}}>{t.text}</p>
-      <p style={{fontSize:10,color:t.done?S.ok:t.due&&t.due.slice(0,10)<today?S.dng:S.td,margin:0}}>{t.due?`Prazo: ${fD(t.due)} ${fT(t.due)}`:`Criada: ${fD(t.created)}`}{t.done&&t.finished?` · Finalizada ${fD(t.finished)}`:""}</p>
+      <p style={{fontSize:12.5,color:S.ts,margin:0,lineHeight:1.5,wordBreak:"break-word"}}>{t.text}</p>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginTop:7,flexWrap:"wrap"}}>
+        <span className="mono" style={{fontSize:11.5,fontWeight:600,color:t.done?S.ok:t.due&&t.due.slice(0,10)<today?S.dng:S.td}}>{t.due?`Prazo ${fD(t.due)} ${fT(t.due)}`:`Criada ${fD(t.created)}`}</span>
+        {t.done&&t.finished&&<><span style={{width:3,height:3,borderRadius:"50%",background:S.td}}/><span className="mono" style={{fontSize:11.5,color:S.ok}}>Finalizada {fD(t.finished)}</span></>}
+      </div>
     </div>
-    {!t.done&&<button onClick={()=>markDone(t)} style={{padding:"6px 12px",fontSize:11,background:S.ok+"22",border:`1px solid ${S.ok}`,color:S.ok,borderRadius:6,flexShrink:0,fontWeight:500}}>Finalizar</button>}
+    {!t.done&&<button onClick={()=>markDone(t)} style={{background:S.inp,border:`1px solid ${S.ok}66`,color:S.ok,borderRadius:8,padding:"9px 16px",fontSize:12.5,fontWeight:600,cursor:"pointer",flexShrink:0}}>Finalizar</button>}
     {t.done&&<span style={{fontSize:18,flexShrink:0}}>✅</span>}
   </div>;
   return(<div style={{display:visible?"block":"none"}}>
-    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-      <p style={{fontWeight:600,fontSize:16,margin:0}}>📅 Agenda</p>
-      <div style={{display:"flex",gap:4}}><button onClick={()=>setShowAdd(true)} style={{padding:"6px 12px",fontSize:11,background:S.acc,border:"none",fontWeight:600}}>+ Tarefa</button><button onClick={load} disabled={lo} style={{padding:"6px 12px",fontSize:11,background:S.pri,border:"none"}}>{lo?"...":"🔄"}</button></div>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,marginBottom:16,flexWrap:"wrap"}}>
+      <div>
+        <div style={{fontSize:16,fontWeight:700,color:S.txt}}>Agenda</div>
+        <div style={{fontSize:12,color:S.ts,marginTop:2}}>{err||`${filtered.length} tarefa(s)${filter==="pending"?" pendentes":" finalizadas"}`}</div>
+      </div>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={load} disabled={lo} style={{width:38,height:38,borderRadius:9,border:`1px solid ${S.inpBdr}`,background:S.inp,fontSize:14,padding:0}}>{lo?"…":"🔄"}</button>
+        <button onClick={()=>setShowAdd(true)} style={{display:"flex",alignItems:"center",gap:7,background:"var(--chrome)",color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:500,cursor:"pointer"}}>+ Nova tarefa</button>
+      </div>
     </div>
-    {/* Pendentes / Finalizadas */}
-    <div style={{display:"flex",gap:3,marginBottom:8}}><button onClick={()=>setFilter("pending")} style={{flex:1,padding:8,fontSize:12,border:filter==="pending"?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:filter==="pending"?S.pri+"22":"transparent",color:filter==="pending"?S.pri:S.ts,fontWeight:filter==="pending"?600:400}}>Pendentes</button><button onClick={()=>setFilter("done")} style={{flex:1,padding:8,fontSize:12,border:filter==="done"?`2px solid ${S.ok}`:`1px solid ${S.brd}`,background:filter==="done"?S.ok+"22":"transparent",color:filter==="done"?S.ok:S.ts,fontWeight:filter==="done"?600:400}}>Finalizadas</button></div>
-    {/* Period filters */}
-    <div style={{display:"flex",gap:3,marginBottom:6}}>{[["all","Todas"],["week","Semana"],["today","Hoje"],["custom","Definir"]].map(([k,l])=><button key={k} onClick={()=>setPeriod(k)} style={{flex:1,padding:6,fontSize:10,border:`1px solid ${period===k?S.gold:S.brd}`,background:period===k?S.gold+"18":"transparent",color:period===k?S.gold:S.td,borderRadius:6,fontWeight:period===k?600:400}}>{l}</button>)}</div>
-    {period==="custom"&&<div style={{display:"flex",gap:4,marginBottom:6,alignItems:"center"}}><input type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)} style={{flex:1,fontSize:10,padding:4}}/><span style={{color:S.td,fontSize:10}}>a</span><input type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)} style={{flex:1,fontSize:10,padding:4}}/></div>}
-    {/* User filter (admin) */}
-    {isAdmin&&<div style={{display:"flex",gap:3,marginBottom:8}}>{[["all","Todos"],["jordan","Jordan"],["alisson","Alisson"]].map(([k,l])=><button key={k} onClick={()=>setUserFilter(k)} style={{flex:1,padding:5,fontSize:10,border:`1px solid ${userFilter===k?S.acc:S.brd}`,background:userFilter===k?S.acc+"18":"transparent",color:userFilter===k?S.acc:S.td,borderRadius:6}}>{l}</button>)}</div>}
-    {err&&<p style={{fontSize:11,color:err.startsWith("Erro")?S.dng:S.acc,margin:"0 0 8px",padding:"4px 10px",background:S.cl,borderRadius:6}}>{err}</p>}
-    <p style={{fontSize:11,color:S.td,margin:"0 0 8px"}}>{filtered.length} tarefa(s){filter==="pending"?" pendentes":" finalizadas"}</p>
+    {/* Barra de filtros (card padrão mockup) */}
+    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"12px 14px",marginBottom:16,display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
+      <div style={{minWidth:200}}><SegTabs items={[["pending","Pendentes"],["done","Finalizadas"]]} value={filter} onChange={setFilter} size={12.5}/></div>
+      <div style={{width:1,height:22,background:S.brd}}/>
+      {[["all","Todas"],["week","Semana"],["today","Hoje"],["custom","Definir"]].map(([k,l])=><Chip key={k} on={period===k} color="var(--chrome)" onClick={()=>setPeriod(k)}>{l}</Chip>)}
+      {isAdmin&&<><div style={{width:1,height:22,background:S.brd}}/>
+      {[["all","Todos"],["jordan","Jordan"],["alisson","Alisson"]].map(([k,l])=><Chip key={k} on={userFilter===k} color={S.acc} onClick={()=>setUserFilter(k)}>{l}</Chip>)}</>}
+      {period==="custom"&&<div style={{display:"flex",gap:6,alignItems:"center",flexBasis:"100%"}}><input type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)} className="mono" style={{flex:1,fontSize:12,padding:"7px 8px"}}/><span style={{color:S.td,fontSize:11}}>a</span><input type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)} className="mono" style={{flex:1,fontSize:12,padding:"7px 8px"}}/></div>}
+    </div>
     {lo&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando...</p>}
-    {!lo&&filter==="pending"&&<>{overdue.length>0&&<><p style={{fontSize:11,fontWeight:600,color:S.dng,margin:"0 0 4px"}}>⚠️ Atrasadas ({overdue.length})</p>{overdue.map(renderTask)}</>}
-      {todayT.filter(t=>!t.done).length>0&&<><p style={{fontSize:11,fontWeight:600,color:S.gold,margin:"8px 0 4px"}}>📌 Hoje ({todayT.filter(t=>!t.done).length})</p>{todayT.filter(t=>!t.done).map(renderTask)}</>}
-      {futureT.length>0&&<><p style={{fontSize:11,fontWeight:600,color:S.pri,margin:"8px 0 4px"}}>🗓️ Próximas ({futureT.length})</p>{futureT.map(renderTask)}</>}</>}
+    {!lo&&filter==="pending"&&<>{overdue.length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"0 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.dng}}>⚠️ Atrasadas ({overdue.length})</span></div>{overdue.map(renderTask)}</>}
+      {todayT.filter(t=>!t.done).length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"14px 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.gold}}>📌 Hoje ({todayT.filter(t=>!t.done).length})</span></div>{todayT.filter(t=>!t.done).map(renderTask)}</>}
+      {futureT.length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"14px 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.pl}}>🗓️ Próximas ({futureT.length})</span></div>{futureT.map(renderTask)}</>}</>}
     {!lo&&filter==="done"&&<>{doneT.length?doneT.map(renderTask):<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma finalizada no período</p>}</>}
     {!lo&&!filtered.length&&filter==="pending"&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma tarefa pendente</p>}
     {/* Add Task Modal */}

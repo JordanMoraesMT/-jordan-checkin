@@ -1,7 +1,7 @@
 // TeamCheck — aba EquipeTab
 import { useState, useEffect } from "react";
 import { toLocalDate, geoEstimate, S, fT, fD, mins, hrsMin, hav, agF, csv, getBase, getEnd } from "../lib";
-import { LB } from "../components";
+import { LB, Kpi } from "../components";
 
 function EquipeTab({sel,setSel,token,plocs,orgs,dayBases}){
   const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[routeKm,setRouteKm]=useState(null);const[err,setErr]=useState("");
@@ -36,27 +36,41 @@ function EquipeTab({sel,setSel,token,plocs,orgs,dayBases}){
   const workH=firstTime&&lastTime?Math.max(0,mins(firstTime,lastTime)-60):0;
   const withGps=tasks.filter(t=>plocs[t.orgId]).length;const withEst=tasks.filter(t=>getCoord(t.orgId)).length;
   return(<div>
-    <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Produtividade — Alisson Henrique</p>
-    <LB t="DATA"><input type="date" value={sel} onChange={e=>setSel(e.target.value)} style={{width:"100%",marginBottom:8}}/></LB>
-    <button onClick={load} disabled={lo} style={{width:"100%",marginBottom:8,padding:12,background:S.pri,border:"none",fontWeight:500}}>{lo?"Carregando...":"Atualizar"}</button>
-    {err&&<p style={{fontSize:11,color:err.startsWith("ERRO")?S.dng:S.acc,margin:"0 0 12px",padding:"6px 10px",background:S.cl,borderRadius:6}}>{err}</p>}
-    {tasks.length>0&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-      {[["Atividades",tasks.length],["Visitas",visitTasks.length],["Inicio",firstTime?fT(firstTime):"-"],["Jornada",hrsMin(workH)],["Km estimado",routeKm!=null?routeKm.toFixed(1):"-"],["Localização",`${withGps}📍 ${withEst-withGps}🏙️`]].map(([l,v],i)=><div key={i} style={{background:S.cl,borderRadius:10,padding:10}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px"}}>{l}</p><p style={{fontSize:18,fontWeight:600,margin:0}}>{v}</p></div>)}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,marginBottom:16,flexWrap:"wrap"}}>
+      <div>
+        <div style={{fontSize:16,fontWeight:700,color:S.txt}}>Produtividade — Alisson Henrique</div>
+        {err&&<div style={{fontSize:12,color:err.startsWith("ERRO")?S.dng:S.ts,marginTop:2}}>{err}</div>}
+      </div>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <input type="date" value={sel} onChange={e=>setSel(e.target.value)} className="mono" style={{fontSize:13,padding:"9px 12px"}}/>
+        <button onClick={load} disabled={lo} style={{background:"var(--chrome)",color:"#fff",border:"none",borderRadius:9,padding:"10px 18px",fontSize:13,fontWeight:500}}>{lo?"Carregando...":"Atualizar"}</button>
+      </div>
+    </div>
+    {tasks.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
+      <Kpi k="Atividades" v={tasks.length}/>
+      <Kpi k="Visitas" v={visitTasks.length}/>
+      <Kpi k="Início" v={firstTime?fT(firstTime):"-"}/>
+      <Kpi k="Jornada" v={hrsMin(workH)}/>
+      <Kpi k="Km estimado" v={routeKm!=null?routeKm.toFixed(1):"-"} u={routeKm!=null?"km":""}/>
+      <Kpi k="Localização" v={`${withGps}📍 ${withEst-withGps}🏙️`}/>
     </div>}
-    {tasks.length>0&&<button onClick={()=>{const rows=[["Data","Hora","Cliente","Tipo","Observação","GPS"]];tasks.forEach(t=>rows.push([fD(t.time),fT(t.time),t.org,t.type,t.text.slice(0,80),plocs[t.orgId]?"Sim":"Nao"]));rows.push([],["Km estimado",routeKm!=null?routeKm.toFixed(1):"-"],["Jornada",hrsMin(workH)],["Visitas",visitTasks.length]);csv(rows,`alisson-${sel}.csv`);}} style={{width:"100%",marginBottom:14,padding:10,fontSize:12,background:S.pri+"22",border:`1px solid ${S.pri}55`,color:S.pl}}>📊 Exportar relatório Alisson</button>}
+    {tasks.length>0&&<button onClick={()=>{const rows=[["Data","Hora","Cliente","Tipo","Observação","GPS"]];tasks.forEach(t=>rows.push([fD(t.time),fT(t.time),t.org,t.type,t.text.slice(0,80),plocs[t.orgId]?"Sim":"Nao"]));rows.push([],["Km estimado",routeKm!=null?routeKm.toFixed(1):"-"],["Jornada",hrsMin(workH)],["Visitas",visitTasks.length]);csv(rows,`alisson-${sel}.csv`);}} style={{width:"100%",marginBottom:16,padding:10,fontSize:12.5,fontWeight:500,background:"transparent",border:`1px solid ${S.inpBdr}`,color:S.pl,borderRadius:8}}>📊 Exportar relatório do Alisson</button>}
     {!lo&&!tasks.length&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma atividade nesta data</p>}
-    {tasks.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,overflow:"hidden"}}>
-      <div style={{padding:"10px 14px",borderBottom:`1px solid ${S.brd}`}}><p style={{fontWeight:500,margin:0,fontSize:13}}>Rota do dia</p></div>
-      {tasks.sort((a,b)=>a.time.localeCompare(b.time)).map((t,i)=><div key={i} style={{padding:"10px 14px",borderBottom:i<tasks.length-1?`1px solid ${S.brd}`:"none"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
-            <div style={{width:22,height:22,borderRadius:"50%",background:plocs[t.orgId]?S.acc+"33":S.bg,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><span style={{fontSize:10,fontWeight:600,color:plocs[t.orgId]?S.acc:S.td}}>{i+1}</span></div>
-            <p style={{fontSize:13,fontWeight:500,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.org}</p>
+    {tasks.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"18px 20px"}}>
+      <div style={{fontSize:14,fontWeight:600,color:S.txt,marginBottom:12}}>Rota do dia</div>
+      <div style={{position:"relative",paddingLeft:4}}>
+        <div style={{position:"absolute",left:15,top:18,bottom:18,width:2,background:S.brd}}/>
+        {tasks.sort((a,b)=>a.time.localeCompare(b.time)).map((t,i)=><div key={i} style={{position:"relative",display:"flex",gap:12,padding:"10px 2px"}}>
+          <div style={{position:"relative",zIndex:1,width:24,height:24,borderRadius:"50%",background:plocs[t.orgId]?"var(--chrome)":S.cl,color:plocs[t.orgId]?"#fff":S.td,fontSize:12,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 0 0 3px var(--card-solid)"}}>{i+1}</div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}>
+              <span style={{fontSize:13.5,fontWeight:600,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.org}</span>
+              <span className="mono" style={{fontSize:11.5,color:S.td,flexShrink:0}}>{fT(t.time)}</span>
+            </div>
+            <p style={{fontSize:12,color:S.ts,margin:"3px 0 0",lineHeight:1.5,wordBreak:"break-word"}}>{t.type} — {t.text}</p>
           </div>
-          <span style={{fontSize:11,color:S.ts,flexShrink:0,marginLeft:8}}>{fT(t.time)}</span>
-        </div>
-        <p style={{fontSize:11,color:S.ts,margin:"2px 0 0 30px",wordBreak:"break-word"}}>{t.type} — {t.text}</p>
-      </div>)}
+        </div>)}
+      </div>
     </div>}
   </div>);}
 

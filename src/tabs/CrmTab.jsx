@@ -531,8 +531,8 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
   const secoes = [["inicio", "Início"], ["tarefas", "Tarefas"], ["empresas", "Empresas"], ["pessoas", "Pessoas"]];
   return (<div>
     {/* Menu do CRM — fiel ao topo do Agendor (Início | Tarefas | Empresas) */}
-    <div style={{ display: "flex", gap: 3, marginBottom: 12, background: S.cl, borderRadius: 10, padding: 3 }}>
-      {secoes.map(([id, l]) => <button key={id} onClick={() => setSecao(id)} style={{ flex: 1, border: "none", background: secao === id ? S.pri : "transparent", borderRadius: 8, padding: "9px 2px", fontSize: 12.5, fontWeight: secao === id ? 700 : 500, color: secao === id ? "#fff" : S.ts, cursor: "pointer" }}>{l}</button>)}
+    <div style={{ display: "flex", gap: 5, marginBottom: 16, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 11, padding: 4, maxWidth: 560 }}>
+      {secoes.map(([id, l]) => <button key={id} onClick={() => setSecao(id)} style={{ flex: 1, border: "none", background: secao === id ? "var(--card-solid)" : "transparent", borderRadius: 8, padding: "9px 2px", fontSize: 13, fontWeight: secao === id ? 600 : 500, color: secao === id ? S.pl : S.ts, boxShadow: secao === id ? "0 1px 2px rgba(3,73,100,.14)" : "none", cursor: "pointer" }}>{l}</button>)}
     </div>
     {secao === "tarefas" && <AgendaTab visible={true} token={token} user={user} allOrgs={allOrgs} />}
     {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
