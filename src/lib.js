@@ -1,7 +1,7 @@
 // TeamCheck — biblioteca: constantes, utilitários e API Agendor
 const API="https://agendor-proxy.administrativo-fc3.workers.dev";
 const OSRM="https://router.project-osrm.org/route/v1/driving";
-const HOMES={743088:{lat:-15.677694,lng:-55.954778,label:"Casa Jordan"},743347:{lat:-15.653611,lng:-56.026833,label:"Casa Alisson"}};
+let HOMES={743088:{lat:-15.677694,lng:-55.954778,label:"Casa Jordan"},743347:{lat:-15.653611,lng:-56.026833,label:"Casa Alisson"}};
 const LUNCH_START=12,LUNCH_END=13,PG=20;
 // ─── Timezone: Cuiabá (UTC-4, sem horário de verão) ───
 const TZ="America/Cuiaba";
@@ -11,13 +11,13 @@ const TYPES=[{id:"VISITA",l:"Visita"},{id:"LIGACAO",l:"Ligação"},{id:"EMAIL",l
 // Backend próprio (D1 via Worker do Dashboard) — fase de transição: gravar em AMBOS (Agendor + D1)
 const DASH="https://dashboard.jordanmt.com";
 const crmFire=(token,path,body,method="POST")=>{try{fetch(DASH+path,{method,headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(body)}).catch(()=>{});}catch{}};
-const CATS=["Ativo","Prospecção","Perdido","Somente Visita","Inativo","Online - B2B"]; // v27: Perdido incluído. Excluído fica fora do PDV; no CRM aparece quando filtrado
-const BRANDS=["TRAMONTINA","PADO","ZAGONEL","RUVOLO","SANTANA","FESTCOLOR","PLASTILIT"];
-const SECTORS=[{id:4512997,n:"Açougues"},{id:4513651,n:"Agropecuarias"},{id:4513000,n:"Atacados"},{id:4512998,n:"Decoração"},{id:4513649,n:"Eletromoveis"},{id:4724740,n:"Embalagens"},{id:4513001,n:"Garden"},{id:4512999,n:"Mat. Construção"},{id:4513019,n:"Outros"},{id:4513020,n:"Papelaria"},{id:4513650,n:"Presenteiros"},{id:4512995,n:"Supermercados"},{id:4512996,n:"Variedades"}];
-const CAT_IDS=[{id:3186598,n:"Ativo"},{id:3186011,n:"Prospecção"},{id:4165331,n:"Perdido"},{id:3186601,n:"Somente Visita"},{id:3186600,n:"Inativo"},{id:4136717,n:"Online - B2B"},{id:3187967,n:"Excluido"}];
-const ORIGINS=[{id:1981672,n:"Carteira"},{id:1979723,n:"Indicação"},{id:1980476,n:"Prospecção"},{id:1979725,n:"Site"},{id:1980477,n:"Instagram"},{id:1980478,n:"Leads"}];
-const USERS=[{id:743088,n:"Jordan Moraes"},{id:743347,n:"Alisson Henrique"}];
-const CC={Ativo:"#10B981",Inativo:"#F59E0B","Online - B2B":"#0578A6","Somente Visita":"#EC4899",Prospecção:"#8B5CF6",Perdido:"#78716C",Excluido:"#DC2626"};
+let CATS=["Ativo","Prospecção","Perdido","Prospectar","Somente Visita","Inativo","Online - B2B"]; // v28: default; sobrescrito por loadCatalogos(). Excluído fica fora do PDV
+let BRANDS=["TRAMONTINA","PADO","HIPER TEXTIL","PLASTILIT","FESTCOLOR","ZAGONEL","RUVOLO","SANTANA"];
+let SECTORS=[{id:4512997,n:"Açougues"},{id:4513651,n:"Agropecuarias"},{id:4513000,n:"Atacados"},{id:4512998,n:"Decoração"},{id:4513649,n:"Eletromoveis"},{id:4724740,n:"Embalagens"},{id:4513001,n:"Garden"},{id:4512999,n:"Mat. Construção"},{id:4513019,n:"Outros"},{id:4513020,n:"Papelaria"},{id:4513650,n:"Presenteiros"},{id:4512995,n:"Supermercados"},{id:4512996,n:"Variedades"}];
+let CAT_IDS=[{id:3186598,n:"Ativo"},{id:3186011,n:"Prospecção"},{id:4165331,n:"Perdido"},{id:3186012,n:"Prospectar"},{id:3186601,n:"Somente Visita"},{id:3186600,n:"Inativo"},{id:4136717,n:"Online - B2B"},{id:3187967,n:"Excluido"}];
+let ORIGINS=[{id:1981672,n:"Carteira"},{id:1979723,n:"Indicação"},{id:1980476,n:"Prospecção"},{id:1979725,n:"Site"},{id:1980477,n:"Instagram"},{id:1980478,n:"Leads"}];
+let USERS=[{id:743088,n:"Jordan Moraes"},{id:743347,n:"Alisson Henrique"}];
+let CC={Ativo:"#10B981",Inativo:"#F59E0B","Online - B2B":"#0578A6","Somente Visita":"#EC4899",Prospecção:"#8B5CF6",Perdido:"#78716C",Prospectar:"#5B8DEF",Excluido:"#DC2626"};
 const CITY_GEO={"Cuiabá":[-15.5989,-56.0949],"Cuiaba":[-15.5989,-56.0949],"Várzea Grande":[-15.6460,-56.1322],"Varzea Grande":[-15.6460,-56.1322],"Tangará da Serra":[-14.6229,-57.4947],"Tangara da Serra":[-14.6229,-57.4947],"Cáceres":[-16.0725,-57.6770],"Caceres":[-16.0725,-57.6770],"Pontes e Lacerda":[-15.2264,-59.3411],"Campo Novo do Parecis":[-13.6629,-57.8914],"Campo Novo dos Parecis":[-13.6629,-57.8914],"Campo Verde":[-15.5444,-55.1628],"Rondonópolis":[-16.4673,-54.6372],"Rondonopolis":[-16.4673,-54.6372],"Mirassol d Oeste":[-15.6779,-58.0948],"Primavera do Leste":[-15.5615,-54.2817],"Sapezal":[-12.9878,-58.7652],"Araputanga":[-15.4723,-58.3438],"São José dos Quatro Marcos":[-15.6270,-58.1755],"Sorriso":[-12.5428,-55.7112],"Sinop":[-11.8642,-55.5095],"Lucas do Rio Verde":[-13.0490,-55.9048],"Nova Mutum":[-13.8321,-56.0813],"Barra do Garças":[-15.8867,-52.2566],"Diamantino":[-14.4080,-56.4437],"Poconé":[-16.2558,-56.6232],"Jaciara":[-15.9620,-54.9696]};
 const BRG={"ubirajara":"O","ribeirao do lipa":"O","colorado":"O","mariana":"O","santa marta":"O","despraiado":"O","quilombo":"O","duque de caxias":"O","ribeirao da ponte":"O","santa rosa":"O","barra do pari":"O","santa isabel":"O","cidade verde":"O","cidade alta":"O","jardim cuiaba":"O","goiabeira":"O","popular":"O","centro-norte":"O","centro norte":"O","centro-sul":"O","centro sul":"O","porto":"O","coophamil":"O","novo terceiro":"O","araes":"O","alvorada":"O","florianopolis":"N","vitoria":"N","paraiso":"N","nova conquista":"N","primeiro de marco":"N","tres barras":"N","morada da serra":"N","morada do ouro":"N","centro politico":"N","paiaguas":"N","cpa":"N","novo tempo":"N","fabio leite":"N","novo horizonte":"L","planalto":"L","itamarati":"L","novo mato grosso":"L","sol nascente":"L","eldorado":"L","sao carlos":"L","sao roque":"L","santa ines":"L","carumbe":"L","bela vista":"L","dom bosco":"L","terra nova":"L","aclimacao":"L","canjica":"L","bosque da saude":"L","bau":"L","lixeira":"L","bandeirantes":"L","areao":"L","leblon":"L","pedregal":"L","italia":"L","morada dos nobres":"L","santa cruz":"L","recanto dos passaros":"L","imperial":"L","universitario":"L","cachoeira das garcas":"L","boa esperanca":"L","ufmt":"L","americas":"L","pico do amor":"L","pocao":"L","dom aquino":"L","terceiro":"L","paulista":"L","europa":"L","campo velho":"L","tropical":"L","petropolis":"L","california":"L","shangri":"L","praeiro":"L","ana pupina":"L","osmar cabral":"S","sao joao del rei":"S","fortaleza":"S","santa laura":"S","sao sebastiao":"S","pascoal ramos":"S","pedra 90":"S","pedra noventa":"S","nova esperanca":"S","industriario":"S","passaredo":"S","sao francisco":"S","lagoa azul":"S","tijucal":"S","altos do coxipo":"S","presidente":"S","coxipo":"S","sao jose":"S","ohara":"S","palmeiras":"S","jordao":"S","vista alegre":"S","gramado":"S","coophema":"S","sao goncalo":"S","georgia":"S","aparecida":"S","comodoro":"S","mossoro":"S","atalaia":"S","parque cuiaba":"S","distrito industrial":"S","capao do pequi":"VN","canelas":"VN","cristo rei":"VN","gloria":"VC","ikaray":"VS","aeroporto":"VL","jardim dos estados":"VC","marajoara":"VS","mapim":"VO","novo mundo":"VN","parque del rey":"VL","parque do lago":"VS","primavera":"VN","sao matheus":"VS","vitoria regia":"VL","ponte nova":"VC","planalto ipiranga":"VN","costa verde":"VL"};
 const RGC={O:[-15.601,-56.115],N:[-15.565,-56.080],L:[-15.610,-56.060],S:[-15.650,-56.065],C:[-15.601,-56.097],VC:[-15.646,-56.132],VN:[-15.630,-56.125],VS:[-15.665,-56.140],VL:[-15.645,-56.110],VO:[-15.650,-56.155]};
@@ -47,6 +47,31 @@ async function cfgApi(token, method="GET", body=null){
     ...(body?{body:JSON.stringify(body)}:{})});
   if(!r.ok){let b="";try{b=await r.text();}catch{}const e=new Error(`config ${r.status}`);e.body=b;throw e;}
   return r.json();
+}
+// Carrega catálogos do D1 (/api/config) e substitui as listas fixas. Chamado no sync → novos cadastros aparecem sozinhos.
+async function loadCatalogos(token){
+  try{
+    const d=await cfgApi(token,"GET");
+    const it=(d&&d.itens)||[];
+    const by=t=>it.filter(x=>x.tipo===t&&x.ativo!==0).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
+    const st=by("status");
+    if(st.length){
+      CAT_IDS=st.map(x=>({id:x.agendor_id,n:x.nome}));
+      CATS=st.filter(x=>x.nome!=="Excluido").map(x=>x.nome);
+      CC=Object.fromEntries(st.map(x=>[x.nome,x.cor||"#78716C"]));
+    }
+    const sg=by("segmento");  if(sg.length)  SECTORS=sg.map(x=>({id:x.agendor_id,n:x.nome}));
+    const or=by("origem");    if(or.length)  ORIGINS=or.map(x=>({id:x.agendor_id,n:x.nome}));
+    const ind=by("industria");if(ind.length) BRANDS=ind.map(x=>x.nome);
+    const us=by("usuario");
+    if(us.length){
+      USERS=us.map(x=>({id:x.agendor_id,n:x.nome}));
+      const h={};
+      for(const x of us){let e={};try{e=JSON.parse(x.extra||"{}");}catch{} if(e.homeLat!=null&&e.homeLng!=null)h[x.agendor_id]={lat:e.homeLat,lng:e.homeLng,label:"Casa "+String(x.nome||"").split(" ")[0]};}
+      if(Object.keys(h).length) HOMES=h;
+    }
+    return true;
+  }catch(e){console.warn("catalogos:",e);return false;}
 }
 function trAg(m){const s=String(m||"").trim();const map=[[/contact email is invalid|email is invalid/i,"E-mail inválido (precisa ter @ e domínio)"],[/name is missing|name can't be blank/i,"Nome é obrigatório"],[/cnpj is invalid/i,"CNPJ inválido"],[/cnpj has already been taken/i,"CNPJ já cadastrado (pode estar na lixeira do Agendor)"],[/cpf is invalid/i,"CPF inválido"],[/cpf has already been taken/i,"CPF já cadastrado"],[/whatsapp.*invalid/i,"WhatsApp inválido"],[/(mobile|phone).*invalid/i,"Telefone inválido"],[/organization.*(missing|blank|required)/i,"Empresa é obrigatória"],[/has already been taken/i,"Já cadastrado no Agendor"],[/is missing|can't be blank|is required/i,"Campo obrigatório não preenchido"],[/is invalid/i,"Campo com formato inválido"]];for(const[re,pt]of map){if(re.test(s))return pt;}return s;}
 function agErr(e){let arr=[];if(e&&e.body){try{const j=JSON.parse(e.body);if(Array.isArray(j.errors))arr=j.errors.map(x=>typeof x==="string"?x:(x.message||x.field||JSON.stringify(x)));else if(j.message)arr=[j.message];else if(j.error)arr=[j.error];}catch{if(e.body)arr=[e.body];}}if(!arr.length){const m=(e&&e.message)||"Erro";arr=[/^\d{3}$/.test(m)?("Erro "+m+" (dados inválidos)"):m];}const pt=[...new Set(arr.map(trAg).filter(Boolean))];return pt.join(" · ");}
@@ -128,4 +153,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, agErr, trAg, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };
+export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };

@@ -3,7 +3,7 @@
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar } from "lucide-react";
-import { S, CC, fT, fD, gps, sL, sS, CATS, crmFire, csv } from "../lib";
+import { S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv } from "../lib";
 import { AgendaTab } from "./AgendaTab";
 
 const DASH = "https://dashboard.jordanmt.com";
@@ -415,7 +415,7 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
   useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fAbc, fSr, fCid }); }, [fCat, fResp, fRfv, fAbc, fSr, fCid]);
   const [ordem, setOrdem] = useState(1); // 1 = A→Z, -1 = Z→A
   const [vc, setVc] = useState(60);
-  const resps = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
+  const resps = useMemo(() => { const s = new Set(USERS.map(u => u.n)); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);/* v29: catálogo ∪ dados */
   const cidades = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const c = o.addr?.city_name || o.addr?.city; if (c) s.add(c); }); return [...s].sort(); }, [allOrgs]);
   const lista = useMemo(() => {
     let l = (q.trim() || fCat === "Excluido") ? [ ...(allOrgs || []), ...(excl || []) ] : (allOrgs || []);
