@@ -1,127 +1,301 @@
-// TeamCheck — biblioteca: constantes, utilitários e API Agendor
-const API="https://agendor-proxy.administrativo-fc3.workers.dev";
-const OSRM="https://router.project-osrm.org/route/v1/driving";
-const HOMES={743088:{lat:-15.677694,lng:-55.954778,label:"Casa Jordan"},743347:{lat:-15.653611,lng:-56.026833,label:"Casa Alisson"}};
-const LUNCH_START=12,LUNCH_END=13,PG=20;
-// ─── Timezone: Cuiabá (UTC-4, sem horário de verão) ───
-const TZ="America/Cuiaba";
-const toLocalDate=(d)=>{const dt=new Date(d);return dt.toLocaleDateString("en-CA",{timeZone:TZ});};// YYYY-MM-DD
-const todayLocal=()=>toLocalDate(new Date());
-const TYPES=[{id:"VISITA",l:"Visita"},{id:"LIGACAO",l:"Ligação"},{id:"EMAIL",l:"E-mail"},{id:"REUNIAO",l:"Reunião"},{id:"WHATSAPP",l:"WhatsApp"},{id:"PROPOSTA",l:"Proposta"}];
-// Backend próprio (D1 via Worker do Dashboard) — fase de transição: gravar em AMBOS (Agendor + D1)
-const DASH="https://dashboard.jordanmt.com";
-const crmFire=(token,path,body,method="POST")=>{try{fetch(DASH+path,{method,headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(body)}).catch(()=>{});}catch{}};
-const CATS=["Ativo","Prospecção","Somente Visita","Inativo","Online - B2B"]; // Excluído fica fora da lista (v16); busca pelo + ainda encontra
-const BRANDS=["TRAMONTINA","PADO","ZAGONEL","RUVOLO","SANTANA","FESTCOLOR","PLASTILIT"];
-const SECTORS=[{id:4512997,n:"Açougues"},{id:4513651,n:"Agropecuarias"},{id:4513000,n:"Atacados"},{id:4512998,n:"Decoração"},{id:4513649,n:"Eletromoveis"},{id:4724740,n:"Embalagens"},{id:4513001,n:"Garden"},{id:4512999,n:"Mat. Construção"},{id:4513019,n:"Outros"},{id:4513020,n:"Papelaria"},{id:4513650,n:"Presenteiros"},{id:4512995,n:"Supermercados"},{id:4512996,n:"Variedades"}];
-const CAT_IDS=[{id:3186598,n:"Ativo"},{id:3186011,n:"Prospecção"},{id:3186601,n:"Somente Visita"},{id:3186600,n:"Inativo"},{id:4136717,n:"Online - B2B"},{id:3187967,n:"Excluido"}];
-const ORIGINS=[{id:1981672,n:"Carteira"},{id:1979723,n:"Indicação"},{id:1980476,n:"Prospecção"},{id:1979725,n:"Site"},{id:1980477,n:"Instagram"},{id:1980478,n:"Leads"}];
-const USERS=[{id:743088,n:"Jordan Moraes"},{id:743347,n:"Alisson Henrique"}];
-const CC={Ativo:"#10B981",Inativo:"#F59E0B","Online - B2B":"#0578A6","Somente Visita":"#EC4899",Prospecção:"#8B5CF6",Excluido:"#DC2626"};
-const CITY_GEO={"Cuiabá":[-15.5989,-56.0949],"Cuiaba":[-15.5989,-56.0949],"Várzea Grande":[-15.6460,-56.1322],"Varzea Grande":[-15.6460,-56.1322],"Tangará da Serra":[-14.6229,-57.4947],"Tangara da Serra":[-14.6229,-57.4947],"Cáceres":[-16.0725,-57.6770],"Caceres":[-16.0725,-57.6770],"Pontes e Lacerda":[-15.2264,-59.3411],"Campo Novo do Parecis":[-13.6629,-57.8914],"Campo Novo dos Parecis":[-13.6629,-57.8914],"Campo Verde":[-15.5444,-55.1628],"Rondonópolis":[-16.4673,-54.6372],"Rondonopolis":[-16.4673,-54.6372],"Mirassol d Oeste":[-15.6779,-58.0948],"Primavera do Leste":[-15.5615,-54.2817],"Sapezal":[-12.9878,-58.7652],"Araputanga":[-15.4723,-58.3438],"São José dos Quatro Marcos":[-15.6270,-58.1755],"Sorriso":[-12.5428,-55.7112],"Sinop":[-11.8642,-55.5095],"Lucas do Rio Verde":[-13.0490,-55.9048],"Nova Mutum":[-13.8321,-56.0813],"Barra do Garças":[-15.8867,-52.2566],"Diamantino":[-14.4080,-56.4437],"Poconé":[-16.2558,-56.6232],"Jaciara":[-15.9620,-54.9696]};
-const BRG={"ubirajara":"O","ribeirao do lipa":"O","colorado":"O","mariana":"O","santa marta":"O","despraiado":"O","quilombo":"O","duque de caxias":"O","ribeirao da ponte":"O","santa rosa":"O","barra do pari":"O","santa isabel":"O","cidade verde":"O","cidade alta":"O","jardim cuiaba":"O","goiabeira":"O","popular":"O","centro-norte":"O","centro norte":"O","centro-sul":"O","centro sul":"O","porto":"O","coophamil":"O","novo terceiro":"O","araes":"O","alvorada":"O","florianopolis":"N","vitoria":"N","paraiso":"N","nova conquista":"N","primeiro de marco":"N","tres barras":"N","morada da serra":"N","morada do ouro":"N","centro politico":"N","paiaguas":"N","cpa":"N","novo tempo":"N","fabio leite":"N","novo horizonte":"L","planalto":"L","itamarati":"L","novo mato grosso":"L","sol nascente":"L","eldorado":"L","sao carlos":"L","sao roque":"L","santa ines":"L","carumbe":"L","bela vista":"L","dom bosco":"L","terra nova":"L","aclimacao":"L","canjica":"L","bosque da saude":"L","bau":"L","lixeira":"L","bandeirantes":"L","areao":"L","leblon":"L","pedregal":"L","italia":"L","morada dos nobres":"L","santa cruz":"L","recanto dos passaros":"L","imperial":"L","universitario":"L","cachoeira das garcas":"L","boa esperanca":"L","ufmt":"L","americas":"L","pico do amor":"L","pocao":"L","dom aquino":"L","terceiro":"L","paulista":"L","europa":"L","campo velho":"L","tropical":"L","petropolis":"L","california":"L","shangri":"L","praeiro":"L","ana pupina":"L","osmar cabral":"S","sao joao del rei":"S","fortaleza":"S","santa laura":"S","sao sebastiao":"S","pascoal ramos":"S","pedra 90":"S","pedra noventa":"S","nova esperanca":"S","industriario":"S","passaredo":"S","sao francisco":"S","lagoa azul":"S","tijucal":"S","altos do coxipo":"S","presidente":"S","coxipo":"S","sao jose":"S","ohara":"S","palmeiras":"S","jordao":"S","vista alegre":"S","gramado":"S","coophema":"S","sao goncalo":"S","georgia":"S","aparecida":"S","comodoro":"S","mossoro":"S","atalaia":"S","parque cuiaba":"S","distrito industrial":"S","capao do pequi":"VN","canelas":"VN","cristo rei":"VN","gloria":"VC","ikaray":"VS","aeroporto":"VL","jardim dos estados":"VC","marajoara":"VS","mapim":"VO","novo mundo":"VN","parque del rey":"VL","parque do lago":"VS","primavera":"VN","sao matheus":"VS","vitoria regia":"VL","ponte nova":"VC","planalto ipiranga":"VN","costa verde":"VL"};
-const RGC={O:[-15.601,-56.115],N:[-15.565,-56.080],L:[-15.610,-56.060],S:[-15.650,-56.065],C:[-15.601,-56.097],VC:[-15.646,-56.132],VN:[-15.630,-56.125],VS:[-15.665,-56.140],VL:[-15.645,-56.110],VO:[-15.650,-56.155]};
-function geoEstimate(o){const b=(o.addr?.district||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9 ]/g,"");for(const[k,r]of Object.entries(BRG)){if(b.includes(k))return RGC[r];}const c=o.addr?.city_name||o.addr?.city||"";return CITY_GEO[c]||null;}
-// Paleta espelhada do Dashboard (theme.js, tema claro): acentos C.pri/C.green/C.gold/C.red,
-// superfícies --bg/--card/--alt/--bdr, textos --t1/--t3, chrome #0578A6/#036690 e sombra de card.
-const S={bg:"var(--bg)",card:"var(--card)",cl:"var(--alt)",pri:"#0AAEE8",pl:"var(--link)",acc:"#12C265",gold:"#FFB020",dng:"#FB4B3A",txt:"var(--t1)",ts:"var(--t3)",td:"var(--t4)",brd:"var(--bdr)",ok:"#12C265",chrome:"#0578A6",chromeTop:"#036690",chromeFg:"#FFFFFF",chromeFg2:"rgba(255,255,255,0.82)",shadow:"var(--card-shadow)",navActive:"rgba(255,255,255,.20)",navFg:"rgba(255,255,255,.82)"};
-const fT=d=>new Date(d).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:TZ});
-const fD=d=>new Date(d).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:TZ});
-const fDS=d=>new Date(d).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",timeZone:TZ});
-const mins=(a,b)=>Math.max(0,Math.round((new Date(b)-new Date(a))/60000));
-const hrsMin=m=>m>=60?`${Math.floor(m/60)}h${(m%60).toString().padStart(2,"0")}`:`${m}min`;
-const hourDec=d=>{const t=new Date(d);return t.getHours()+t.getMinutes()/60;};
-const hav=(a,b,c,d)=>{const R=6371,x=((c-a)*Math.PI)/180,y=((d-b)*Math.PI)/180;const z=Math.sin(x/2)**2+Math.cos((a*Math.PI)/180)*Math.cos((c*Math.PI)/180)*Math.sin(y/2)**2;return R*2*Math.atan2(Math.sqrt(z),Math.sqrt(1-z));};
-function sL(k,f){try{return JSON.parse(localStorage.getItem(k))||f;}catch{return f;}}
-function sS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("sync:",e);}}
-// 2º parâmetro carrega a SESSÃO (o Worker injeta o token do Agendor no servidor)
-async function agF(path,token,opts={}){const p=path.startsWith("/")?path.slice(1):path;const[base,qs]=p.split("?");let u=`${API}?path=${encodeURIComponent(base)}`;if(qs)u+="&"+qs;
-  const r=await fetch(u,{...opts,cache:"no-store",headers:{"X-Session":token,"Content-Type":"application/json; charset=utf-8","Accept":"application/json; charset=utf-8",...(opts.headers||{})}});
-  if(r.status===401){try{localStorage.removeItem("jc:session");localStorage.removeItem("jc:user");}catch{}location.reload();throw new Error("Sessão expirada");}
-  if(!r.ok){let _b="";try{_b=await r.text();}catch{}const _e=new Error(`${r.status}`);_e.body=_b;throw _e;}
-  const buf=await r.arrayBuffer();
-  const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);
-  return JSON.parse(txt);
-}
-function trAg(m){const s=String(m||"").trim();const map=[[/contact email is invalid|email is invalid/i,"E-mail inválido (precisa ter @ e domínio)"],[/name is missing|name can't be blank/i,"Nome é obrigatório"],[/cnpj is invalid/i,"CNPJ inválido"],[/cnpj has already been taken/i,"CNPJ já cadastrado (pode estar na lixeira do Agendor)"],[/cpf is invalid/i,"CPF inválido"],[/cpf has already been taken/i,"CPF já cadastrado"],[/whatsapp.*invalid/i,"WhatsApp inválido"],[/(mobile|phone).*invalid/i,"Telefone inválido"],[/organization.*(missing|blank|required)/i,"Empresa é obrigatória"],[/has already been taken/i,"Já cadastrado no Agendor"],[/is missing|can't be blank|is required/i,"Campo obrigatório não preenchido"],[/is invalid/i,"Campo com formato inválido"]];for(const[re,pt]of map){if(re.test(s))return pt;}return s;}
-function agErr(e){let arr=[];if(e&&e.body){try{const j=JSON.parse(e.body);if(Array.isArray(j.errors))arr=j.errors.map(x=>typeof x==="string"?x:(x.message||x.field||JSON.stringify(x)));else if(j.message)arr=[j.message];else if(j.error)arr=[j.error];}catch{if(e.body)arr=[e.body];}}if(!arr.length){const m=(e&&e.message)||"Erro";arr=[/^\d{3}$/.test(m)?("Erro "+m+" (dados inválidos)"):m];}const pt=[...new Set(arr.map(trAg).filter(Boolean))];return pt.join(" · ");}
-async function postTask(token,oid,text,type="VISITA",done=true,due=null){const b={text,type,done};if(due)b.due_date=due;return agF(`/organizations/${oid}/tasks`,token,{method:"POST",body:JSON.stringify(b)});}
-function gps(){return new Promise((r,j)=>{if(!navigator.geolocation)return j(new Error("GPS"));navigator.geolocation.getCurrentPosition(p=>r({lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)}),j,{enableHighAccuracy:true,timeout:15000,maximumAge:0});});}
-async function roadKm(a,b,c,d){try{const r=await fetch(`${OSRM}/${b},${a};${d},${c}?overview=false`);const j=await r.json();if(j.code==="Ok"&&j.routes?.[0])return{km:j.routes[0].distance/1000,dur:Math.round(j.routes[0].duration/60)};}catch{}return{km:hav(a,b,c,d)*1.3,dur:0};}
-function csv(rows,fn){const b="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");Object.assign(document.createElement("a"),{href:URL.createObjectURL(new Blob([b],{type:"text/csv;charset=utf-8"})),download:fn}).click();}
-// ROBUST encoding fix: tries multiple strategies, picks the best result
-function fixMojibake(s){
-  if(!s||typeof s!=="string")return s;
-  // Quick path: if no high-bit chars or replacement char, return as-is
-  let hasIssue=false;
-  for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);if(c>=0x80){hasIssue=true;break;}}
-  if(!hasIssue)return s;
-  
-  const candidates=[s];
-  
-  // Strategy 1: U+FFFD replacement → known terms
-  if(s.indexOf("\uFFFD")>=0){
-    let r=s
-      .replace(/CONSTRU\uFFFD+O/gi,"CONSTRUÇÃO")
-      .replace(/CONSTRU\uFFFD+ES/gi,"CONSTRUÇÕES")
-      .replace(/MAT\uFFFDRIAS/gi,"MATÉRIAS")
-      .replace(/MAT\uFFFDRIA/gi,"MATÉRIA")
-      .replace(/PRE\uFFFDO/gi,"PREÇO")
-      .replace(/Cuiab\uFFFD/g,"Cuiabá")
-      .replace(/V\uFFFDrzea/g,"Várzea")
-      .replace(/Cap\uFFFDo/g,"Capão")
-      .replace(/Bel\uFFFDm/g,"Belém")
-      .replace(/Bras\uFFFDlia/g,"Brasília")
-      .replace(/J\uFFFDlio/g,"Júlio")
-      .replace(/Mour\uFFFDo/g,"Mourão")
-      .replace(/Guimar\uFFFDes/g,"Guimarães")
-      .replace(/Aren\uFFFDpolis/g,"Arenápolis")
-      .replace(/Campin\uFFFDpolis/g,"Campinápolis")
-      .replace(/Chapad\uFFFDo/g,"Chapadão")
-      .replace(/ALIAN\uFFFDA/g,"ALIANÇA")
-      .replace(/REPRESENTA\uFFFD\uFFFDES/gi,"REPRESENTAÇÕES")
-      .replace(/representa\uFFFD\uFFFDes/gi,"representações");
-    candidates.push(r);
-  }
-  
-  // Strategy 2: Treat as Latin-1, re-decode as UTF-8
-  try{
-    const bytes=new Uint8Array(s.length);
-    let allFit=true;
-    for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);if(c>255){allFit=false;break;}bytes[i]=c;}
-    if(allFit){
-      const decoded=new TextDecoder("utf-8",{fatal:false}).decode(bytes);
-      candidates.push(decoded);
-    }
-  }catch{}
-  
-  // Strategy 3: Last-resort character substitutions for common Portuguese
-  let r3=s.replace(/\uFFFD/g,"a"); // Replace unknown with 'a' (most common vowel)
-  candidates.push(r3);
-  
-  // Pick best: fewest replacement chars, fewest control chars
-  let best=candidates[0],bestScore=-1;
-  for(const c of candidates){
-    if(!c||typeof c!=="string")continue;
-    let score=100;
-    score-=(c.match(/\uFFFD/g)||[]).length*20;
-    score-=(c.match(/[\x00-\x08\x0B-\x1F\x7F-\x9F]/g)||[]).length*10;
-    // Prefer Portuguese-looking results (has á, é, ç, ã, ô, etc)
-    if(/[áéíóúâêîôûãõçÁÉÍÓÚÂÊÎÔÛÃÕÇ]/.test(c))score+=15;
-    if(score>bestScore){bestScore=score;best=c;}
-  }
-  return best;
-}
-function strip(o){const a=o.address||{};const desc=fixMojibake(o.description||"");return{id:o.id,name:fixMojibake(o.name||""),nickname:fixMojibake(o.nickname||""),legalName:fixMojibake(o.legalName||""),cnpj:o.cnpj||"",cat:o.category?.name||"",sector:o.sector?.name||"",products:(o.products||[]).map(p=>p.name).join(", "),owner:o.ownerUser?.name||"",ownerId:o.ownerUser?.id||null,grupo:desc.startsWith("Grupo:")?desc:"",addr:{street:fixMojibake(a.streetName||a.street||""),number:a.streetNumber||a.number||"",district:fixMojibake(a.district||a.neighborhood||""),city:fixMojibake(a.city||""),city_name:fixMojibake(a.city_name||a.city||""),state:a.state||""},people:(o.people||[]).map(p=>p.name).join(", "),email:o.contact?.email||"",phone:o.contact?.whatsapp||o.contact?.work||o.contact?.mobile||"",ranking:o.ranking||0};}
-async function fetchCNPJ(cnpj){const clean=cnpj.replace(/[.\-\/]/g,"");try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);if(r.ok)return r.json();}catch{}const r2=await fetch(`${API}?cnpj=${clean}`);if(!r2.ok)throw new Error("CNPJ nao encontrado");return r2.json();}
-// ─── Helper: get base for date (backward compatible) ───
-function getBase(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBases[date];if(!b)return HOMES[userId]||null;if(b.start)return b.start;return b;}
-function getEnd(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBases[date];if(b?.end)return b.end;return getBase(dayBases,date,userId);}
-// ─── Helper: only real visits (check-in based, not WhatsApp/calls) ───
-function isRealVisit(v){if(!v.checkoutTime)return false;if(v.taskType&&v.taskType!=="VISITA")return false;if(v.divergent)return false;return true;}
-// ─── Helper: resolve GPS from visit directly OR from plocs by orgId ───
-function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs&&v.orgId&&plocs[v.orgId])return{lat:plocs[v.orgId].lat,lng:plocs[v.orgId].lng};return null;}
-function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
-const MIN_OBS=50;
+// TeamCheck — App (orquestração principal)
+import { useState, useEffect, useMemo, lazy, Suspense } from "react";
+import { Store, Map as MapIcon, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser } from "lucide-react";
+import { API, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
+import { Login, Banner, NoteModal, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
+import { RotasTab } from "./tabs/RotasTab";
+const RelatorioTab=lazy(()=>import("./tabs/RelatorioTab").then(m=>({default:m.RelatorioTab})));// recharts só carrega ao abrir o Relatório
+import { EquipeTab } from "./tabs/EquipeTab";
+import { AgendaTab } from "./tabs/AgendaTab";
+import { ConfigTab } from "./tabs/ConfigTab";
+import { PdvsTab } from "./tabs/PdvsTab";
+import { CrmTab } from "./tabs/CrmTab";
 
-export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, fT, fD, fDS, mins, hrsMin, hourDec, hav, sL, sS, agF, agErr, trAg, postTask, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };
+// ─── CRM próprio (D1 via Worker do Dashboard) — registro em segundo plano ───
+const DASH_CRM = "https://dashboard.jordanmt.com";
+
+export default function App(){
+  // Tema (espelho do Dashboard): escuro por padrão; troca na aba Config, persistida
+  useEffect(()=>{document.documentElement.dataset.theme=sL("jc:theme","dark");let m=document.querySelector("meta[name=theme-color]");if(!m){m=document.createElement("meta");m.name="theme-color";document.head.appendChild(m);}m.content="#0578A6";},[]);
+  const[token,setToken]=useState(()=>sL("jc:session",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);const[exclOrgs,setExclOrgs]=useState([]);
+  const[visits,setVisits]=useState(()=>{const raw=sL("jc:visits",[]);const cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);const cut=cutoff.toISOString();const purged=raw.filter(v=>!v.checkinTime||v.checkinTime>=cut);if(purged.length<raw.length)console.log(`Purged ${raw.length-purged.length} visits >90d`);return purged;});const[active,setActive]=useState(()=>sL("jc:active",null));
+  const[tab,setTab]=useState("pdvs");const[focusReq,setFocusReq]=useState(null);
+  // ─── Moldura padrão Dashboard: sidebar recolhível + tema no header ───
+  const[mob,setMob]=useState(()=>typeof window!=="undefined"&&window.innerWidth<900);
+  const[navOpen,setNavOpen]=useState(()=>typeof window!=="undefined"&&window.innerWidth>=900);
+  const[tema,setTema]=useState(()=>sL("jc:theme","dark"));
+  useEffect(()=>{const fn=()=>{const m=window.innerWidth<900;setMob(m);setNavOpen(o=>m?false:true);};window.addEventListener("resize",fn);return()=>window.removeEventListener("resize",fn);},[]);
+  const trocarTema=()=>{const t=tema==="dark"?"light":"dark";setTema(t);sS("jc:theme",t);document.documentElement.dataset.theme=t;};
+  // (estado de filtros/proximidade de PDV movido para PdvsTab)
+  const[syncing,setSyncing]=useState(false);const[syncMsg,setSyncMsg]=useState("");const[ldId,setLdId]=useState(null);const[geoErr,setGeoErr]=useState("");
+  const[coTarget,setCoTarget]=useState(null);const[personTarget,setPersonTarget]=useState(null);const[newClient,setNewClient]=useState(false);const[searchAdd,setSearchAdd]=useState(false);const[divTarget,setDivTarget]=useState(null);const[editTarget,setEditTarget]=useState(null);
+  const[plocs,setPlocs]=useState(()=>sL("jc:pdvLocs",{}));const[dayBases,setDayBases]=useState(()=>sL("jc:dayBases",{}));
+  const[showDB,setShowDB]=useState(false);const[showEndDay,setShowEndDay]=useState(false);const[equipeSel,setEquipeSel]=useState(todayLocal());const[rotasSel,setRotasSel]=useState(todayLocal());
+
+  useEffect(()=>{sS("jc:visits",visits);},[visits]);useEffect(()=>{sS("jc:active",active);},[active]);useEffect(()=>{sS("jc:pdvLocs",plocs);},[plocs]);useEffect(()=>{sS("jc:dayBases",dayBases);syncDayBasesSave(dayBases);},[dayBases]);
+  // Auto-clear cache once after v13.5 upgrade to remove old corrupted cached responses
+  useEffect(()=>{if(!localStorage.getItem("jc:cleaned_v135")){(async()=>{try{if("caches" in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister();}}catch{}localStorage.setItem("jc:cleaned_v135","1");if(token&&user)setTimeout(()=>doSync(),500);})();}},[]);
+  // Auto-atualização v19: PWAs antigos seguram o service worker velho e mostram o app desatualizado.
+  // Uma única vez por aparelho: limpa caches, desregistra o SW e recarrega — o servidor já serve a v19.
+  useEffect(()=>{if(!localStorage.getItem("jc:cleaned_v19")){(async()=>{localStorage.setItem("jc:cleaned_v19","1");try{if("caches" in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister();}location.reload();}catch{}})();}},[]);
+  useEffect(()=>{if(token&&user&&!orgs.length&&!syncing)doSync();},[token,user]);
+
+  const syncPush=async(data)=>{try{await fetch(`${API}?sync=${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:data})});}catch(e){console.warn("syncPush:",e);}};
+  const syncClear=async()=>{try{await fetch(`${API}?sync=${user.id}`,{method:"DELETE"});}catch(e){console.warn("syncClear:",e);}};
+  const syncVisitSave=async(visit)=>{try{const r=await fetch(`${API}?sync=visits_${user.id}`);const d=await r.json();const all=[visit,...(d.active||[])].slice(0,200);await fetch(`${API}?sync=visits_${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:all})});}catch(e){console.warn("syncVisitSave:",e);}};
+  const syncVisitLoad=async()=>{try{const ids=[743088,743347];let remote=[];for(const uid of ids){const r=await fetch(`${API}?sync=visits_${uid}`,{cache:"no-store"});const buf=await r.arrayBuffer();const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);const d=JSON.parse(txt);if(d.active)remote.push(...d.active.map(v=>({...v,orgName:fixMojibake(v.orgName||""),city:fixMojibake(v.city||""),note:fixMojibake(v.note||"")})));}if(remote.length){setVisits(prev=>{const existing=new Set(prev.map(v=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+(r.userName||"")+"|"+toLocalDate(r.checkinTime)));if(newOnes.length)return[...prev,...newOnes];return prev;});}}catch(e){console.warn("syncVisitLoad:",e);}};
+  const syncPlocs=async(locs)=>{try{await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:locs})});}catch(e){console.warn("syncPlocs:",e);}};
+  const syncDayBasesSave=async(bases)=>{if(!bases||!Object.keys(bases).length)return;try{await fetch(`${API}?sync=dayBases`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:bases})});}catch(e){console.warn("syncBases:",e);}};
+  const syncDayBasesLoad=async()=>{try{const r=await fetch(`${API}?sync=dayBases`);const d=await r.json();if(d.active&&Object.keys(d.active).length){setDayBases(prev=>{const merged={...prev};for(const k in d.active){merged[k]={...(d.active[k]||{}),...(prev[k]||{})};}sS("jc:dayBases",merged);return merged;});}}catch(e){console.warn("syncBasesLoad:",e);}};
+  const[teamActive,setTeamActive]=useState(null);
+  // ─── Matriz RFV (D1, consolidada por CNPJ) — badges e ordenação da lista de visitas ───
+  const[rfvMap,setRfvMap]=useState(null);
+  const loadRfv=async()=>{try{const r=await fetch(`${DASH_CRM}/api/crm/rfv`,{headers:{"X-Session":token}});const d=await r.json();if(d&&d.ok&&d.clientes){const byOrg={};for(const k in d.clientes){const x=d.clientes[k];if(x.org_id)byOrg[x.org_id]=x;}setRfvMap({byCnpj:d.clientes,byOrg,ref:d.ref});}}catch(e){console.warn("rfv:",e);}};
+  useEffect(()=>{if(token&&user)loadRfv();},[token,user]);
+  const[syncStatus,setSyncStatus]=useState("");
+  const syncPull=async()=>{try{
+    const r=await fetch(`${API}?sync=${user.id}`);const d=await r.json();
+    setActive(prev=>{if(d.active&&(!prev||prev.fromSync))return{...d.active,fromSync:true};if(!d.active&&prev?.fromSync)return null;return prev;});
+    const otherId=user.id===743088?743347:743088;
+    const r2=await fetch(`${API}?sync=${otherId}`);const d2=await r2.json();
+    setTeamActive(d2.active||null);
+    const r3=await fetch(`${API}?sync=plocs`);const d3=await r3.json();
+    if(d3.active){const deleted=sL("jc:deletedGPS",[]);setPlocs(prev=>{const cloud={...d3.active};deleted.forEach(id=>{delete cloud[id];});const m={...cloud,...prev};sS("jc:pdvLocs",m);return m;});}
+    setSyncStatus(`OK ${fT(new Date())} | eu:${d.active?"ativo":"--"}${user?.id===743088?` | equipe:${d2.active?d2.active.orgName:"--"}`:""}`);
+  }catch(e){setSyncStatus("Erro: "+e.message);}};
+  useEffect(()=>{if(!token||!user)return;syncPull();syncVisitLoad();syncDayBasesLoad();const iv=setInterval(()=>{syncPull();syncDayBasesLoad();},15000);return()=>clearInterval(iv);},[token,user]);
+
+  const[mAlert,setMAlert]=useState(false);
+  useEffect(()=>{if(!token||!user)return;const ck=()=>{const h=new Date().getHours();const td=new Date().toDateString();const has=visits.some(v=>new Date(v.checkinTime).toDateString()===td)||active;setMAlert(h>=8&&h<12&&!has);};ck();const iv=setInterval(ck,300000);return()=>clearInterval(iv);},[token,user,visits,active]);
+  const[longVisit,setLongVisit]=useState(false);
+  useEffect(()=>{if(!active){setLongVisit(false);return;}const ck=()=>{if(mins(active.checkinTime,new Date())>=120)setLongVisit(true);};ck();const iv=setInterval(ck,60000);return()=>clearInterval(iv);},[active]);
+  const[prevDay,setPrevDay]=useState(null);
+  useEffect(()=>{if(!token||!user||!active)return setPrevDay(null);if(new Date(active.checkinTime).toDateString()!==new Date().toDateString())setPrevDay(active);else setPrevDay(null);},[token,user,active]);
+
+  // ─── PWA Notifications ───
+  const notifiedRef=useState(()=>new Set())[0];
+  useEffect(()=>{if(!token||!user)return;
+    // Request permission on mount
+    if("Notification"in window&&Notification.permission==="default")Notification.requestPermission();
+    // Check pending tasks every 5 min
+    const checkTasks=async()=>{if(!("Notification"in window)||Notification.permission!=="granted")return;
+      try{const since=new Date();since.setDate(since.getDate()-30);
+        // v24: notificações lidas do D1 (fonte de verdade). Sem Agendor.
+        const r=await fetch(`${DASH_CRM}/api/crm/tarefas?desde=${since.toISOString().slice(0,10)}&limit=1000`,{headers:{"X-Session":token},cache:"no-store"});
+        if(!r.ok)return;const j=await r.json();const lista=(j&&j.tarefas)||[];
+        const now=new Date();const soon=new Date(now.getTime()+15*60000);// 15 min ahead
+        lista.filter(t=>!t.done&&t.userId===user.id&&t.due).forEach(t=>{
+          const due=new Date(t.due);const key=t.id+"|"+t.due;
+          if(due>=now&&due<=soon&&!notifiedRef.has(key)){notifiedRef.add(key);
+            new Notification("📅 TeamCheck",{body:`${t.type||"Tarefa"}: ${t.org||"?"}\n${t.text?.slice(0,60)||""}`,icon:"/logo.png",tag:key,requireInteraction:true});}
+          // Morning alert: tasks due today
+          const h=now.getHours();if(h>=7&&h<8&&toLocalDate(due)===todayLocal()&&!notifiedRef.has("morning_"+key)){notifiedRef.add("morning_"+key);
+            new Notification("🌅 TeamCheck",{body:`${t.type}: ${t.org}\n${fT(t.due)}`,icon:"/logo.png",tag:"morning_"+key});}
+        });
+      }catch(e){console.warn("notif:",e);}};
+    checkTasks();const iv=setInterval(checkTasks,300000);// 5 min
+    return()=>clearInterval(iv);
+  },[token,user]);
+
+  // Check if day has visits but no active visit (can close route)
+  const today=todayLocal();
+  const todayVisits=useMemo(()=>visits.filter(v=>{const d=toLocalDate(v.checkinTime);return d===today&&isRealVisit(v);}),[visits,today]);
+  const hasEndBase=dayBases[user?.id+"_"+today]?.end!=null||dayBases[today]?.end!=null;
+  const canCloseRoute=todayVisits.length>0&&!active&&!hasEndBase;
+
+  const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{
+    const tk=t||token;
+    await loadCatalogos(tk).catch(()=>{}); // catálogos (status/segmento/usuario/industria) do D1
+    let all=[],exc=[],fonteD1=false;
+    // Fonte única = D1 (dashboard.jordanmt.com). Chave de vinculo = CNPJ.
+    try{
+      setSyncMsg("Carregando clientes...");
+      const r=await fetch(`${DASH_CRM}/api/crm/clientes?limit=5000`,{headers:{"X-Session":tk},cache:"no-store"});
+      if(r.ok){const d=await r.json();
+        if(d&&d.ok&&Array.isArray(d.clientes)){
+          for(const o of d.clientes){(o.excluido?exc:all).push(o);}
+          fonteD1=true;
+        }
+      }
+    }catch(e){console.warn("clientes D1:",e);}
+    if(!fonteD1){setSyncMsg("Erro ao carregar clientes. Tente novamente.");setSyncing(false);return;}
+    setAllOrgs(all);setOrgs(all);setExclOrgs(exc);setSyncMsg(`${all.length} clientes (D1)`);
+    await loadHistoryInner(tk);
+  }catch(e){setSyncMsg("Erro");}setSyncing(false);};
+
+  const loadHistoryInner=async(tk)=>{setSyncMsg("Carregando historico...");
+    let raw=[];
+    try{const desde=new Date(Date.now()-90*86400000).toISOString().slice(0,10);
+      for(const tp of ["Visita","VISITA"]){
+        const r=await fetch(`${DASH_CRM}/api/crm/atividades?tipo=${tp}&desde=${desde}&limit=2000`,{headers:{"X-Session":tk||token},cache:"no-store"});
+        if(r.ok){const d=await r.json();if(d&&d.ok&&Array.isArray(d.atividades))raw.push(...d.atividades);}
+      }
+    }catch(e){console.warn("historico D1:",e);}
+    // visita REGISTRADA = tipo Visita sem prazo (com prazo = visita agendada)
+    const apiVisits=raw.filter(t=>!t.due_em);
+    const seen=new Set();const deduped=[];
+    for(const t of apiVisits){const key=(t.org_id||"")+"|"+(t.user_id||"")+"|"+(t.criado_em||"").slice(0,10);if(seen.has(key))continue;seen.add(key);deduped.push(t);}
+    const remote=deduped.map(t=>({orgId:t.org_id,orgName:t.org_nome||"?",city:"",checkinTime:t.criado_em,checkoutTime:t.criado_em,note:t.texto||"",taskType:"VISITA",synced:true,userName:t.user_nome||""}));
+    // Merge: KV/local visits take priority (have real timestamps)
+    const existing=new Set(visits.map(v=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime)));
+    const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+(r.userName||"")+"|"+toLocalDate(r.checkinTime)));
+    if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas`);}else setSyncMsg("Atualizado");};
+  const loadHistory=async()=>{try{await loadHistoryInner();}catch(e){setSyncMsg("Erro: "+e.message);}};
+
+  const ensureBase=()=>{const t=todayLocal();const k=user.id+"_"+t;if(!dayBases[k]||(!dayBases[k].start&&!dayBases[k].lat))setShowDB(true);};
+  // (derivados de filtro de PDV movidos para PdvsTab)
+  const usersList=useMemo(()=>{const m={};orgs.forEach(o=>{if(o.ownerId&&o.owner)m[o.ownerId]=o.owner;});return Object.entries(m).map(([id,n])=>({id:parseInt(id),n}));},[orgs]);
+
+  // (lastVisits/visitsByOrg/fo/proximidade/toggleCat movidos para PdvsTab)
+  // Grava atividade no CRM próprio (D1) em segundo plano — nunca bloqueia o fluxo.
+  const crmLog=(payload)=>{try{fetch(`${DASH_CRM}/api/crm/atividades`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(payload)}).catch(()=>{});}catch{}};
+  const crmGps=(orgId,cnpj,g)=>{try{fetch(`${DASH_CRM}/api/crm/gps`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:orgId,cnpj:cnpj||null,lat:g.lat,lng:g.lng,precisao:g.acc})}).catch(()=>{});}catch{}};
+  const quickAction=async(org,type)=>{const note=prompt(`Registrar ${type==="WHATSAPP"?"WhatsApp":"Ligacao"} com ${org.name}:`);if(!note?.trim())return;try{crmLog({org_id:org.id,cnpj:(org.cnpj||"").replace(/\D/g,"")||null,org_nome:org.nickname||org.name,tipo:type,texto:note});alert("Registrado!");}catch(e){alert("Erro: "+e.message);}};
+
+  const checkin=async(org)=>{ensureBase();if(org.cat==="Online - B2B"&&!confirm(`${org.name} e Online/B2B.\nRegistrar visita?`))return;if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\nContinuar?`))return;if(org.cat==="Excluido"&&!confirm(`${org.name} esta Excluido.\nContinuar?`))return;setLdId(org.id);setGeoErr("");try{const g=await gps();if(plocs[org.id]){const d=hav(plocs[org.id].lat,plocs[org.id].lng,g.lat,g.lng)*1000;if(d>500){setDivTarget({org,dist:Math.round(d),geo:g});setLdId(null);return;}}else{const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);crmGps(org.id,(org.cnpj||"").replace(/\D/g,""),g);}const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}catch{setGeoErr("GPS indisponivel.");}setLdId(null);};
+  const handleDivAction=(action,type)=>{if(!divTarget)return;const{org,geo}=divTarget;if(action==="checkin"){const v={orgId:org.id,orgName:org.name,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:geo.lat,lng:geo.lng,accuracy:geo.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}else if(action==="remote"&&type)setCoTarget({...org,remoteType:type});setDivTarget(null);};
+  const checkout=async(note,type="VISITA",next=null,sale=null)=>{if(!active||ldId)return;setLdId(active.orgId);let g=null;try{g=await gps();}catch{}
+    // Detect divergent checkout: GPS far from registered client location
+    let divergent=false,divDist=0;
+    if(g){
+      const ref=plocs[active.orgId]||{lat:active.lat,lng:active.lng};
+      if(ref&&ref.lat&&ref.lng){divDist=Math.round(hav(ref.lat,ref.lng,g.lat,g.lng)*1000);if(divDist>500)divergent=true;}
+    }
+    const done={...active,checkoutTime:new Date().toISOString(),checkoutLat:g?.lat,checkoutLng:g?.lng,note,taskType:type,sale,divergent,divDist};
+    // Só grava (D1 + KV) se NÃO for divergente
+    if(!divergent){
+      done.synced=true;
+      // v24: checkout gravado só no D1 (fonte de verdade). Sem Agendor.
+      const oRef=(allOrgs||[]).find(o=>o.id===active.orgId);const cnpjRef=oRef?(oRef.cnpj||"").replace(/\D/g,""):null;
+      crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:""),lat:g?.lat,lng:g?.lng,origem:"checkout"});
+      // Próximo passo → tarefa com prazo no D1 (aparece na Agenda). Tipo validado p/ CRM_TIPOS do Worker.
+      if(next?.nextDate&&next?.nextDesc){const nt=(next.nextType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(nt)?nt:"VISITA";crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:tipoOk,texto:next.nextDesc,origem:"tarefa",due_em:`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`});}
+      syncVisitSave(done);
+    }else{done.synced=false;}
+    // Save locally (even divergent, for visual flag)
+    setVisits(p=>[done,...p]);setActive(null);syncClear();setCoTarget(null);setLdId(null);
+    // Alert AFTER UI is cleared (non-blocking flow)
+    if(divergent)setTimeout(()=>alert(`⚠️ CHECKOUT DESLOCADO\nVocê está a ${divDist}m do local cadastrado.\n\nEsta visita NÃO foi registrada e NÃO contará no relatório (visita e km).\n\nFica marcada com ⚠️ apenas para conferência.`),100);
+    else if(next?.nextDate&&next?.nextDesc)setTimeout(()=>alert("Proximo passo agendado!"),100);
+  };
+
+  if(!token||!user)return <Login onLogin={(t,u)=>{setToken(t);setUser(u);sS("jc:session",t);sS("jc:user",u);}}/>;
+
+  // ─── Navegação: grupos iguais ao Dashboard (sidebar) + lista plana (bottom nav mobile) ───
+  const isAdmin=user?.id===743088;
+  const NAVG=[
+    {grp:"CAMPO",itens:[{id:"pdvs",I:Store,l:"PDVs"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"agenda",I:Calendar,l:"Agenda"}]},
+    {grp:"CLIENTES",itens:[{id:"crm",I:BookUser,l:"CRM"}]},
+    {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true}]:[]),{id:"relatorio",I:BarChart3,l:"Relatório"}]},
+    {grp:"SISTEMA",itens:[{id:"config",I:Settings,l:"Configurações"}]},
+  ];
+  const TITULOS={pdvs:["PDVS","Pontos de venda"],crm:["CRM","Empresas & atividades"],rotas:["ROTAS","Roteiro do dia"],relatorio:["RELATÓRIO","Período, jornada & km"],equipe:["EQUIPE","Produtividade"],agenda:["AGENDA","Tarefas & follow-ups"],config:["CONFIGURAÇÕES","Sistema"]};
+  const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"crm",I:BookUser,l:"CRM"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
+  const tabs=isAdmin?[...baseTabs.slice(0,3),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(3)]:baseTabs;
+  const irPara=(id)=>{setTab(id);if(mob)setNavOpen(false);};
+  const sair=()=>{setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);};
+  const dataHoje=fD(new Date());
+
+  return(<div style={{display:"flex",height:"100vh",overflow:"hidden",background:S.chrome,color:S.txt,fontFamily:"'Roboto',sans-serif"}}>
+    {/* SIDEBAR — mesma estrutura do Dashboard (grupos + itens); no mobile vira gaveta */}
+    {mob&&navOpen&&<div onClick={()=>setNavOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:49}}/>}
+    <div style={{width:navOpen?230:0,minWidth:navOpen?230:0,transition:"all .25s",overflow:"hidden",background:S.chrome,borderRight:`1px solid ${S.chromeBdr}`,position:mob?"fixed":"relative",top:0,left:0,height:"100vh",zIndex:mob?50:1,display:"flex",flexDirection:"column",boxShadow:mob&&navOpen?"0 0 40px rgba(0,0,0,.5)":"none"}}>
+      <div style={{height:60,display:"flex",alignItems:"center",gap:11,padding:"0 18px",flexShrink:0}}>
+        <div style={{width:34,height:34,borderRadius:"50%",border:`1.5px solid ${S.chromeBdr}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,letterSpacing:".04em",color:S.chromeFg,flexShrink:0}}>JM</div>
+        <div style={{lineHeight:1.15,whiteSpace:"nowrap"}}>
+          <div style={{fontSize:13,fontWeight:700,letterSpacing:".06em",color:S.chromeFg}}>TEAMCHECK</div>
+          <div style={{fontSize:9.5,color:S.navGrp,letterSpacing:".02em"}}>Força de Vendas</div>
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"0 8px 18px"}}>
+        {NAVG.map((g,gi)=>(
+          <div key={gi} style={{marginBottom:10}}>
+            <div style={{fontSize:9,color:S.navGrp,textTransform:"uppercase",letterSpacing:1.5,padding:"10px 10px 5px",fontWeight:600,whiteSpace:"nowrap"}}>{g.grp}</div>
+            {g.itens.map(it=>{const act=tab===it.id;return(
+              <div key={it.id} className="navit" onClick={()=>irPara(it.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,cursor:"pointer",marginBottom:2,background:act?S.navActive:"transparent",color:act?S.navActiveFg:S.nav,fontSize:12,fontWeight:act?600:400,whiteSpace:"nowrap"}}>
+                <it.I size={16} strokeWidth={act?2.2:1.7} style={{flexShrink:0}}/>
+                <span style={{flex:1}}>{it.l}</span>
+                {it.admin&&<span style={{fontSize:8,padding:"1px 5px",borderRadius:4,background:S.gold+"33",color:S.gold}}>admin</span>}
+              </div>);})}
+          </div>))}
+      </div>
+      <div style={{padding:"12px 18px 16px",borderTop:`1px solid ${S.chromeBdr}`,whiteSpace:"nowrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:S.nav}}><span style={{width:7,height:7,borderRadius:"50%",background:syncStatus.startsWith?.("Erro")?S.dng:"#3FBFD4",boxShadow:"0 0 0 3px rgba(63,191,212,.22)",flexShrink:0}}/>{syncing?syncMsg:(syncStatus?syncStatus.split("|")[0].trim():"Sync —")}</div>
+        <div style={{fontSize:10,color:S.navGrp,marginTop:4}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</div>
+      </div>
+    </div>
+
+    {/* COLUNA PRINCIPAL */}
+    <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",height:"100vh",background:S.chrome}}>
+      {/* HEADER — gradiente chrome, idêntico ao Dashboard */}
+      <div style={{height:60,flexShrink:0,background:`linear-gradient(135deg,${S.chromeTop},${S.chrome})`,borderBottom:`1px solid ${S.chromeBdr}`,display:"flex",alignItems:"center",gap:mob?8:14,padding:mob?"0 12px":"0 24px",zIndex:10}}>
+        <button onClick={()=>setNavOpen(o=>!o)} style={{background:"none",border:`1px solid ${S.chromeBdr}`,color:S.chromeFg,borderRadius:6,width:32,height:32,minWidth:32,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>☰</button>
+        {!mob&&<JordanLogo color={S.chromeFg} height={34}/>}
+        <div style={{flex:1,minWidth:0,display:"flex",alignItems:"baseline",gap:8,overflow:"hidden"}}>
+          <span style={{fontSize:mob?15:17,fontWeight:700,letterSpacing:".12em",color:S.chromeFg,whiteSpace:"nowrap"}}>{(TITULOS[tab]||["TEAMCHECK"])[0]}</span>
+          {!mob&&<span style={{fontSize:11,color:S.navGrp,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(TITULOS[tab]||[])[1]||""}</span>}
+        </div>
+        <button onClick={()=>setSearchAdd(true)} title="Adicionar / buscar cliente" style={{width:34,height:34,minWidth:34,borderRadius:9,border:"none",background:S.acc,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:`0 2px 10px ${S.acc}44`,padding:0}}><Plus size={18} strokeWidth={2.4} color="#fff"/></button>
+        <button onClick={async()=>{await doSync();await loadHistory();syncVisitLoad();}} disabled={syncing} title="Sincronizar" style={{width:34,height:34,minWidth:34,borderRadius:9,border:`1px solid ${S.chromeBdr}`,background:"rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0}}><RefreshCw size={16} strokeWidth={2} color="var(--chrome-fg)" className={syncing?"spin":""}/></button>
+        <button onClick={trocarTema} title={tema==="dark"?"Mudar para tema claro":"Mudar para tema escuro"} style={{width:34,height:34,minWidth:34,borderRadius:9,border:`1px solid ${S.chromeBdr}`,background:"none",color:S.chromeFg,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>{tema==="dark"?"☀️":"🌙"}</button>
+        {!mob&&<div style={{textAlign:"right",lineHeight:1.25}}>
+          <div style={{fontSize:13,fontWeight:600,color:S.chromeFg}}>{user?.name}</div>
+          <div style={{fontSize:11,color:S.navGrp}}>{dataHoje}</div>
+        </div>}
+        {!mob&&<button onClick={sair} style={{padding:"7px 15px",borderRadius:8,border:`1px solid ${S.chromeBdr}`,background:"transparent",color:S.chromeFg,fontSize:12.5,fontWeight:500,cursor:"pointer"}}>Sair</button>}
+      </div>
+
+      {/* CONTEÚDO — recorte com sombra interna + efeitos Cyber Tech Premium (.jc-main) */}
+      <div className="jc-main" style={{flex:1,overflowY:"auto",borderRadius:"22px 0 0 0",boxShadow:`inset 0 18px 28px -22px ${S.seam},inset 18px 0 28px -22px ${S.seam}`,padding:mob?"16px 14px 96px":"22px 26px 42px"}}>
+      {active&&tab!=="config"&&<Banner v={active} orgs={orgs} onClick={()=>{setTab("pdvs");setFocusReq({id:active.orgId,name:active.orgName,t:Date.now()});}}/>}
+      {teamActive&&tab!=="config"&&isAdmin&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,borderRadius:"50%",background:S.gold,animation:"pulse 2s infinite"}}/><p style={{fontSize:13,color:S.gold,margin:0}}>Alisson em atendimento: <b>{teamActive.orgName}</b></p></div><p style={{fontSize:11,color:S.ts,margin:"3px 0 0 16px"}}>Desde {fT(teamActive.checkinTime)} — {hrsMin(mins(teamActive.checkinTime,new Date()))}</p></div>}
+
+      {mAlert&&!active&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.gold,margin:0}}>⏰ Bom dia! Atividades ainda nao iniciadas.</p></div>}
+      {prevDay&&<div style={{background:S.dng+"18",border:`1px solid ${S.dng}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.dng,margin:"0 0 8px"}}>⚠️ Visita aberta de {fD(prevDay.checkinTime)} — {prevDay.orgName}</p><div style={{display:"flex",gap:8}}><button onClick={()=>{const c=new Date(prevDay.checkinTime);c.setHours(18);setVisits(p=>[{...prevDay,checkoutTime:c.toISOString(),note:"Auto 18h",taskType:"VISITA",synced:false},...p]);setActive(null);setPrevDay(null);}} style={{flex:1,fontSize:12,background:S.dng,border:"none",color:"#fff"}}>Fechar 18h</button><button onClick={()=>setCoTarget({id:prevDay.orgId,name:prevDay.orgName})} style={{flex:1,fontSize:12}}>Com obs.</button></div></div>}
+      {longVisit&&!prevDay&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.gold,margin:"0 0 6px"}}>⏰ Visita ativa ha mais de 2h — {active?.orgName}</p><button onClick={()=>setCoTarget({id:active.orgId,name:active.orgName})} style={{width:"100%",fontSize:12,borderColor:S.gold,color:S.gold}}>Fazer check-out</button></div>}
+
+      {canCloseRoute&&tab!=="config"&&<div style={{background:S.acc+"18",border:`1px solid ${S.acc}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.acc,margin:"0 0 8px"}}>✅ {todayVisits.length} visita(s) hoje — Fechar roteiro?</p><button onClick={()=>setShowEndDay(true)} style={{width:"100%",padding:10,fontSize:13,background:S.acc,border:"none",fontWeight:600,borderRadius:8,color:"#fff"}}>🏨 Fechar Roteiro do Dia</button></div>}
+
+      <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} focusReq={focusReq} rfv={rfvMap} excl={exclOrgs}/>
+      <CrmTab visible={tab==="crm"} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs}/>
+      {tab==="rotas"&&<RotasTab sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
+      {tab==="relatorio"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando relatório…</p>}><RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/></Suspense>}
+      {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} token={token} plocs={plocs} orgs={orgs} dayBases={dayBases}/>}
+      <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs}/>
+
+      {tab==="config"&&<ConfigTab user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
+        onSync={doSync} onLoadHistory={loadHistory} onSyncPull={()=>{syncPull();setSyncStatus("Forçando sync...");}}
+        onShareGPS={async()=>{if(!Object.keys(plocs).length){alert("Nenhum GPS salvo");return;}setSyncStatus("Enviando GPS...");try{const r=await fetch(`${API}?sync=plocs`);const d=await r.json();const merged={...(d.active||{}),...plocs};await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:merged})});setSyncStatus(`${Object.keys(merged).length} GPS enviados!`);}catch(e){setSyncStatus("Erro: "+e.message);}}}
+        onShowDB={()=>setShowDB(true)} onShowEnd={()=>setShowEndDay(true)}
+        onDeleteGPS={(orgId)=>{setPlocs(p=>{const n={...p};delete n[orgId];sS("jc:pdvLocs",n);
+          const del=sL("jc:deletedGPS",[]);if(!del.includes(orgId)){del.push(orgId);sS("jc:deletedGPS",del);}
+          fetch(`${API}?sync=plocs`).then(r=>r.json()).then(d=>{const cloud={...d.active||{}};delete cloud[orgId];fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:cloud})});}).catch(()=>{});
+          return n;});}}
+        onSaveGPS={(orgId,lat,lng)=>{setPlocs(p=>{const n={...p,[orgId]:{lat,lng}};sS("jc:pdvLocs",n);
+          const del=sL("jc:deletedGPS",[]).filter(id=>id!==orgId);sS("jc:deletedGPS",del);
+          syncPlocs(n);return n;});}}
+        onClearVisits={(target)=>setVisits(prev=>prev.filter(v=>!v.checkinTime?.startsWith(target)))}
+        onClearAllGPS={()=>{setPlocs({});sS("jc:pdvLocs",{});}}
+        onLogout={sair}
+      />}
+      </div>
+    </div>
+
+    {/* Voltar ao topo */}
+    <button onClick={()=>{const el=document.querySelector(".jc-main");if(el)el.scrollTo({top:0,behavior:"smooth"});}} style={{position:"fixed",bottom:mob?84:24,right:16,width:44,height:44,borderRadius:50,background:S.pri,border:"none",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 3px 12px ${S.pri}66`,zIndex:30,cursor:"pointer",padding:0}}><ChevronUp size={22} strokeWidth={2.5} color="#fff"/></button>
+
+    {/* BOTTOM NAV — só no celular (agilidade de campo); no desktop a navegação é a sidebar */}
+    {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=><button key={t.id} onClick={()=>{setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:tab===t.id?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:tab===t.id?700:400,color:tab===t.id?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={tab===t.id?2.2:1.6}/>{t.l}</button>)}</div></div>}
+
+    {coTarget&&<NoteModal org={coTarget} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
+    {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const n={...p,[k]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
+    {showEndDay&&<DayEndModal user={user} onSave={b=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const cur=p[k]||{};const n={...p,[k]:{...cur,end:b}};sS("jc:dayBases",n);return n;});setShowEndDay(false);}} onCancel={()=>setShowEndDay(false)}/>}
+    {searchAdd&&<SearchOrAddModal token={token} allOrgs={allOrgs}
+      onFound={(org)=>{setTab("pdvs");setFocusReq({id:org.id||null,name:org.name||org.nickname,t:Date.now()});}}
+      onNewClient={(cnpj,rfData)=>{sS("jc:prefill",{cnpj,rfData});setNewClient(true);}}
+      onCancel={()=>setSearchAdd(false)}/>}
+    {newClient&&<NewClientModal token={token} allOrgs={allOrgs} onSave={org=>{setOrgs(p=>[org,...p]);setAllOrgs(p=>[org,...p]);setNewClient(false);}} onCancel={()=>setNewClient(false)}/>}
+    {personTarget&&<PeopleModal org={personTarget} token={token} onClose={()=>setPersonTarget(null)}/>}
+    {editTarget&&<EditModal org={editTarget} token={token} users={usersList} allOrgs={allOrgs} onSave={u=>{setOrgs(p=>p.map(o=>o.id===u.id?u:o));setAllOrgs(p=>p.map(o=>o.id===u.id?u:o));setEditTarget(null);}} onClose={()=>setEditTarget(null)}/>}
+    {divTarget&&<DivergentModal org={divTarget.org} dist={divTarget.dist} onAction={handleDivAction} onCancel={()=>setDivTarget(null)}/>}
+  </div>);}
