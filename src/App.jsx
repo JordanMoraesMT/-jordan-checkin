@@ -99,9 +99,26 @@ export default function App(){
   const hasEndBase=dayBases[user?.id+"_"+today]?.end!=null||dayBases[today]?.end!=null;
   const canCloseRoute=todayVisits.length>0&&!active&&!hasEndBase;
 
-  const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{let pg=1,all=[],exc=[];while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,t||token);if(!d.data?.length)break;const pg_=d.data.map(strip);all.push(...pg_.filter(o=>!/exclu/i.test(o.cat||"")));exc.push(...pg_.filter(o=>/exclu/i.test(o.cat||"")));/* v19: excluídos guardados à parte — aparecem só na busca */if(d.data.length<100)break;pg++;}setAllOrgs(all);setOrgs(all);setExclOrgs(exc);setSyncMsg(`${all.length} clientes`);
-    // Auto-load visit history
-    await loadHistoryInner(t||token);
+  const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{
+    const tk=t||token;
+    let all=[],exc=[],fonteD1=false;
+    // v23: fonte primaria = D1 (dashboard.jordanmt.com). Chave de vinculo = CNPJ.
+    try{
+      setSyncMsg("Carregando clientes...");
+      const r=await fetch(`${DASH_CRM}/api/crm/clientes?limit=5000`,{headers:{"X-Session":tk},cache:"no-store"});
+      if(r.ok){const d=await r.json();
+        if(d&&d.ok&&Array.isArray(d.clientes)){
+          for(const o of d.clientes){(o.excluido?exc:all).push(o);}
+          fonteD1=true;
+        }
+      }
+    }catch(e){console.warn("clientes D1:",e);}
+    if(!fonteD1){
+      setSyncMsg("D1 indisponivel, usando Agendor...");
+      let pg=1;while(true){setSyncMsg(`${all.length} clientes...`);const d=await agF(`/organizations?page=${pg}&per_page=100`,tk);if(!d.data?.length)break;const pg_=d.data.map(strip);all.push(...pg_.filter(o=>!/exclu/i.test(o.cat||"")));exc.push(...pg_.filter(o=>/exclu/i.test(o.cat||"")));if(d.data.length<100)break;pg++;}
+    }
+    setAllOrgs(all);setOrgs(all);setExclOrgs(exc);setSyncMsg(`${all.length} clientes${fonteD1?" (D1)":" (Agendor)"}`);
+    await loadHistoryInner(tk);
   }catch(e){setSyncMsg("Erro");}setSyncing(false);};
 
   const loadHistoryInner=async(tk)=>{setSyncMsg("Carregando historico...");const now=new Date();let allTasks=[];

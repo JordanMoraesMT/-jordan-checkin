@@ -1,6 +1,6 @@
 // TeamCheck — aba AgendaTab
 import { useState, useEffect, useMemo, useRef } from "react";
-import { API, toLocalDate, todayLocal, TYPES, S, fT, fD, agF, crmFire } from "../lib";
+import { API, DASH, toLocalDate, todayLocal, TYPES, S, fT, fD, agF, crmFire } from "../lib";
 import { LB, SegTabs, Chip } from "../components";
 
 function AgendaTab({visible,token,user,allOrgs}){
@@ -14,21 +14,31 @@ function AgendaTab({visible,token,user,allOrgs}){
   const[showAdd,setShowAdd]=useState(false);const[addQ,setAddQ]=useState("");const[addOrg,setAddOrg]=useState(null);
   const[addType,setAddType]=useState("VISITA");const[addText,setAddText]=useState("");const[addDate,setAddDate]=useState("");const[addTime,setAddTime]=useState("09:00");const[addLo,setAddLo]=useState(false);
   const load=async()=>{setLo(true);setErr("");try{
-    const now=new Date();let all=[];
-    for(let w=0;w<2;w++){const from=new Date(now);from.setDate(from.getDate()-30*(w+1));const to=new Date(now);to.setDate(to.getDate()-30*w);
-      setErr(`${all.length} tasks (${w*30}d)...`);
-      let pg=1;while(true){const d=await agF(`/tasks?createdDateGt=${from.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}}
-    // ONLY tasks with due_date (tarefas agendadas), NOT activities (logs without schedule)
-    // done field is ALWAYS null in Agendor API — use finishedAt to determine completion
-    const mapped=all.filter(t=>t.due_date||t.dueDate).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt,done:!!(t.finishedAt||t.done),finished:t.finishedAt||null,userName:t.user?.name||"?",userId:t.user?.id}));
+    // v23: fonte primaria = D1 (tarefas com prazo). Fallback = Agendor.
+    let mapped=null;
+    try{
+      const desde=new Date(Date.now()-90*86400000).toISOString().slice(0,10);
+      const r=await fetch(`${DASH}/api/crm/tarefas?desde=${desde}&limit=2000`,{headers:{"X-Session":token},cache:"no-store"});
+      if(r.ok){const d=await r.json();if(d&&d.ok&&Array.isArray(d.tarefas))mapped=d.tarefas;}
+    }catch(e){console.warn("tarefas D1:",e);}
+    if(mapped===null){
+      // Fallback Agendor (rede de seguranca da transicao)
+      const now=new Date();let all=[];
+      for(let w=0;w<2;w++){const from=new Date(now);from.setDate(from.getDate()-30*(w+1));const to=new Date(now);to.setDate(to.getDate()-30*w);
+        setErr(`${all.length} tasks (${w*30}d)...`);
+        let pg=1;while(true){const d=await agF(`/tasks?createdDateGt=${from.toISOString()}&createdDateLt=${to.toISOString()}&per_page=100&page=${pg}`,token);if(!d.data?.length)break;all.push(...d.data);if(d.data.length<100)break;pg++;}}
+      mapped=all.filter(t=>t.due_date||t.dueDate).map(t=>({id:t.id,type:t.type||"?",org:t.organization?.name||"?",orgId:t.organization?.id,text:t.text||"",due:t.due_date||t.dueDate||null,created:t.createdAt,done:!!(t.finishedAt||t.done),finished:t.finishedAt||null,userName:t.user?.name||"?",userId:t.user?.id}));
+    }
     setTasks(mapped);setErr(`${mapped.length} tarefas · atualizado ${fT(new Date())}`);
   }catch(e){console.warn("agenda:",e);setErr("Erro: "+e.message);}setLo(false);};
   useEffect(()=>{if(!visible)return;if(!loadedRef.current){loadedRef.current=true;load();}const iv=setInterval(()=>{load();},300000);return()=>clearInterval(iv);},[visible]);// carrega só na 1ª abertura; auto-refresh 5min enquanto visível
   const markDone=async(t)=>{if(!confirm(`Finalizar "${t.text.slice(0,50)}..."?`))return;try{
-    // Agendor API ignores done:true on PUT — use DELETE + POST activity
-    await agF(`/organizations/${t.orgId}/tasks/${t.id}`,token,{method:"DELETE"});
-    await agF(`/organizations/${t.orgId}/tasks`,token,{method:"POST",body:JSON.stringify({text:"[CONCLUIDA] "+t.text,type:t.type,done:true})});
-    crmFire(token,"/api/crm/tarefa-concluir",{agendor_id:t.id},"PUT");setTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true,finished:new Date().toISOString()}:x));setErr("Finalizada!");
+    // v23: conclui no D1 (fonte de verdade). Usa d1_id se houver, senao o id (que pode ser agendor_id).
+    const corpo=t.d1_id?{id:t.d1_id}:{agendor_id:t.id};
+    try{await fetch(`${DASH}/api/crm/tarefa-concluir`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(corpo)});}catch(e){console.warn("concluir D1:",e);}
+    // Espelho Agendor enquanto existir (nao trava se falhar)
+    if(t.orgId&&t.id){try{await agF(`/organizations/${t.orgId}/tasks/${t.id}`,token,{method:"DELETE"});await agF(`/organizations/${t.orgId}/tasks`,token,{method:"POST",body:JSON.stringify({text:"[CONCLUIDA] "+t.text,type:t.type,done:true})});}catch(e){console.warn("espelho agendor:",e);}}
+    setTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true,finished:new Date().toISOString()}:x));setErr("Finalizada!");
   }catch(e){console.warn("markDone:",e);alert("Erro: "+e.message);}};
   const addTask=async()=>{if(!addOrg||!addText.trim())return;setAddLo(true);try{const body={text:addText,type:addType,done:false};if(addDate)body.due_date=`${addDate}T${addTime}:00-04:00`;const rT=await agF(`/organizations/${addOrg.id}/tasks`,token,{method:"POST",body:JSON.stringify(body)});crmFire(token,"/api/crm/atividades",{org_id:addOrg.id,cnpj:(addOrg.cnpj||"").replace(/\D/g,"")||null,org_nome:addOrg.nickname||addOrg.name,tipo:addType,texto:addText,origem:"tarefa",due_em:body.due_date||null,agendor_id:rT?.data?.id||null});setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
   // Filters
