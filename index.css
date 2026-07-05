@@ -1,0 +1,62 @@
+/* ============================================================
+   TeamCheck — temas claro/escuro espelhados do Dashboard
+   (theme.js): superfícies e textos por variáveis CSS; acentos
+   vívidos ficam em HEX fixo no lib.js (permitem concatenar).
+   Padrão: ESCURO. Troca por [data-theme] no <html> (Config).
+   ============================================================ */
+:root, :root[data-theme="dark"]{
+  --bg:#0B1B2C; --card:#122B43; --alt:#1A3148; --bdr:#1E3A57;
+  --inp:#0C2236; --inp-bdr:#294763;
+  --t1:#E6EFF6; --t2:#8DA4B8; --t3:#7C92A6; --t4:#5E7488;
+  --link:#0AAEE8; --scroll:#294763;
+  --card-shadow:0 12px 32px -18px rgba(0,0,0,.55);
+}
+:root[data-theme="light"]{
+  --bg:#CED5D9; --card:#FBFCFD; --alt:#EEF2F5; --bdr:#DCE3E7;
+  --inp:#FFFFFF; --inp-bdr:#D3DBE1;
+  --t1:#14202B; --t2:#2E3A45; --t3:#54616C; --t4:#9AA6B0;
+  --link:#0578A6; --scroll:#B9C4CC;
+  --card-shadow:0 12px 30px -14px rgba(14,41,66,.20);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body {
+  background: var(--bg);
+  font-family: 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 15px;
+  color: var(--t1);
+  overscroll-behavior-y: contain;
+  -webkit-tap-highlight-color: transparent;
+}
+#root {
+  max-width: 640px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding-bottom: 70px;
+}
+input, select, textarea {
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--t1);
+  background: var(--inp);
+  border: 1px solid var(--inp-bdr);
+  border-radius: 8px;
+  padding: 9px 10px;
+  outline: none;
+  width: auto;
+}
+input::placeholder, textarea::placeholder { color: var(--t4); }
+input:focus, select:focus, textarea:focus { border-color: #0AAEE8; }
+option { background: var(--inp); color: var(--t1); }
+button {
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--t1);
+  background: var(--alt);
+  border: 1px solid var(--bdr);
+  border-radius: 8px;
+  padding: 9px 12px;
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scroll); border-radius: 4px; }
