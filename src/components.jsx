@@ -18,11 +18,14 @@ function Login({onLogin}){
   const doReset=async()=>{if(!code.trim()||!np)return;if(np!==np2){setEr("As senhas não conferem.");return;}if(np.length<8){setEr("A nova senha precisa ter ao menos 8 caracteres.");return;}setLo(true);setEr("");setOk("");try{const{r,d}=await post("reset",{email:email.trim().toLowerCase(),code:code.trim(),password:np});if(r.ok&&d.ok){setMode("login");setPw("");setCode("");setNp("");setNp2("");setOk("Senha redefinida! Entre com a nova senha.");}else setEr(d.error||"Não foi possível redefinir.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};
   const nav=m=>{setEr("");setOk("");setMode(m);};
   const linkStyle={background:"none",border:"none",color:S.pri,fontSize:13,cursor:"pointer",padding:0,textDecoration:"underline"};
-  return(<div style={{padding:"3rem 1rem",textAlign:"center"}}>
-    <JordanLogo color={S.pri} height={84} style={{marginBottom:16}}/>
-    <h1 style={{fontSize:20,fontWeight:600,margin:"0 0 4px",display:"flex",alignItems:"baseline",justifyContent:"center",gap:8,flexWrap:"wrap"}}>TeamCheck<span style={{fontSize:11,fontWeight:500,color:S.ts}}>197 tentativas até dar certo 🏆</span></h1>
-    <p style={{fontSize:13,color:S.ts,margin:"0 0 2rem"}}>Jordan Representação Inteligente</p>
-    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1.25rem",textAlign:"left"}}>
+  return(<div style={{position:"fixed",inset:0,zIndex:100,background:"radial-gradient(120% 120% at 20% 0%,#0A8FC2 0%,#0578A6 45%,#024E6E 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Roboto',sans-serif",padding:16,overflowY:"auto"}}>
+    <div style={{width:380,maxWidth:"100%",background:"var(--card-solid)",borderRadius:20,boxShadow:"0 40px 80px -30px rgba(2,30,45,.7),0 0 0 1px rgba(255,255,255,.06)",padding:"38px 34px 32px",textAlign:"left"}}>
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:26}}>
+      <JordanLogo color={S.pl} height={64} style={{marginBottom:12}}/>
+      <div style={{fontSize:24,fontWeight:700,letterSpacing:".02em",color:S.txt}}>TeamCheck</div>
+      <div style={{fontSize:12,color:S.ts,marginTop:4}}>Força de Vendas · Jordan Representações</div>
+    </div>
+    <div>
       {mode==="login"&&<>
         <LB t="E-MAIL"><input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doLogin()}/></LB>
         <LB t="SENHA"><input type="password" autoComplete="current-password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Sua senha" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doLogin()}/></LB>
@@ -46,25 +49,46 @@ function Login({onLogin}){
       {er&&<p style={{fontSize:13,color:S.dng,marginTop:12,textAlign:"center"}}>{er}</p>}
       {ok&&<p style={{fontSize:13,color:S.ok||S.acc,marginTop:12,textAlign:"center"}}>{ok}</p>}
     </div>
+    <div style={{textAlign:"center",fontSize:11,color:S.td,marginTop:20}}>197 tentativas até dar certo 🏆</div>
+    </div>
   </div>);
 }
+
+// ─── Primitivos visuais padrão Dashboard (usados por todas as abas) ───
+// Cartão KPI: rótulo maiúsculo + número em IBM Plex Mono (fiel ao Dashboard/mockup)
+const Kpi=({k,v,u})=><div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"14px 16px"}}>
+  <div style={{fontSize:10,letterSpacing:".1em",textTransform:"uppercase",color:S.ts,fontWeight:600,marginBottom:8}}>{k}</div>
+  <div className="mono" style={{fontSize:24,fontWeight:600,color:S.txt,lineHeight:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{v}{u&&<span style={{fontSize:13,color:S.td,fontWeight:400,marginLeft:4}}>{u}</span>}</div>
+</div>;
+// Controle segmentado (trilho alt + pílula ativa clara com sombra) — padrão do mockup
+const SegTabs=({items,value,onChange,size=13})=><div style={{display:"flex",gap:5,background:S.cl,border:`1px solid ${S.brd}`,borderRadius:11,padding:4}}>
+  {items.map(([id,l])=><button key={id} onClick={()=>onChange(id)} style={{flex:1,textAlign:"center",padding:"8px 6px",borderRadius:8,fontSize:size,fontWeight:value===id?600:500,background:value===id?"var(--card-solid)":"transparent",color:value===id?S.pl:S.ts,border:"none",boxShadow:value===id?"0 1px 2px rgba(3,73,100,.14)":"none",cursor:"pointer",whiteSpace:"nowrap"}}>{l}</button>)}
+</div>;
+// Chip pílula de filtro
+const Chip=({on,color=S.pl,children,onClick})=><button onClick={onClick} style={{padding:"6px 13px",borderRadius:20,fontSize:12,fontWeight:on?600:500,background:on?(color==="#fff"?S.pl:color):S.inp,color:on?"#fff":S.ts,border:on?"none":`1px solid ${S.inpBdr}`,cursor:"pointer",whiteSpace:"nowrap"}}>{children}</button>;
+export { Kpi, SegTabs, Chip };
 // Cores da Matriz RFV (mesmas classes da tela RFV do Dashboard)
 const RFVC={"Campeão":S.gold,"Leal":S.ok,"Em Crescimento":S.pri,"Em Risco":"#E76F51","Inativo":S.td};
+// Quadradinho de ação 32px com borda (padrão do mockup)
+const IQ={width:32,height:32,borderRadius:8,border:`1px solid ${S.inpBdr}`,background:S.inp,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0};
 const SRC_={"Em Dia":S.ok,"Momento de Recompra":S.gold,"Atrasado":S.dng};
 const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,onQuick,onInfo,ldId,plocs,lastVisit,lastOrder,nearRoad,rfvInfo}){
   const isA=active?.orgId===org.id;const a=org.addr||{};const addr=[a.street,a.number].filter(Boolean).join(", ");const loc=[a.district,a.city_name||a.city,a.state].filter(Boolean).join(" · ");
   const catColor=CC[org.cat]||S.ts;
-  return(<div id={"org-"+org.id} style={{background:isA?S.cl:S.card,border:`${isA?2:1}px solid ${isA?S.pri:S.brd}`,borderRadius:12,padding:"12px 14px",boxShadow:S.shadow}}>
-    <div style={{display:"flex",justifyContent:"space-between",gap:8}}>
+  return(<div id={"org-"+org.id} style={{background:isA?S.cl:S.card,border:`${isA?2:1}px solid ${isA?S.pri:S.brd}`,borderRadius:14,padding:"14px 16px",boxShadow:S.shadow}}>
+    <div style={{display:"flex",justifyContent:"space-between",gap:12}}>
       <div style={{flex:1,minWidth:0}}>
-        <p style={{fontWeight:500,fontSize:14,margin:"0 0 2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{plocs[org.id]?<span style={{color:S.ok,fontSize:10,marginRight:4}}>●</span>:null}{org.name||org.nickname}</p>
-        {org.cnpj&&<p style={{fontSize:11,color:S.td,margin:"0 0 1px"}}>{org.cnpj}</p>}
-        {addr&&<p style={{fontSize:11,color:S.ts,margin:"0 0 1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{addr}</p>}
-        {loc&&<p style={{fontSize:11,color:S.ts,margin:"0 0 2px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{loc}</p>}
-        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:2}}>
-          {org.cat&&<span style={{fontSize:10,color:"#fff",background:catColor,padding:"2px 8px",borderRadius:4,fontWeight:500}}>{org.cat}</span>}
-          {org.sector&&<span style={{fontSize:9,color:S.ts,background:S.bg,padding:"1px 6px",borderRadius:4}}>{org.sector}</span>}
-          {rfvInfo&&<span style={{fontSize:10,color:RFVC[rfvInfo.rfv]||S.ts,border:`1px solid ${(RFVC[rfvInfo.rfv]||S.ts)}66`,background:(RFVC[rfvInfo.rfv]||S.ts)+"18",padding:"1px 7px",borderRadius:4,fontWeight:700}}>{rfvInfo.rfv}</span>}
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
+          {plocs[org.id]?<span style={{color:S.ok,fontSize:10}}>●</span>:null}
+          <span style={{fontWeight:700,fontSize:14.5,color:S.txt}}>{org.name||org.nickname}</span>
+          {org.cat&&<span style={{fontSize:10,letterSpacing:".05em",textTransform:"uppercase",color:"#fff",background:catColor,padding:"2px 8px",borderRadius:6,fontWeight:600}}>{org.cat}</span>}
+          {rfvInfo&&<span style={{fontSize:10,color:RFVC[rfvInfo.rfv]||S.ts,border:`1px solid ${(RFVC[rfvInfo.rfv]||S.ts)}66`,background:(RFVC[rfvInfo.rfv]||S.ts)+"18",padding:"2px 8px",borderRadius:6,fontWeight:700}}>{rfvInfo.rfv}</span>}
+        </div>
+        {org.cnpj&&<p className="mono" style={{fontSize:11,color:S.td,margin:"0 0 3px"}}>{org.cnpj}</p>}
+        {addr&&<p style={{fontSize:12,color:S.ts,margin:"0 0 1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{addr}</p>}
+        <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginTop:4}}>
+          {loc&&<span style={{fontSize:12,color:S.ts}}>{loc}</span>}
+          {org.sector&&<><span style={{width:3,height:3,borderRadius:"50%",background:S.td}}/><span style={{fontSize:11,color:S.ts,background:S.cl,border:`1px solid ${S.brd}`,padding:"2px 8px",borderRadius:6}}>{org.sector}</span></>}
         </div>
         {lastVisit&&<p style={{fontSize:10,color:S.td,margin:"4px 0 0"}}>📋 Visita: {fD(lastVisit.time)} — {lastVisit.who} ({Math.floor((Date.now()-new Date(lastVisit.time))/86400000)}d)</p>}
         {lastOrder&&<p style={{fontSize:10,color:S.gold,margin:"2px 0 0"}}>📦 Pedido: {fD(lastOrder.time)} — {lastOrder.source||"Dashboard"}</p>}
@@ -73,19 +97,17 @@ const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,o
         {org.dist!=null&&org.dist<9999&&<p style={{fontSize:10,color:org.distType==="gps"?S.acc:S.ts,margin:"2px 0 0",fontWeight:org.distType==="gps"?500:400}}>📍 {nearRoad[org.id]!=null?`${nearRoad[org.id].toFixed(1)}km (estrada)`:org.dist<1?`${(org.dist*1000).toFixed(0)}m`:`${org.dist.toFixed(1)}km`}{org.distType==="bairro"?" (estimado)":""}</p>}
         {org.distType==="sem_ref"&&<p style={{fontSize:10,color:S.td,margin:"2px 0 0",fontStyle:"italic"}}>Sem referencia de localização</p>}
       </div>
-      <div style={{display:"flex",flexDirection:"column",gap:4,flexShrink:0}}>
-        {isA?<button onClick={()=>onOut(org)} disabled={ldId===org.id} style={{background:S.dng,border:"none",color:"#fff",fontSize:13,fontWeight:700,padding:"10px 18px",borderRadius:50,display:"flex",alignItems:"center",gap:6,boxShadow:`0 2px 10px ${S.dng}44`,cursor:"pointer"}}><LogOut size={22} strokeWidth={2.5}/>{ldId===org.id?"...":"Check-out"}</button>
-        :<div style={{display:"flex",gap:5}}>
-          <button onClick={()=>onIn(org)} disabled={!!active||ldId===org.id} style={{background:active?S.cl:S.acc,border:"none",color:"#fff",fontSize:13,fontWeight:700,padding:"10px 18px",borderRadius:50,opacity:active?0.4:1,display:"flex",alignItems:"center",gap:6,boxShadow:active?"none":`0 2px 10px ${S.acc}44`,cursor:"pointer"}}><LogIn size={22} strokeWidth={2.5}/>{ldId===org.id?"...":"Check-in"}</button>
-          <button onClick={()=>onQuick&&onQuick(org,"WHATSAPP")} style={{background:"transparent",border:"none",color:S.ok,padding:6,cursor:"pointer"}}><MessageCircle size={32} strokeWidth={1.8}/></button>
-          <button onClick={()=>onQuick&&onQuick(org,"LIGACAO")} style={{background:"transparent",border:"none",color:S.pl,padding:6,cursor:"pointer"}}><Phone size={32} strokeWidth={1.8}/></button>
-        </div>}
-        <div style={{display:"flex",gap:2,justifyContent:"flex-end"}}>
-          {plocs&&plocs[org.id]&&<button onClick={()=>{const loc=plocs[org.id];const url=`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}&travelmode=driving`;window.open(url,"_blank","noopener");}} title="Navegar" style={{background:"transparent",border:"none",color:S.acc,padding:4,cursor:"pointer"}}><Navigation size={26} strokeWidth={1.8}/></button>}
-          {org.cnpj&&<button onClick={()=>window.open(`https://dashboard.jordanmt.com/?cliente=${org.cnpj.replace(/[.\-\/]/g,"")}`,"_blank","noopener")} title="Ver no Dashboard" style={{background:"transparent",border:"none",color:S.pri,padding:4,cursor:"pointer"}}><BarChart3 size={26} strokeWidth={1.8}/></button>}
-          <button onClick={()=>onInfo&&onInfo(org)} style={{background:"transparent",border:"none",color:S.pl,padding:4,cursor:"pointer"}}><Info size={26} strokeWidth={1.8}/></button>
-          <button onClick={()=>onEdit&&onEdit(org)} style={{background:"transparent",border:"none",color:S.gold,padding:4,cursor:"pointer"}}><Pencil size={26} strokeWidth={1.8}/></button>
-          <button onClick={()=>onPerson&&onPerson(org)} style={{background:"transparent",border:"none",color:S.ts,padding:4,cursor:"pointer"}}><UserPlus size={26} strokeWidth={1.8}/></button>
+      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8,flexShrink:0}}>
+        {isA?<button onClick={()=>onOut(org)} disabled={ldId===org.id} style={{display:"flex",alignItems:"center",gap:8,background:S.dng,color:"#fff",border:"none",borderRadius:9,padding:"10px 18px",fontSize:13.5,fontWeight:600,cursor:"pointer",boxShadow:`0 6px 16px -8px ${S.dng}AA`}}><LogOut size={16} strokeWidth={2.2}/>{ldId===org.id?"...":"Check-out"}</button>
+        :<button onClick={()=>onIn(org)} disabled={!!active||ldId===org.id} style={{display:"flex",alignItems:"center",gap:8,background:active?S.cl:"var(--chrome)",color:active?S.td:"#fff",border:"none",borderRadius:9,padding:"10px 18px",fontSize:13.5,fontWeight:600,opacity:active?0.5:1,cursor:"pointer",boxShadow:active?"none":"0 6px 16px -8px rgba(5,120,166,.6)"}}><LogIn size={16} strokeWidth={2.2}/>{ldId===org.id?"...":"Check-in"}</button>}
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
+          {!isA&&<button onClick={()=>onQuick&&onQuick(org,"WHATSAPP")} title="WhatsApp" style={IQ}><MessageCircle size={16} strokeWidth={1.9} color={S.ok}/></button>}
+          {!isA&&<button onClick={()=>onQuick&&onQuick(org,"LIGACAO")} title="Ligação" style={IQ}><Phone size={15} strokeWidth={1.9} color="var(--t3)"/></button>}
+          {plocs&&plocs[org.id]&&<button onClick={()=>{const loc=plocs[org.id];const url=`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}&travelmode=driving`;window.open(url,"_blank","noopener");}} title="Navegar" style={IQ}><Navigation size={15} strokeWidth={1.9} color={S.acc}/></button>}
+          {org.cnpj&&<button onClick={()=>window.open(`https://dashboard.jordanmt.com/?cliente=${org.cnpj.replace(/[.\-\/]/g,"")}`,"_blank","noopener")} title="Ver no Dashboard" style={IQ}><BarChart3 size={15} strokeWidth={1.9} color={S.pri}/></button>}
+          <button onClick={()=>onInfo&&onInfo(org)} title="Detalhes" style={IQ}><Info size={15} strokeWidth={1.9} color="var(--t3)"/></button>
+          <button onClick={()=>onEdit&&onEdit(org)} title="Editar" style={IQ}><Pencil size={15} strokeWidth={1.9} color={S.gold}/></button>
+          <button onClick={()=>onPerson&&onPerson(org)} title="Pessoas" style={IQ}><UserPlus size={15} strokeWidth={1.9} color="var(--t3)"/></button>
         </div>
       </div>
     </div>
@@ -98,7 +120,7 @@ function NoteModal({org,onSave,onCancel}){
   const today=todayLocal();
   const dateValid=nd>=today;const ok=n.trim().length>=MIN_OBS&&nd&&ndsc.trim().length>=MIN_OBS&&dateValid;
   const obsLeft=MIN_OBS-n.trim().length;const dscLeft=MIN_OBS-ndsc.trim().length;
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:50}}><div style={{background:S.card,borderRadius:"16px 16px 0 0",padding:"1.25rem",width:"100%",maxWidth:480,maxHeight:"92vh",overflowY:"auto"}}>
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:50}}><div style={{background:S.cardSolid,borderRadius:"16px 16px 0 0",padding:"1.25rem",width:"100%",maxWidth:480,maxHeight:"92vh",overflowY:"auto"}}>
   <p style={{fontWeight:600,fontSize:16,margin:"0 0 8px"}}>Registrar atividade</p>
   <p style={{fontSize:12,color:S.ts,margin:"0 0 8px"}}>{org?.name||org?.nickname}</p>
   <LB t="O QUE FOI FEITO"><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4}}>{TYPES.map(t=><button key={t.id} onClick={()=>setTp(t.id)} style={{padding:"6px",fontSize:10,border:tp===t.id?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:tp===t.id?S.cl:S.bg,color:tp===t.id?S.pl:S.ts,fontWeight:tp===t.id?600:400}}>{t.l}</button>)}</div></LB>
@@ -124,8 +146,8 @@ function NewClientModal({token,allOrgs,onSave,onCancel}){
   const createOrg=async()=>{if(!name.trim()&&!legal.trim())return;setLo(true);setEr("");try{const body={name:name.trim()||legal.trim(),legalName:legal.trim()};if(cnpj)body.cnpj=cnpj.replace(/[.\-\/]/g,"");const addr={};if(street)addr.street_name=street;const numOk=num&&/\d/.test(num);if(numOk)addr.street_number=num;const _ai=[comp,(num&&!numOk)?num:""].filter(Boolean).join(" ");if(_ai)addr.additional_info=_ai;if(district)addr.district=district;if(city)addr.city=city;if(state)addr.state=state;if(cep)addr.postal_code=cep;if(Object.keys(addr).length)body.address=addr;if(phone)body.contact={work:phone};if(catId)body.category=catId;if(sectorId)body.sector=parseInt(sectorId);if(originId)body.leadOrigin=parseInt(originId);const gFinal=grupo==="__new__"?newGrupo.trim():grupo;if(gFinal)body.description=`Grupo: ${gFinal}`;const d=await agF("/organizations",token,{method:"POST",body:JSON.stringify(body)});if(d.data){const st_=strip(d.data);crmFire(token,"/api/crm/cliente-upsert",{cnpj:(st_.cnpj||"").replace(/\D/g,"")||null,org_id:st_.id,fantasia:st_.nickname||st_.name,razao:st_.legalName||null,cidade:st_.addr?.city_name||st_.addr?.city||null,uf:st_.addr?.state||null,segmento:st_.sector||null,vendedor:st_.owner||null,grupo:(st_.grupo||"").replace("Grupo: ","")||null,categoria_id:d.data.category?.id||null,categoria_nome:st_.cat||null});setOrgId(d.data.id);setOrgName(d.data.name||name);setOrgData(st_);setStep(2);}else setEr("Erro");}catch(e){setEr(agErr(e));}setLo(false);};
   const[pCargo,setPCargo]=useState("");
   const existGrp=useMemo(()=>[...new Set((allOrgs||[]).map(o=>fixMojibake(o.grupo?.replace("Grupo: ","")||"")).filter(Boolean))].sort(),[allOrgs]);
-  const finish=(wp)=>{const od=orgData||strip({id:orgId,name:orgName||name,legalName:legal,cnpj,address:{city,state,district},category:{id:catId,name:CAT_IDS.find(c=>c.id===catId)?.n},sector:{id:parseInt(sectorId),name:SECTORS.find(s=>s.id===parseInt(sectorId))?.n}});if(wp&&pName.trim()){setLo(true);agF("/people",token,{method:"POST",body:JSON.stringify({name:pName,organization:orgId,role:pCargo||undefined,contact:{...(pEmail?{email:pEmail}:{}),...(pPhone?{mobile:pPhone}:{}),...(pWhats?{whatsapp:pWhats}:{})}})}).then(()=>{setLo(false);setOrgData(od);setStep(3);}).catch((e)=>{setLo(false);alert("Empresa criada, mas o contato não foi salvo: "+agErr(e));setOrgData(od);setStep(3);});}else{setOrgData(od);setStep(3);}};
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
+  const finish=(wp)=>{const od=orgData||strip({id:orgId,name:orgName||name,legalName:legal,cnpj,address:{city,state,district},category:{id:catId,name:CAT_IDS.find(c=>c.id===catId)?.n},sector:{id:parseInt(sectorId),name:SECTORS.find(s=>s.id===parseInt(sectorId))?.n}});if(wp&&pName.trim()){setLo(true);agF("/people",token,{method:"POST",body:JSON.stringify({name:pName,organization:orgId,role:pCargo||undefined,contact:{...(pEmail?{email:pEmail}:{}),...(pPhone?{mobile:pPhone}:{}),...(pWhats?{whatsapp:pWhats}:{})}})}).then(()=>{crmFire(token,"/api/crm/contatos",{org_id:orgId,cnpj:(cnpj||"").replace(/\D/g,"")||null,nome:pName,cargo:pCargo||null,telefone:pPhone||null,whatsapp:pWhats||null,email:pEmail||null});setLo(false);setOrgData(od);setStep(3);}).catch((e)=>{setLo(false);alert("Empresa criada, mas o contato não foi salvo: "+agErr(e));setOrgData(od);setStep(3);});}else{setOrgData(od);setStep(3);}};
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.cardSolid,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
   {step===1?<><p style={{fontWeight:600,fontSize:16,margin:"0 0 2px"}}>Novo Cliente — Empresa</p><p style={{fontSize:11,color:S.ts,margin:"0 0 10px"}}>Etapa 1 de 3</p>
   <LB t="CNPJ"><div style={{display:"flex",gap:6}}><input value={cnpj} onChange={e=>setCnpj(e.target.value)} placeholder="00.000.000/0000-00" style={{flex:1}} onKeyDown={e=>e.key==="Enter"&&buscarCNPJ()}/><button onClick={buscarCNPJ} disabled={fetching} style={{padding:"8px 12px",background:S.acc,border:"none",fontWeight:600,fontSize:11}}>{fetching?"...":"Buscar"}</button></div></LB>
   {fetching&&<p style={{fontSize:11,color:S.acc,margin:"-4px 0 4px"}}>Consultando Receita Federal...</p>}
@@ -177,10 +199,10 @@ function PeopleModal({org,token,onClose}){
     const contact={};if(e.trim())contact.email=e.trim();if(p.trim())contact.mobile=p.trim();if(w.trim())contact.whatsapp=w.trim();
     const body={name:n.trim()};if(cargo)body.role=cargo;if(Object.keys(contact).length)body.contact=contact;
     try{if(mode==="edit"&&editId){await agF(`/people/${editId}`,token,{method:"PUT",body:JSON.stringify(body)});setMsg("Atualizado!");}
-    else{body.organization=org.id;await agF("/people",token,{method:"POST",body:JSON.stringify(body)});setMsg("Adicionado!");}
+    else{body.organization=org.id;await agF("/people",token,{method:"POST",body:JSON.stringify(body)});crmFire(token,"/api/crm/contatos",{org_id:org.id,cnpj:(org.cnpj||"").replace(/\D/g,"")||null,nome:n.trim(),cargo:cargo||null,telefone:p.trim()||null,whatsapp:w.trim()||null,email:e.trim()||null});setMsg("Adicionado!");}
     await reload();clear();}catch(x){setMsg("Erro: "+agErr(x));}setSaving(false);};
   const del=async(pe)=>{if(!confirm(`Excluir ${pe.name}?\nEssa ação remove o contato do Agendor.`))return;setSaving(true);try{await agF(`/people/${pe.id}`,token,{method:"DELETE"});await reload();setMsg("Excluído!");}catch(x){setMsg("Erro: "+agErr(x));}setSaving(false);};
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.cardSolid,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 2px"}}>👤 Contatos</p>
     <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>{org.name}</p>
     {lo&&<p style={{color:S.ts,textAlign:"center",padding:"1rem 0"}}>Carregando...</p>}
@@ -224,7 +246,7 @@ function EditModal({org,token,users,allOrgs,onSave,onClose}){const[name,setName]
   const toggleProd=id=>setSelProds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
   const refresh=async()=>{if(!org.cnpj)return;setFetching(true);setMsg("");try{const d=await fetchCNPJ(org.cnpj);setName(d.nome_fantasia||name);setLegal(d.razao_social||"");setMsg("Dados atualizados!");}catch(e){setMsg("Erro: "+e.message);}setFetching(false);};
   const save=async()=>{setLo(true);setMsg("");try{const body={products:selProds};if(name.trim())body.name=name.trim();if(legal.trim())body.legalName=legal.trim();if(catId)body.category=parseInt(catId);if(sectorId)body.sector=parseInt(sectorId);if(ownerId)body.ownerUser=parseInt(ownerId);const gFinal=grupo==="__new__"?newGrupo.trim():grupo;body.description=gFinal?`Grupo: ${gFinal}`:"";const resp=await agF(`/organizations/${org.id}`,token,{method:"PUT",body:JSON.stringify(body)});if(resp.data){const st_=strip(resp.data);crmFire(token,"/api/crm/cliente-upsert",{cnpj:(st_.cnpj||"").replace(/\D/g,"")||null,org_id:st_.id,fantasia:st_.nickname||st_.name,razao:st_.legalName||null,cidade:st_.addr?.city_name||st_.addr?.city||null,uf:st_.addr?.state||null,segmento:st_.sector||null,vendedor:st_.owner||null,grupo:(st_.grupo||"").replace("Grupo: ","")||null,categoria_id:resp.data.category?.id||null,categoria_nome:st_.cat||null});onSave(st_);setMsg("Salvo!");}else{onSave({...org,name:name||org.name});}}catch(e){setMsg("Erro: "+agErr(e));}setLo(false);};
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}><p style={{fontWeight:600,fontSize:16,margin:0}}>Editar Cliente</p>{org.cnpj&&<button onClick={refresh} disabled={fetching} style={{padding:"4px 10px",fontSize:11,background:S.acc+"22",border:`1px solid ${S.acc}`,color:S.acc}}>{fetching?"...":"🔄 RF"}</button>}</div>
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.cardSolid,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}><p style={{fontWeight:600,fontSize:16,margin:0}}>Editar Cliente</p>{org.cnpj&&<button onClick={refresh} disabled={fetching} style={{padding:"4px 10px",fontSize:11,background:S.acc+"22",border:`1px solid ${S.acc}`,color:S.acc}}>{fetching?"...":"🔄 RF"}</button>}</div>
   {org.cnpj&&<p style={{fontSize:11,color:S.td,margin:"0 0 8px"}}>CNPJ: {org.cnpj}</p>}
   <LB t="NOME FANTASIA"><input value={name} onChange={e=>setName(e.target.value)} style={{width:"100%"}}/></LB>
   <LB t="RAZÃO SOCIAL"><input value={legal} onChange={e=>setLegal(e.target.value)} placeholder="Atualizar" style={{width:"100%"}}/></LB>
@@ -274,7 +296,7 @@ function JourneyModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[o
     else if(destLat&&destLng){endBase={type:"hotel",lat:destLat,lng:destLng,label:destName||"Hotel"};}
     else{endBase={type:"hotel",lat:null,lng:null,label:destName||"Hotel (GPS ao fechar)"};}
     onSave({start:startBase,end:endBase});setLo(false);};
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.cardSolid,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 12px"}}>Jornada de Trabalho</p>
     <p style={{fontSize:12,color:S.acc,fontWeight:600,margin:"0 0 6px"}}>DE ONDE ESTÁ SAINDO?</p>
     {["home","hotel"].map(t=><label key={"o"+t} style={{display:"flex",alignItems:"center",gap:10,padding:10,border:`${orig===t?2:1}px solid ${orig===t?S.pri:S.brd}`,borderRadius:10,marginBottom:6,cursor:"pointer",background:orig===t?S.cl:S.bg}}><input type="radio" checked={orig===t} onChange={()=>setOrig(t)}/><span style={{fontSize:13,fontWeight:500}}>{t==="home"?"🏠 Casa":"🏨 Hotel / Airbnb"}</span></label>)}
@@ -291,14 +313,14 @@ function DayEndModal({user,onSave,onCancel}){const home=HOMES[user?.id];const[tp
   const go=()=>{if(tp==="home"&&home){onSave({type:"home",...home});return;}
     if(!htLat||!htLng){alert("Defina a localização do hotel (GPS, busca ou coordenadas).");return;}
     onSave({type:"hotel",lat:htLat,lng:htLng,label:hn||"Hotel/Airbnb"});};
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:400}}>
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.cardSolid,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:400}}>
     <p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Fechar roteiro do dia</p>
     <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>Para onde esta indo agora?</p>
     {["home","hotel"].map(t=><label key={t} style={{display:"flex",alignItems:"center",gap:10,padding:12,border:`${tp===t?2:1}px solid ${tp===t?S.pri:S.brd}`,borderRadius:10,marginBottom:8,cursor:"pointer",background:tp===t?S.cl:S.bg}}><input type="radio" checked={tp===t} onChange={()=>setTp(t)}/><span style={{fontWeight:500}}>{t==="home"?"🏠 Voltando para casa":"🏨 Hotel / Airbnb"}</span></label>)}
     {tp==="hotel"&&<div style={{marginBottom:8}}><HotelGeoInput name={hn} onNameChange={setHn} lat={htLat} lng={htLng} onCoordsChange={(la,ln)=>{setHtLat(la);setHtLng(ln);}} label="Local de repouso"/></div>}
     <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={onCancel} style={{flex:1}}>Cancelar</button><button onClick={go} disabled={tp==="hotel"&&(!htLat||!htLng)} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>Fechar Roteiro</button></div>
   </div></div>);}
-function DivergentModal({org,dist,onAction,onCancel}){return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:400}}><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:S.gold}}>Local divergente</p><p style={{fontSize:13,color:S.ts,margin:"0 0 4px"}}>{org.name}</p><p style={{fontSize:12,color:S.gold,margin:"0 0 16px"}}>Voce esta a {dist}m do cadastrado</p><div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}><button onClick={()=>onAction("checkin")} style={{padding:12,textAlign:"left",fontWeight:500}}>📍 Visita presencial</button>{TYPES.filter(t=>t.id!=="VISITA").map(t=><button key={t.id} onClick={()=>onAction("remote",t.id)} style={{padding:12,textAlign:"left"}}>{t.l} (sem check-in)</button>)}<button onClick={()=>onAction("schedule")} style={{padding:12,textAlign:"left",color:S.acc}}>📅 Agendar futuro</button></div><button onClick={onCancel} style={{width:"100%",color:S.dng}}>Cancelar</button></div></div>);}
+function DivergentModal({org,dist,onAction,onCancel}){return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.cardSolid,borderRadius:16,padding:"1.25rem",width:"100%",maxWidth:400}}><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px",color:S.gold}}>Local divergente</p><p style={{fontSize:13,color:S.ts,margin:"0 0 4px"}}>{org.name}</p><p style={{fontSize:12,color:S.gold,margin:"0 0 16px"}}>Voce esta a {dist}m do cadastrado</p><div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}><button onClick={()=>onAction("checkin")} style={{padding:12,textAlign:"left",fontWeight:500}}>📍 Visita presencial</button>{TYPES.filter(t=>t.id!=="VISITA").map(t=><button key={t.id} onClick={()=>onAction("remote",t.id)} style={{padding:12,textAlign:"left"}}>{t.l} (sem check-in)</button>)}<button onClick={()=>onAction("schedule")} style={{padding:12,textAlign:"left",color:S.acc}}>📅 Agendar futuro</button></div><button onClick={onCancel} style={{width:"100%",color:S.dng}}>Cancelar</button></div></div>);}
 function BaseEditInline({day,dayBases,userId,plocs,lastVisitCoord,onSave,onCancel,dayKey}){
   const home=HOMES[userId];const k=dayKey||day;const cur=dayBases[k]?.start||HOMES[userId];const curEnd=dayBases[k]?.end||cur;
   const[origType,setOrigType]=useState(cur?.type||"home");const[destType,setDestType]=useState(curEnd?.type||"home");
@@ -342,7 +364,7 @@ function SearchOrAddModal({token,allOrgs,onFound,onNewClient,onCancel}){
   const pCanSave=pName.trim()&&pEmail.trim()&&pWhats.trim();
   const addPerson=async()=>{if(!pCanSave||!selected?.id)return;setPLo(true);try{const ct={};if(pEmail.trim())ct.email=pEmail.trim();if(pPhone.trim())ct.mobile=pPhone.trim();if(pWhats.trim())ct.whatsapp=pWhats.trim();await agF("/people",token,{method:"POST",body:JSON.stringify({name:pName,organization:selected.id,...(pCargo?{role:pCargo}:{}),contact:ct})});await loadPeople(selected.id);setAddP(false);setPName("");setPCargo("");setPEmail("");setPPhone("");setPWhats("");}catch(e){alert("Erro: "+agErr(e));}setPLo(false);};
   const catColor=CC[selected?.cat]||S.ts;const isExcluido=selected?.cat==="Excluido";
-  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
+  return(<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.cardSolid,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
     {step==="search"&&<><p style={{fontWeight:600,fontSize:16,margin:"0 0 4px"}}>Buscar / Cadastrar Cliente</p>
       <p style={{fontSize:12,color:S.ts,margin:"0 0 12px"}}>CNPJ, nome fantasia ou razão social</p>
       <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Ex: Compacta, Tropical, Bom Jesus..." style={{width:"100%",marginBottom:8,fontSize:14}} onKeyDown={e=>e.key==="Enter"&&search()} autoFocus/>

@@ -24,7 +24,12 @@ const RGC={O:[-15.601,-56.115],N:[-15.565,-56.080],L:[-15.610,-56.060],S:[-15.65
 function geoEstimate(o){const b=(o.addr?.district||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9 ]/g,"");for(const[k,r]of Object.entries(BRG)){if(b.includes(k))return RGC[r];}const c=o.addr?.city_name||o.addr?.city||"";return CITY_GEO[c]||null;}
 // Paleta espelhada do Dashboard (theme.js, tema claro): acentos C.pri/C.green/C.gold/C.red,
 // superfícies --bg/--card/--alt/--bdr, textos --t1/--t3, chrome #0578A6/#036690 e sombra de card.
-const S={bg:"var(--bg)",card:"var(--card)",cl:"var(--alt)",pri:"#0AAEE8",pl:"var(--link)",acc:"#12C265",gold:"#FFB020",dng:"#FB4B3A",txt:"var(--t1)",ts:"var(--t3)",td:"var(--t4)",brd:"var(--bdr)",ok:"#12C265",chrome:"#0578A6",chromeTop:"#036690",chromeFg:"#FFFFFF",chromeFg2:"rgba(255,255,255,0.82)",shadow:"var(--card-shadow)",navActive:"rgba(255,255,255,.20)",navFg:"rgba(255,255,255,.82)"};
+const S={bg:"var(--bg)",card:"var(--card)",cardSolid:"var(--card-solid)",cl:"var(--alt)",pri:"#0AAEE8",pl:"var(--link)",acc:"#12C265",gold:"#FFB020",dng:"#FB4B3A",purple:"#8B5CF6",cyan:"#06B6D4",txt:"var(--t1)",t2:"var(--t2)",ts:"var(--t3)",td:"var(--t4)",brd:"var(--bdr)",inp:"var(--inp)",inpBdr:"var(--inp-bdr)",ok:"#12C265",
+  chrome:"var(--chrome)",chromeTop:"var(--chrome-top)",chromeFg:"var(--chrome-fg)",chromeFg2:"var(--nav-fg)",chromeBdr:"var(--chrome-bdr)",
+  nav:"var(--nav-fg)",navGrp:"var(--nav-grp)",navActive:"var(--nav-active-bg)",navActiveFg:"var(--nav-active-fg)",navFg:"var(--nav-fg)",navHover:"var(--nav-hover)",
+  shadow:"var(--card-shadow)",track:"var(--track)",seam:"var(--seam-shadow)",contentShadow:"var(--content-shadow)",mono:"'IBM Plex Mono',ui-monospace,monospace"};
+// paleta de gráficos — idêntica ao Dashboard (theme.js → PC)
+const PC=["#0AAEE8","#06B6D4","#12C265","#FFB020","#8B5CF6","#FF4D8D","#FB4B3A","#06C281","#38C6F5","#A78BFA","#34D399","#F59E0B"];
 const fT=d=>new Date(d).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:TZ});
 const fD=d=>new Date(d).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:TZ});
 const fDS=d=>new Date(d).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",timeZone:TZ});
@@ -124,4 +129,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, fT, fD, fDS, mins, hrsMin, hourDec, hav, sL, sS, agF, agErr, trAg, postTask, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };
+export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, mins, hrsMin, hourDec, hav, sL, sS, agF, agErr, trAg, postTask, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };
