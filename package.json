@@ -1,6 +1,6 @@
 {
   "name": "jordan-checkin",
-  "version": "15.0.0",
+  "version": "21.0.0",
   "description": "App de check-in/checkout para vendedores externos integrado ao Agendor CRM",
   "private": true,
   "type": "module",
@@ -12,7 +12,8 @@
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "lucide-react": "^0.383.0"
+    "lucide-react": "^0.383.0",
+    "recharts": "^2.12.7"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
