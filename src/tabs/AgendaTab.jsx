@@ -33,14 +33,17 @@ function AgendaTab({visible,token,user,allOrgs}){
   }catch(e){console.warn("agenda:",e);setErr("Erro: "+e.message);}setLo(false);};
   useEffect(()=>{if(!visible)return;if(!loadedRef.current){loadedRef.current=true;load();}const iv=setInterval(()=>{load();},300000);return()=>clearInterval(iv);},[visible]);// carrega só na 1ª abertura; auto-refresh 5min enquanto visível
   const markDone=async(t)=>{if(!confirm(`Finalizar "${t.text.slice(0,50)}..."?`))return;try{
-    // v23: conclui no D1 (fonte de verdade). Usa d1_id se houver, senao o id (que pode ser agendor_id).
+    // v24: conclui só no D1 (fonte de verdade). Usa d1_id se houver, senao o id (agendor_id legado).
     const corpo=t.d1_id?{id:t.d1_id}:{agendor_id:t.id};
     try{await fetch(`${DASH}/api/crm/tarefa-concluir`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(corpo)});}catch(e){console.warn("concluir D1:",e);}
-    // Espelho Agendor enquanto existir (nao trava se falhar)
-    if(t.orgId&&t.id){try{await agF(`/organizations/${t.orgId}/tasks/${t.id}`,token,{method:"DELETE"});await agF(`/organizations/${t.orgId}/tasks`,token,{method:"POST",body:JSON.stringify({text:"[CONCLUIDA] "+t.text,type:t.type,done:true})});}catch(e){console.warn("espelho agendor:",e);}}
     setTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true,finished:new Date().toISOString()}:x));setErr("Finalizada!");
   }catch(e){console.warn("markDone:",e);alert("Erro: "+e.message);}};
-  const addTask=async()=>{if(!addOrg||!addText.trim())return;setAddLo(true);try{const body={text:addText,type:addType,done:false};if(addDate)body.due_date=`${addDate}T${addTime}:00-04:00`;const rT=await agF(`/organizations/${addOrg.id}/tasks`,token,{method:"POST",body:JSON.stringify(body)});crmFire(token,"/api/crm/atividades",{org_id:addOrg.id,cnpj:(addOrg.cnpj||"").replace(/\D/g,"")||null,org_nome:addOrg.nickname||addOrg.name,tipo:addType,texto:addText,origem:"tarefa",due_em:body.due_date||null,agendor_id:rT?.data?.id||null});setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
+  const addTask=async()=>{if(!addOrg||!addText.trim())return;setAddLo(true);try{
+    const dueEm=addDate?`${addDate}T${addTime}:00-04:00`:null;
+    const tp=(addType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(tp)?tp:"NOTA";
+    // v24: tarefa criada só no D1 (fonte de verdade). Sem Agendor.
+    crmFire(token,"/api/crm/atividades",{org_id:addOrg.id,cnpj:(addOrg.cnpj||"").replace(/\D/g,"")||null,org_nome:addOrg.nickname||addOrg.name,tipo:tipoOk,texto:addText,origem:"tarefa",due_em:dueEm,agendor_id:null});
+    setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
   // Filters
   const today=todayLocal();const dow=new Date().getDay();const weekStart=toLocalDate(new Date(Date.now()-dow*86400000));const weekEnd=toLocalDate(new Date(Date.now()+(6-dow)*86400000));
   const filtered=useMemo(()=>{const doneCutoff=toLocalDate(new Date(Date.now()-30*86400000));let list=tasks.filter(t=>filter==="pending"?!t.done:(t.done&&((t.finished||t.created||"").slice(0,10)>=doneCutoff)));

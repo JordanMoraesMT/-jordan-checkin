@@ -1,7 +1,7 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser } from "lucide-react";
-import { API, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, agF, postTask, gps, fixMojibake, strip, isRealVisit } from "./lib";
+import { API, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, agF, gps, fixMojibake, strip, isRealVisit } from "./lib";
 import { Login, Banner, NoteModal, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 const RelatorioTab=lazy(()=>import("./tabs/RelatorioTab").then(m=>({default:m.RelatorioTab})));// recharts só carrega ao abrir o Relatório
@@ -79,14 +79,18 @@ export default function App(){
     if("Notification"in window&&Notification.permission==="default")Notification.requestPermission();
     // Check pending tasks every 5 min
     const checkTasks=async()=>{if(!("Notification"in window)||Notification.permission!=="granted")return;
-      try{const since=new Date();since.setDate(since.getDate()-30);const d=await agF(`/tasks?createdDateGt=${since.toISOString()}&per_page=100`,token);const now=new Date();const soon=new Date(now.getTime()+15*60000);// 15 min ahead
-        (d.data||[]).filter(t=>!t.finishedAt&&!t.done&&t.user?.id===user.id&&t.due_date).forEach(t=>{
-          const due=new Date(t.due_date);const key=t.id+"|"+t.due_date;
+      try{const since=new Date();since.setDate(since.getDate()-30);
+        // v24: notificações lidas do D1 (fonte de verdade). Sem Agendor.
+        const r=await fetch(`${DASH_CRM}/api/crm/tarefas?desde=${since.toISOString().slice(0,10)}&limit=1000`,{headers:{"X-Session":token},cache:"no-store"});
+        if(!r.ok)return;const j=await r.json();const lista=(j&&j.tarefas)||[];
+        const now=new Date();const soon=new Date(now.getTime()+15*60000);// 15 min ahead
+        lista.filter(t=>!t.done&&t.userId===user.id&&t.due).forEach(t=>{
+          const due=new Date(t.due);const key=t.id+"|"+t.due;
           if(due>=now&&due<=soon&&!notifiedRef.has(key)){notifiedRef.add(key);
-            new Notification("📅 TeamCheck",{body:`${t.type||"Tarefa"}: ${t.organization?.name||"?"}\n${t.text?.slice(0,60)||""}`,icon:"/logo.png",tag:key,requireInteraction:true});}
+            new Notification("📅 TeamCheck",{body:`${t.type||"Tarefa"}: ${t.org||"?"}\n${t.text?.slice(0,60)||""}`,icon:"/logo.png",tag:key,requireInteraction:true});}
           // Morning alert: tasks due today
           const h=now.getHours();if(h>=7&&h<8&&toLocalDate(due)===todayLocal()&&!notifiedRef.has("morning_"+key)){notifiedRef.add("morning_"+key);
-            new Notification("🌅 TeamCheck",{body:`${t.type}: ${t.organization?.name}\n${fT(t.due_date)}`,icon:"/logo.png",tag:"morning_"+key});}
+            new Notification("🌅 TeamCheck",{body:`${t.type}: ${t.org}\n${fT(t.due)}`,icon:"/logo.png",tag:"morning_"+key});}
         });
       }catch(e){console.warn("notif:",e);}};
     checkTasks();const iv=setInterval(checkTasks,300000);// 5 min
@@ -145,7 +149,7 @@ export default function App(){
   // Grava atividade no CRM próprio (D1) em segundo plano — nunca bloqueia o fluxo.
   const crmLog=(payload)=>{try{fetch(`${DASH_CRM}/api/crm/atividades`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(payload)}).catch(()=>{});}catch{}};
   const crmGps=(orgId,cnpj,g)=>{try{fetch(`${DASH_CRM}/api/crm/gps`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:orgId,cnpj:cnpj||null,lat:g.lat,lng:g.lng,precisao:g.acc})}).catch(()=>{});}catch{}};
-  const quickAction=async(org,type)=>{const note=prompt(`Registrar ${type==="WHATSAPP"?"WhatsApp":"Ligacao"} com ${org.name}:`);if(!note?.trim())return;try{await postTask(token,org.id,note,type,true);crmLog({org_id:org.id,cnpj:(org.cnpj||"").replace(/\D/g,"")||null,org_nome:org.nickname||org.name,tipo:type,texto:note});alert("Registrado no Agendor!");}catch(e){alert("Erro: "+e.message);}};
+  const quickAction=async(org,type)=>{const note=prompt(`Registrar ${type==="WHATSAPP"?"WhatsApp":"Ligacao"} com ${org.name}:`);if(!note?.trim())return;try{crmLog({org_id:org.id,cnpj:(org.cnpj||"").replace(/\D/g,"")||null,org_nome:org.nickname||org.name,tipo:type,texto:note});alert("Registrado!");}catch(e){alert("Erro: "+e.message);}};
 
   const checkin=async(org)=>{ensureBase();if(org.cat==="Online - B2B"&&!confirm(`${org.name} e Online/B2B.\nRegistrar visita?`))return;if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\nContinuar?`))return;if(org.cat==="Excluido"&&!confirm(`${org.name} esta Excluido.\nContinuar?`))return;setLdId(org.id);setGeoErr("");try{const g=await gps();if(plocs[org.id]){const d=hav(plocs[org.id].lat,plocs[org.id].lng,g.lat,g.lng)*1000;if(d>500){setDivTarget({org,dist:Math.round(d),geo:g});setLdId(null);return;}}else{const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);crmGps(org.id,(org.cnpj||"").replace(/\D/g,""),g);}const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}catch{setGeoErr("GPS indisponivel.");}setLdId(null);};
   const handleDivAction=(action,type)=>{if(!divTarget)return;const{org,geo}=divTarget;if(action==="checkin"){const v={orgId:org.id,orgName:org.name,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:geo.lat,lng:geo.lng,accuracy:geo.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}else if(action==="remote"&&type)setCoTarget({...org,remoteType:type});setDivTarget(null);};
@@ -157,19 +161,20 @@ export default function App(){
       if(ref&&ref.lat&&ref.lng){divDist=Math.round(hav(ref.lat,ref.lng,g.lat,g.lng)*1000);if(divDist>500)divergent=true;}
     }
     const done={...active,checkoutTime:new Date().toISOString(),checkoutLat:g?.lat,checkoutLng:g?.lng,note,taskType:type,sale,divergent,divDist};
-    // Only register in Agendor + KV if NOT divergent
+    // Só grava (D1 + KV) se NÃO for divergente
     if(!divergent){
-      try{await postTask(token,active.orgId,note,type,true);done.synced=true;}catch(e){console.warn("task:",e);done.synced=false;}
-      // CRM próprio: histórico durável no D1 (não bloqueia; Agendor segue como espelho)
-      {const oRef=(allOrgs||[]).find(o=>o.id===active.orgId);crmLog({org_id:active.orgId,cnpj:oRef?(oRef.cnpj||"").replace(/\D/g,""):null,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:""),lat:g?.lat,lng:g?.lng,origem:"checkout"});}
-      if(next?.nextDate&&next?.nextDesc){try{await postTask(token,active.orgId,next.nextDesc,next.nextType||"VISITA",false,`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`);}catch(e){console.warn("nextStep:",e);}}
-      if(sale?.brand&&sale?.value){try{await agF(`/organizations/${active.orgId}/deals`,token,{method:"POST",body:JSON.stringify({title:`Venda ${sale.brand}`,value:sale.value})});}catch(e){console.warn("deal:",e);}}
+      done.synced=true;
+      // v24: checkout gravado só no D1 (fonte de verdade). Sem Agendor.
+      const oRef=(allOrgs||[]).find(o=>o.id===active.orgId);const cnpjRef=oRef?(oRef.cnpj||"").replace(/\D/g,""):null;
+      crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:""),lat:g?.lat,lng:g?.lng,origem:"checkout"});
+      // Próximo passo → tarefa com prazo no D1 (aparece na Agenda). Tipo validado p/ CRM_TIPOS do Worker.
+      if(next?.nextDate&&next?.nextDesc){const nt=(next.nextType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(nt)?nt:"VISITA";crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:tipoOk,texto:next.nextDesc,origem:"tarefa",due_em:`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`});}
       syncVisitSave(done);
     }else{done.synced=false;}
     // Save locally (even divergent, for visual flag)
     setVisits(p=>[done,...p]);setActive(null);syncClear();setCoTarget(null);setLdId(null);
     // Alert AFTER UI is cleared (non-blocking flow)
-    if(divergent)setTimeout(()=>alert(`⚠️ CHECKOUT DESLOCADO\nVocê está a ${divDist}m do local cadastrado.\n\nEsta visita NÃO foi registrada no Agendor e NÃO contará no relatório (visita e km).\n\nFica marcada com ⚠️ apenas para conferência.`),100);
+    if(divergent)setTimeout(()=>alert(`⚠️ CHECKOUT DESLOCADO\nVocê está a ${divDist}m do local cadastrado.\n\nEsta visita NÃO foi registrada e NÃO contará no relatório (visita e km).\n\nFica marcada com ⚠️ apenas para conferência.`),100);
     else if(next?.nextDate&&next?.nextDesc)setTimeout(()=>alert("Proximo passo agendado!"),100);
   };
 
