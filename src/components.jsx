@@ -211,7 +211,7 @@ const RFVC={"Campeão":S.gold,"Leal":S.ok,"Em Crescimento":S.pri,"Em Risco":"#E7
 // Quadradinho de ação 32px com borda (padrão do mockup)
 const IQ={width:32,height:32,borderRadius:8,border:`1px solid ${S.inpBdr}`,background:S.inp,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0};
 const SRC_={"Em Dia":S.ok,"Momento de Recompra":S.gold,"Atrasado":S.dng};
-const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,onQuick,onInfo,ldId,plocs,lastVisit,lastOrder,nearRoad,rfvInfo}){
+const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,onQuick,onOpen,ldId,plocs,lastVisit,lastOrder,nearRoad,rfvInfo}){
   const isA=active?.orgId===org.id;const a=org.addr||{};const addr=[a.street,a.number].filter(Boolean).join(", ");const loc=[a.district,a.city_name||a.city,a.state].filter(Boolean).join(" · ");
   const catColor=CC[org.cat]||S.ts;
   return(<div id={"org-"+org.id} style={{background:isA?S.cl:S.card,border:`${isA?2:1}px solid ${isA?S.pri:S.brd}`,borderRadius:14,padding:"14px 16px",boxShadow:S.shadow}}>
@@ -219,7 +219,7 @@ const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,o
       <div style={{flex:1,minWidth:0}}>
         <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:4}}>
           {plocs[org.id]?<span style={{color:S.ok,fontSize:10}}>●</span>:null}
-          <span style={{fontWeight:700,fontSize:14.5,color:S.txt}}>{org.name||org.nickname}</span>
+          <button onClick={()=>onOpen&&onOpen(org)} title="Abrir ficha do cliente" style={{background:"transparent",border:"none",padding:0,margin:0,cursor:onOpen?"pointer":"default",textAlign:"left",fontWeight:700,fontSize:14.5,color:onOpen?S.pl:S.txt}}>{org.name||org.nickname}</button>
           {org.cat&&<span style={{fontSize:10,letterSpacing:".05em",textTransform:"uppercase",color:"#fff",background:catColor,padding:"2px 8px",borderRadius:6,fontWeight:600}}>{org.cat}</span>}
           {rfvInfo&&<span style={{fontSize:10,color:RFVC[rfvInfo.rfv]||S.ts,border:`1px solid ${(RFVC[rfvInfo.rfv]||S.ts)}66`,background:(RFVC[rfvInfo.rfv]||S.ts)+"18",padding:"2px 8px",borderRadius:6,fontWeight:700}}>{rfvInfo.rfv}</span>}
         </div>

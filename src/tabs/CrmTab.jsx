@@ -453,10 +453,10 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
       <button onClick={() => { setFCat([]); setFResp([]); setFRfv([]); setFAbc([]); setFSr([]); setFCid([]); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
     </div>
     <div style={{ overflowX: "auto", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: S.shadow }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 720 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 820 }}>
         <thead><tr>
           <th style={{ ...th, cursor: "pointer" }} onClick={() => setOrdem(o => -o)}>Nome {ordem === 1 ? "▲" : "▼"}</th>
-          <th style={th}>Categoria</th><th style={th}>RFV</th><th style={th}>Responsável</th><th style={th}>E-mail</th><th style={th}>Telefone</th><th style={th}>Ranking</th><th style={th}></th>
+          <th style={th}>Categoria</th><th style={th}>Cidade</th><th style={th}>UF</th><th style={th}>RFV</th><th style={th}>Responsável</th><th style={th}>E-mail</th><th style={th}>Telefone</th><th style={th}></th>
         </tr></thead>
         <tbody>
           {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id}>
@@ -466,18 +466,19 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
                 <span style={{ display: "block", fontSize: 10.5, color: S.td }}>{[o.addr?.city_name || o.addr?.city, o.cnpj].filter(Boolean).join(" · ")}</span>
               </button></td>
             <td style={td}>{o.cat && <span style={{ fontSize: 10.5, color: "#fff", background: cor, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{o.cat}</span>}</td>
+            <td style={{ ...td, fontSize: 11.5 }}>{o.addr?.city_name || o.addr?.city || "—"}</td>
+            <td style={{ ...td, fontSize: 11.5, color: S.ts }}>{o.addr?.state || "—"}</td>
             <td style={td}>{(() => { const r = rfvDe(o); if (!r) return "—"; const rc = { "Campeão": S.gold, "Leal": S.ok, "Em Crescimento": S.pri, "Em Risco": "#E76F51", "Inativo": S.td }[r.rfv] || S.ts; return <span style={{ fontSize: 10.5, color: rc, border: `1px solid ${rc}66`, background: rc + "18", padding: "2px 7px", borderRadius: 4, fontWeight: 700 }}>{r.rfv}</span>; })()}</td>
             <td style={{ ...td, fontSize: 11.5 }}>{o.owner || "—"}</td>
             <td style={{ ...td, fontSize: 11.5 }}>{o.email ? <a href={`mailto:${o.email}`} style={{ color: S.pl, textDecoration: "none" }}>{o.email}</a> : "—"}</td>
             <td style={{ ...td, fontSize: 11.5 }}>{o.phone ? <a href={`https://wa.me/55${String(o.phone).replace(/\D/g, "")}`} target="_blank" rel="noreferrer" style={{ color: S.ok, textDecoration: "none", fontWeight: 600 }}>{o.phone}</a> : "—"}</td>
-            <td style={{ ...td, color: S.gold, fontSize: 11, letterSpacing: 1 }}>{(o.ranking || 0) > 0 ? "★".repeat(o.ranking) : "—"}</td>
             <td style={td}><button onClick={() => onEdit(o)} title="Editar empresa" style={{ background: "transparent", border: `1px solid ${S.gold}66`, color: S.gold, borderRadius: 8, padding: "5px 8px", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={14}/></button></td>
           </tr>); })}
         </tbody>
       </table>
     </div>
-    <button onClick={() => { const rows = [["Nome","CNPJ","Cidade","Categoria","Classe RFV","Curva ABC","Status Recompra","Responsável","E-mail","Telefone","Ranking"]];
-      lista.forEach(o => { const r = rfvDe(o); rows.push([o.nickname || o.name, o.cnpj || "", o.addr?.city_name || o.addr?.city || "", o.cat || "", r ? r.rfv : "", r ? r.abc : "", r ? r.status : "", o.owner || "", o.email || "", o.phone || "", o.ranking || ""]); });
+    <button onClick={() => { const rows = [["Nome","CNPJ","Cidade","UF","Categoria","Classe RFV","Curva ABC","Status Recompra","Responsável","E-mail","Telefone"]];
+      lista.forEach(o => { const r = rfvDe(o); rows.push([o.nickname || o.name, o.cnpj || "", o.addr?.city_name || o.addr?.city || "", o.addr?.state || "", o.cat || "", r ? r.rfv : "", r ? r.abc : "", r ? r.status : "", o.owner || "", o.email || "", o.phone || ""]); });
       csv(rows, `empresas-${new Date().toISOString().slice(0,10)}.csv`); }} style={{ width: "100%", marginTop: 10, padding: 12, fontSize: 13, background: S.pri + "22", border: `1px solid ${S.pri}55`, color: S.pl, fontWeight: 600, borderRadius: 10 }}>📊 Exportar {lista.length} empresas (Excel)</button>
     {vc < lista.length && <button onClick={() => setVc(v => v + 60)} style={{ width: "100%", marginTop: 10, padding: 12, fontSize: 13, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.txt, cursor: "pointer" }}>Ver mais ({lista.length - vc})</button>}
   </div>);
@@ -486,9 +487,11 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
 // ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, secao = "inicio", bump, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl }) {
+export function CrmTab({ visible, secao = "inicio", bump, focus, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl }) {
   // secao controlada pelo menu lateral do App: inicio | empresas | pessoas
   const [sel, setSel] = useState(null);
+  // Abrir a ficha de um cliente vindo de outra tela (ex.: clique no card em PDVs)
+  useEffect(() => { if (focus && focus.org) setSel(focus.org); }, [focus?.t]);
   const [q, setQ] = useState("");
   const [feed, setFeed] = useState([]); const [ld, setLd] = useState(false); const [erro, setErro] = useState("");
   const [fTipo, setFTipo] = useState(""); const [fUser, setFUser] = useState(""); const [fDias, setFDias] = useState(90);
