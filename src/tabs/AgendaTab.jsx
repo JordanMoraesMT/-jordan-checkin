@@ -41,8 +41,11 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
     setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();onCrmChange&&onCrmChange();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
   // Filters
   const today=todayLocal();const dow=new Date().getDay();const weekStart=toLocalDate(new Date(Date.now()-dow*86400000));const weekEnd=toLocalDate(new Date(Date.now()+(6-dow)*86400000));
+  // Casa a tarefa ao usuário por userId OU pelo nome (o selo usa userName; algumas tarefas vêm sem userId)
+  const userMatch=(t,who)=>{if(who==="all")return true;const nm=who==="alisson"?"alisson":"jordan";const uid=who==="alisson"?743347:743088;if(t.userName)return t.userName.toLowerCase().includes(nm);return t.userId!=null&&String(t.userId)===String(uid);};
+  const meWho=user.id===743347?"alisson":"jordan";
   const filtered=useMemo(()=>{const doneCutoff=toLocalDate(new Date(Date.now()-30*86400000));let list=tasks.filter(t=>filter==="pending"?!t.done:(t.done&&((t.finished||t.created||"").slice(0,10)>=doneCutoff)));
-    if(!isAdmin||userFilter!=="all"){const uid=userFilter==="alisson"?743347:userFilter==="jordan"?743088:user.id;list=list.filter(t=>isAdmin&&userFilter==="all"?true:t.userId===uid);}
+    if(!isAdmin)list=list.filter(t=>userMatch(t,meWho));else if(userFilter!=="all")list=list.filter(t=>userMatch(t,userFilter));
     if(period==="today")list=list.filter(t=>(t.due&&t.due.slice(0,10)===today)||(t.created&&toLocalDate(t.created)===today));
     if(period==="week")list=list.filter(t=>{const d=t.due?t.due.slice(0,10):toLocalDate(t.created);return d>=weekStart&&d<=weekEnd;});
     if(period==="custom")list=list.filter(t=>{const d=t.due?t.due.slice(0,10):toLocalDate(t.created);return d>=customFrom&&d<=customTo;});
@@ -53,9 +56,10 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
   const futureT=filtered.filter(t=>!t.done&&t.due&&t.due.slice(0,10)>today);
   const noDueT=filtered.filter(t=>!t.due);
   const doneT=filtered.filter(t=>t.done);
-  // Calendário: pontinhos por dia (tarefas pendentes com prazo) e lista do dia selecionado
-  const marks=useMemo(()=>{const m={};tasks.forEach(t=>{if(t.due&&!t.done){const d=t.due.slice(0,10);m[d]=t.due.slice(0,10)<today?S.dng:S.gold;}});return m;},[tasks,today]);
-  const dayTasks=useMemo(()=>{const uid=userFilter==="alisson"?743347:userFilter==="jordan"?743088:null;return tasks.filter(t=>{const d=t.due?t.due.slice(0,10):null;if(d!==calDay)return false;if(!isAdmin)return t.userId===user.id;if(uid)return t.userId===uid;return true;}).sort((a,b)=>(a.due||"").localeCompare(b.due||""));},[tasks,calDay,userFilter,isAdmin,user.id]);
+  // Calendário: quem contar para os pontinhos/lista respeita o filtro de equipe
+  const calWho=!isAdmin?meWho:userFilter;
+  const marks=useMemo(()=>{const m={};tasks.forEach(t=>{if(t.due&&!t.done&&userMatch(t,calWho)){const d=t.due.slice(0,10);if(m[d]!==S.dng)m[d]=t.due.slice(0,10)<today?S.dng:S.gold;}});return m;},[tasks,today,calWho]);
+  const dayTasks=useMemo(()=>tasks.filter(t=>{const d=t.due?t.due.slice(0,10):null;if(d!==calDay)return false;return userMatch(t,calWho);}).sort((a,b)=>(a.due||"").localeCompare(b.due||"")),[tasks,calDay,calWho]);
   // Add task: search orgs
   const addResults=addQ.trim().length>=2?allOrgs.filter(o=>[o.name,o.nickname,o.legalName,o.cnpj].filter(Boolean).some(f=>f.toLowerCase().includes(addQ.toLowerCase()))).slice(0,8):[];
   const renderTask=(t)=><div key={t.id} style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:13,padding:"14px 16px",marginBottom:11,display:"flex",gap:16,alignItems:"center"}}>
