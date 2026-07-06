@@ -93,9 +93,10 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
 
   const carregaInfo = async () => { try { const d = await crm(token, `/api/crm/cliente?${cnpjN ? "cnpj=" + cnpjN : "org_id=" + org.id}`); setInfo(d); } catch (e) { setInfo({ erro: e.message }); } };
   const carregaAtvs = async () => { setLdA(true); try {
-    const r1 = await crm(token, `/api/crm/atividades?org_id=${org.id}&limit=200`);
+    // Histórico COMPLETO do cliente (sem filtro de data). limit alto p/ nunca truncar.
+    const r1 = await crm(token, `/api/crm/atividades?org_id=${org.id}&limit=1000`);
     let lista = r1.atividades || [];
-    if (cnpjN) { try { const r2 = await crm(token, `/api/crm/atividades?cnpj=${cnpjN}&limit=200`); const ids = new Set(lista.map(a => a.id)); lista = [...lista, ...(r2.atividades || []).filter(a => !ids.has(a.id))]; } catch {} }
+    if (cnpjN) { try { const r2 = await crm(token, `/api/crm/atividades?cnpj=${cnpjN}&limit=1000`); const ids = new Set(lista.map(a => a.id)); lista = [...lista, ...(r2.atividades || []).filter(a => !ids.has(a.id))]; } catch {} }
     lista.sort((a, b) => (b.criado_em || "").localeCompare(a.criado_em || "") || b.id - a.id);
     setAtvs(lista);
   } catch (e) { setMsg("Histórico: " + e.message); } setLdA(false); };
@@ -501,12 +502,12 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
   const [sel, setSel] = useState(null);
   const [q, setQ] = useState("");
   const [feed, setFeed] = useState([]); const [ld, setLd] = useState(false); const [erro, setErro] = useState("");
-  const [fTipo, setFTipo] = useState(""); const [fUser, setFUser] = useState(""); const [fDias, setFDias] = useState(30);
+  const [fTipo, setFTipo] = useState(""); const [fUser, setFUser] = useState(""); const [fDias, setFDias] = useState(90);
 
   const carregaFeed = async () => { setLd(true); setErro("");
     try {
       const desde = new Date(Date.now() - fDias * 86400000).toISOString().slice(0, 10);
-      const ps = new URLSearchParams({ limit: "150", desde });
+      const ps = new URLSearchParams({ limit: "1000", desde });
       if (fTipo) ps.set("tipo", fTipo); if (fUser) ps.set("user_id", fUser);
       const d = await crm(token, "/api/crm/atividades?" + ps.toString());
       setFeed(d.atividades || []);
@@ -556,7 +557,7 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
         <option value="">Toda a equipe</option><option value="743088">Jordan</option><option value="743347">Alisson</option>
       </select>
       <select value={fDias} onChange={e => setFDias(+e.target.value)} style={{ ...inp, width: "auto", flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
-        <option value={7}>7 dias</option><option value={30}>30 dias</option><option value={90}>90 dias</option><option value={365}>12 meses</option>
+        <option value={7}>7 dias</option><option value={30}>30 dias</option><option value={90}>3 meses</option><option value={180}>6 meses</option><option value={365}>12 meses</option>
       </select>
       <button onClick={carregaFeed} style={{ width: 38, height: 38, borderRadius: 10, background: S.pl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><RefreshCw size={16} color="#fff" className={ld ? "spin" : ""} /></button>
     </div>
