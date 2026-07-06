@@ -2,7 +2,7 @@
 // CRM próprio: histórico de atividades, contatos, fotos/arquivos da loja e GPS.
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar } from "lucide-react";
+import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check } from "lucide-react";
 import { S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, todayLocal } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
@@ -58,12 +58,14 @@ const inp = { width: "100%", boxSizing: "border-box", background: "var(--inp)", 
 // ─────────────────────────────────────────────────────────────
 //  Card de atividade (timeline — mesmo desenho do início do Agendor)
 // ─────────────────────────────────────────────────────────────
-function AtvCard({ a, onOrg, onDel, canDel }) {
+function AtvCard({ a, onOrg, onDel, canDel, onFinish }) {
   const t = tipoDe(a.tipo);
+  const isTask = a.origem === "tarefa"; const done = !!a.concluida;
+  const atrasada = isTask && !done && a.due_em && a.due_em.slice(0, 10) < todayLocal();
   return (<Crd style={{ padding: 0, overflow: "hidden" }}>
     <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: S.cl, borderBottom: `1px solid ${S.brd}` }}>
       <div style={{ width: 28, height: 28, borderRadius: "50%", background: t.c + "22", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><t.I size={15} color={t.c} /></div>
-      <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: S.txt, letterSpacing: 0.4 }}>{t.l.toUpperCase()}{a.origem === "checkout" && <span style={{ fontWeight: 400, color: S.ts }}> · check-out</span>}</p>
+      <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: S.txt, letterSpacing: 0.4 }}>{t.l.toUpperCase()}{a.origem === "checkout" && <span style={{ fontWeight: 400, color: S.ts }}> · check-out</span>}{isTask && <span style={{ fontWeight: 700, color: done ? S.ok : atrasada ? S.dng : S.gold, marginLeft: 6, fontSize: 10 }}>· {done ? "TAREFA OK" : "TAREFA"}</span>}</p>
       <p style={{ margin: "0 0 0 auto", fontSize: 11, color: S.ts, display: "flex", alignItems: "center", gap: 4 }}><Clock size={11} />{fDH(a.criado_em)}</p>
       {canDel && <button onClick={() => onDel(a)} style={{ background: "transparent", border: "none", padding: 2, cursor: "pointer" }}><Trash2 size={14} color={S.td} /></button>}
     </div>
@@ -73,6 +75,13 @@ function AtvCard({ a, onOrg, onDel, canDel }) {
         {a.org_nome && <button onClick={() => onOrg && onOrg(a)} style={{ background: "transparent", border: "none", padding: 0, cursor: onOrg ? "pointer" : "default", display: "flex", alignItems: "center", gap: 4, color: S.pri, fontSize: 12, fontWeight: 600, textAlign: "right" }}><Building2 size={12} />{a.org_nome}</button>}
       </div>
       <p style={{ margin: 0, fontSize: 13.5, color: S.txt, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{a.texto}</p>
+      {isTask && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+        {a.due_em ? <span style={{ fontSize: 11.5, fontFamily: "monospace", color: done ? S.ts : atrasada ? S.dng : S.gold }}>Prazo {fDH(a.due_em)}</span> : <span />}
+        <button onClick={() => !done && onFinish && onFinish(a)} disabled={done || !onFinish} title={done ? "Tarefa finalizada" : "Marcar como finalizada"} style={{ display: "flex", alignItems: "center", gap: 8, background: done ? S.ok + "18" : S.inp, border: `1px solid ${done ? S.ok : S.inpBdr}`, borderRadius: 8, padding: "7px 12px", cursor: done ? "default" : (onFinish ? "pointer" : "default") }}>
+          <span style={{ width: 17, height: 17, borderRadius: 5, border: `1.5px solid ${done ? S.ok : S.inpBdr}`, background: done ? S.ok : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>{done && <Check size={12} color="#fff" strokeWidth={3} />}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: done ? S.ok : S.ts }}>{done ? "Finalizada" : "Finalizar"}</span>
+        </button>
+      </div>}
     </div>
   </Crd>);
 }
@@ -265,7 +274,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       </Crd>
       {ldA && <p style={{ fontSize: 12, color: S.ts }}>Carregando histórico...</p>}
       {!ldA && !atvs.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Nenhuma atividade registrada ainda.</p></Crd>}
-      {atvs.map(a => <AtvCard key={a.id} a={a} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={delAtv} />)}
+      {atvs.map(a => <AtvCard key={a.id} a={a} onFinish={async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setAtvs(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } }} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={delAtv} />)}
     </div>}
 
     {/* ── CONTATOS ── */}
@@ -562,7 +571,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
     <p style={{ fontSize: 12, color: S.ts, margin: "0 0 8px" }}>{ld ? "Carregando atividades..." : `${feed.length} atividade(s) no período`}</p>
     {erro && <Crd style={{ borderColor: S.dng + "66" }}><p style={{ margin: 0, fontSize: 12.5, color: S.dng }}>Erro ao carregar o feed: {erro}</p><p style={{ margin: "4px 0 0", fontSize: 11.5, color: S.ts }}>Verifique se o Dashboard está no ar (rotas CRM) e se você está logado.</p></Crd>}
     {!ld && !erro && !feed.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Sem atividades no período. Elas aparecem aqui a cada check-out, ligação, WhatsApp ou registro manual na tela do cliente.</p></Crd>}
-    {feed.map(a => <AtvCard key={a.id} a={a} onOrg={abrePorFeed} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={async (x) => { if (!confirm("Excluir esta atividade do CRM?")) return; try { await crm(token, `/api/crm/atividades?id=${x.id}`, { method: "DELETE" }); setFeed(p => p.filter(y => y.id !== x.id)); } catch (e) { alert("Erro: " + e.message); } }} />)}
+    {feed.map(a => <AtvCard key={a.id} a={a} onOrg={abrePorFeed} onFinish={async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setFeed(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } }} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={async (x) => { if (!confirm("Excluir esta atividade do CRM?")) return; try { await crm(token, `/api/crm/atividades?id=${x.id}`, { method: "DELETE" }); setFeed(p => p.filter(y => y.id !== x.id)); } catch (e) { alert("Erro: " + e.message); } }} />)}
   </div>}
   </div>);
 }
