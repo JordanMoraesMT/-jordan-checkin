@@ -1,7 +1,7 @@
 // TeamCheck — aba AgendaTab
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Check } from "lucide-react";
-import { DASH, toLocalDate, todayLocal, TYPES, USERS, S, fT, fD, crmFire } from "../lib";
+import { DASH, toLocalDate, todayLocal, TYPES, USERS, S, fT, fD, crmFire, gcalUrl } from "../lib";
 import { LB, SegTabs, Chip, DateField, MonthCalendar, TarefaModal } from "../components";
 
 function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
@@ -66,6 +66,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
       <div style={{display:"flex",alignItems:"center",gap:10,marginTop:7,flexWrap:"wrap"}}>
         <span className="mono" style={{fontSize:11.5,fontWeight:600,color:t.done?S.td:t.due&&t.due.slice(0,10)<today?S.dng:S.td,textDecoration:t.done?"line-through":"none"}}>{t.due?`Prazo ${fD(t.due)} ${fT(t.due)}`:`Criada ${fD(t.created)}`}</span>
         {t.done&&t.finished&&<><span style={{width:3,height:3,borderRadius:"50%",background:S.td}}/><span className="mono" style={{fontSize:11.5,color:S.ok}}>Finalizada {fD(t.finished)}</span></>}
+        {!t.done&&t.due&&<a href={gcalUrl({titulo:`${t.type||"Tarefa"} — ${t.org||""}`,detalhes:t.text||"",inicio:t.due,local:t.org||""})||"#"} target="_blank" rel="noopener" title="Adicionar ao Google Agenda" style={{fontSize:11,fontWeight:600,color:S.pl,textDecoration:"none",border:`1px solid ${S.brd}`,borderRadius:6,padding:"2px 8px"}}>📅 Google Agenda</a>}
       </div>
     </div>
     {/* Caixa de seleção: marca a tarefa como finalizada (padrão Dashboard) */}

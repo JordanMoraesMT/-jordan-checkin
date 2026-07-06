@@ -152,9 +152,21 @@ function getBase(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBas
 function getEnd(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBases[date];if(b?.end)return b.end;return getBase(dayBases,date,userId);}
 // ─── Helper: only real visits (check-in based, not WhatsApp/calls) ───
 function isRealVisit(v){if(!v.checkoutTime)return false;if(v.taskType&&v.taskType!=="VISITA")return false;if(v.divergent)return false;return true;}
+
+// ─── Google Agenda: monta o link "Adicionar evento" pré-preenchido (sem OAuth) ───
+function gcalUrl({titulo,detalhes,inicio,duracaoMin=60,local}){
+  const d=inicio instanceof Date?inicio:new Date(inicio);
+  if(isNaN(d))return null;
+  const fim=new Date(d.getTime()+duracaoMin*60000);
+  const z=x=>x.toISOString().replace(/[-:]|\.\d{3}/g,"");
+  const p=new URLSearchParams({action:"TEMPLATE",text:titulo||"Tarefa TeamCheck",dates:`${z(d)}/${z(fim)}`,details:detalhes||"",ctz:"America/Cuiaba"});
+  if(local)p.set("location",local);
+  return "https://calendar.google.com/calendar/render?"+p.toString();
+}
+
 // ─── Helper: resolve GPS from visit directly OR from plocs by orgId ───
 function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs&&v.orgId&&plocs[v.orgId])return{lat:plocs[v.orgId].lat,lng:plocs[v.orgId].lng};return null;}
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };
+export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };

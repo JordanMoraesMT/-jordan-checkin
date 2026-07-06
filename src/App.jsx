@@ -1,6 +1,6 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
-import { Store, Map as MapIcon, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact } from "lucide-react";
+import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact } from "lucide-react";
 import { API, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
 import { Login, Banner, NoteModal, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
@@ -9,6 +9,7 @@ import { EquipeTab } from "./tabs/EquipeTab";
 import { AgendaTab } from "./tabs/AgendaTab";
 import { ConfigTab } from "./tabs/ConfigTab";
 import { PdvsTab } from "./tabs/PdvsTab";
+const MapaTab=lazy(()=>import("./tabs/MapaTab").then(m=>({default:m.MapaTab})));// leaflet só carrega ao abrir o Mapa
 import { CrmTab } from "./tabs/CrmTab";
 
 // ─── CRM próprio (D1 via Worker do Dashboard) — registro em segundo plano ───
@@ -17,6 +18,8 @@ const DASH_CRM = "https://dashboard.jordanmt.com";
 export default function App(){
   // Tema (espelho do Dashboard): escuro por padrão; troca na aba Config, persistida
   useEffect(()=>{document.documentElement.dataset.theme=sL("jc:theme","dark");let m=document.querySelector("meta[name=theme-color]");if(!m){m=document.createElement("meta");m.name="theme-color";document.head.appendChild(m);}m.content="#0578A6";},[]);
+  const[instEvt,setInstEvt]=useState(null);const[mapaLigado,setMapaLigado]=useState(false);
+  useEffect(()=>{const h=(e)=>{e.preventDefault();setInstEvt(e);};window.addEventListener("beforeinstallprompt",h);return()=>window.removeEventListener("beforeinstallprompt",h);},[]);
   const[token,setToken]=useState(()=>sL("jc:session",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);const[exclOrgs,setExclOrgs]=useState([]);
   const[visits,setVisits]=useState(()=>{const raw=sL("jc:visits",[]);const cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);const cut=cutoff.toISOString();const purged=raw.filter(v=>!v.checkinTime||v.checkinTime>=cut);if(purged.length<raw.length)console.log(`Purged ${raw.length-purged.length} visits >90d`);return purged;});const[active,setActive]=useState(()=>sL("jc:active",null));
   const[tab,setTab]=useState("pdvs");const[focusReq,setFocusReq]=useState(null);
@@ -186,17 +189,17 @@ export default function App(){
   // ─── Navegação: grupos iguais ao Dashboard (sidebar) + lista plana (bottom nav mobile) ───
   const isAdmin=user?.id===743088;
   const NAVG=[
-    {grp:"CAMPO",itens:[{id:"pdvs",I:Store,l:"PDVs"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"agenda",I:Calendar,l:"Agenda"}]},
+    {grp:"CAMPO",itens:[{id:"pdvs",I:Store,l:"PDVs"},{id:"mapa",I:MapPin,l:"Mapa"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"agenda",I:Calendar,l:"Agenda"}]},
     {grp:"CRM",itens:[{id:"crm_inicio",I:BookUser,l:"Início"},{id:"crm_empresas",I:Building2,l:"Empresas"},{id:"crm_pessoas",I:Contact,l:"Pessoas"}]},
     {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true}]:[]),{id:"relatorio",I:BarChart3,l:"Relatório"}]},
     {grp:"SISTEMA",itens:[{id:"config",I:Settings,l:"Configurações"}]},
   ];
-  const TITULOS={pdvs:["PDVS","Pontos de venda"],crm_inicio:["CRM","Feed de atividades"],crm_empresas:["EMPRESAS","Carteira de clientes"],crm_pessoas:["PESSOAS","Contatos"],rotas:["ROTAS","Roteiro do dia"],relatorio:["RELATÓRIO","Período, jornada & km"],equipe:["EQUIPE","Produtividade"],agenda:["AGENDA","Tarefas & follow-ups"],config:["CONFIGURAÇÕES","Sistema"]};
+  const TITULOS={pdvs:["PDVS","Pontos de venda"],crm_inicio:["CRM","Feed de atividades"],crm_empresas:["EMPRESAS","Carteira de clientes"],crm_pessoas:["PESSOAS","Contatos"],mapa:["MAPA","Clientes no mapa"],rotas:["ROTAS","Roteiro do dia"],relatorio:["RELATÓRIO","Período, jornada & km"],equipe:["EQUIPE","Produtividade"],agenda:["AGENDA","Tarefas & follow-ups"],config:["CONFIGURAÇÕES","Sistema"]};
   // Bottom nav (mobile): CRM entra como atalho único (→ Início); Empresas/Pessoas ficam na gaveta lateral
-  const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"crm_inicio",I:BookUser,l:"CRM"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
-  const tabs=isAdmin?[...baseTabs.slice(0,3),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(3)]:baseTabs;
+  const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"mapa",I:MapPin,l:"Mapa"},{id:"crm_inicio",I:BookUser,l:"CRM"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
+  const tabs=isAdmin?[...baseTabs.slice(0,4),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(4)]:baseTabs;
   const navAtivo=(id)=>id.startsWith("crm")?tab.startsWith("crm"):tab===id;
-  const irPara=(id)=>{setTab(id);if(mob)setNavOpen(false);};
+  const irPara=(id)=>{if(id==="mapa")setMapaLigado(true);setTab(id);if(mob)setNavOpen(false);};
   const sair=()=>{setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);};
   const dataHoje=fD(new Date());
 
@@ -262,12 +265,13 @@ export default function App(){
 
       <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}} focusReq={focusReq} rfv={rfvMap} excl={exclOrgs}/>
       <CrmTab visible={tab.startsWith("crm")} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs}/>
+      <Suspense fallback={null}>{mapaLigado&&<MapaTab visible={tab==="mapa"} orgs={orgs} plocs={plocs} user={user} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}</Suspense>
       {tab==="rotas"&&<RotasTab sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
       {tab==="relatorio"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando relatório…</p>}><RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/></Suspense>}
       {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} plocs={plocs} dayBases={dayBases} user={user} visits={visits}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs} bump={crmBump} onCrmChange={()=>setCrmBump(b=>b+1)}/>
 
-      {tab==="config"&&<ConfigTab user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
+      {tab==="config"&&<ConfigTab instEvt={instEvt} user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
         onSync={doSync} onLoadHistory={loadHistory} onSyncPull={()=>{syncPull();setSyncStatus("Forçando sync...");}}
         onShareGPS={async()=>{if(!Object.keys(plocs).length){alert("Nenhum GPS salvo");return;}setSyncStatus("Enviando GPS...");try{const r=await fetch(`${API}?sync=plocs`);const d=await r.json();const merged={...(d.active||{}),...plocs};await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:merged})});setSyncStatus(`${Object.keys(merged).length} GPS enviados!`);}catch(e){setSyncStatus("Erro: "+e.message);}}}
         onShowDB={()=>setShowDB(true)} onShowEnd={()=>setShowEndDay(true)}
@@ -289,7 +293,7 @@ export default function App(){
     <button onClick={()=>{const el=document.querySelector(".jc-main");if(el)el.scrollTo({top:0,behavior:"smooth"});}} style={{position:"fixed",bottom:mob?84:24,right:16,width:44,height:44,borderRadius:50,background:S.pri,border:"none",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 3px 12px ${S.pri}66`,zIndex:30,cursor:"pointer",padding:0}}><ChevronUp size={22} strokeWidth={2.5} color="#fff"/></button>
 
     {/* BOTTOM NAV — só no celular (agilidade de campo); no desktop a navegação é a sidebar */}
-    {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=>{const act=navAtivo(t.id);return <button key={t.id} onClick={()=>{setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:act?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:act?700:400,color:act?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={act?2.2:1.6}/>{t.l}</button>;})}</div></div>}
+    {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=>{const act=navAtivo(t.id);return <button key={t.id} onClick={()=>{if(t.id==="mapa")setMapaLigado(true);setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:act?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:act?700:400,color:act?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={act?2.2:1.6}/>{t.l}</button>;})}</div></div>}
 
     {coTarget&&<NoteModal org={coTarget} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
     {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const n={...p,[k]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}

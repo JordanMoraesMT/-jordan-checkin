@@ -1,6 +1,6 @@
 // TeamCheck — Gestão de catálogos (admin): usuários, segmentos, status de clientes, indústrias
 import { useState, useEffect, useMemo } from "react";
-import { S, cfgApi } from "../lib";
+import { S, cfgApi, API } from "../lib";
 
 const TIPOS = [
   { id: "usuario",   l: "Usuários",   emo: "👤", temEmail: true,  temCor: false },
@@ -18,6 +18,23 @@ function ConfigCatalogos({ token }) {
   const [novo, setNovo] = useState(false);
   const [edit, setEdit] = useState(null); // item em edição
   const [form, setForm] = useState({ nome: "", email: "", cor: PALETA[0], admin: false });
+  const [convLo, setConvLo] = useState(null); // id do item convidando
+
+  // Convite por e-mail: cria o acesso (login) no Worker e envia e-mail com código para definir a senha
+  const convidar = async (it) => {
+    let ex = {}; try { ex = it.extra ? JSON.parse(it.extra) : {}; } catch {}
+    const email = (ex.email || "").trim().toLowerCase();
+    if (!email) { alert("Este usuário não tem e-mail cadastrado. Edite e informe o e-mail primeiro."); return; }
+    if (!confirm(`Enviar convite de acesso para ${email}?\nO usuário receberá um e-mail com código para criar a própria senha.`)) return;
+    setConvLo(it.id);
+    try {
+      const r = await fetch(`${API}/admin/convidar`, { method: "POST", headers: { "X-Session": token, "Content-Type": "application/json" }, body: JSON.stringify({ email, nome: it.nome, admin: !!ex.admin, catId: it.id, userId: it.agendor_id || null }) });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.ok) { alert(`Convite enviado para ${email}!\nO usuário deve abrir o TeamCheck → "Primeiro acesso / tenho um código" e criar a senha.`); await carregar(); }
+      else alert("Não foi possível convidar: " + (d.error || r.status));
+    } catch (e) { alert("Erro de conexão: " + e.message); }
+    setConvLo(null);
+  };
 
   const meta = useMemo(() => TIPOS.find(t => t.id === tab), [tab]);
 
@@ -149,6 +166,7 @@ function ConfigCatalogos({ token }) {
                   {ex.email ? ex.email + " · " : ""}{it.agendor_id ? `ID origem #${it.agendor_id}` : "cadastro próprio"}
                 </div>
               </div>
+              {meta.temEmail && <button onClick={() => convidar(it)} disabled={convLo === it.id} title="Enviar convite de acesso por e-mail" style={{ height: 32, borderRadius: 8, border: `1px solid ${S.acc}55`, background: S.inp, color: S.acc, cursor: "pointer", fontSize: 12, fontWeight: 600, padding: "0 10px" }}>{convLo === it.id ? "..." : "✉️ Convidar"}</button>}
               <button onClick={() => abrirEdit(it)} title="Editar" style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: S.inp, cursor: "pointer", fontSize: 13, padding: 0 }}>✏️</button>
               <button onClick={() => alternarAtivo(it)} title={it.ativo ? "Desativar" : "Reativar"} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${it.ativo ? S.dng : S.acc}55`, background: S.inp, color: it.ativo ? S.dng : S.acc, cursor: "pointer", fontSize: 14, padding: 0 }}>{it.ativo ? "⏻" : "↻"}</button>
             </div>
@@ -158,7 +176,7 @@ function ConfigCatalogos({ token }) {
 
       <p style={{ fontSize: 11, color: S.td, marginTop: 16, lineHeight: 1.6 }}>
         Estes cadastros vivem no banco do TeamCheck (D1) e são a base de catálogos do CRM.
-        Desativar preserva o histórico — nada é apagado. Itens com "ID origem #" vieram da importação inicial.
+        Desativar preserva o histórico — nada é apagado. Itens com "ID origem #" vieram da importação inicial. Em Usuários, o botão ✉️ Convidar cria o acesso de login e envia um e-mail com código para o próprio usuário definir a senha (vale por 48 horas).
       </p>
     </div>
   );

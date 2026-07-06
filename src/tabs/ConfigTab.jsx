@@ -31,7 +31,7 @@ const ARow=({emo,t,d,onClick,disabled,color})=><div onClick={disabled?undefined:
   </div>
   <span style={{color:S.td,fontSize:14,flexShrink:0}}>›</span>
 </div>;
-function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStatus,syncing,syncMsg,onSync,onLoadHistory,onSyncPull,onShareGPS,onShowDB,onShowEnd,onDeleteGPS,onSaveGPS,onClearVisits,onClearAllGPS,onLogout,doSync}){
+function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStatus,syncing,syncMsg,onSync,onLoadHistory,onSyncPull,onShareGPS,onShowDB,onShowEnd,onDeleteGPS,onSaveGPS,onClearVisits,onClearAllGPS,onLogout,doSync}){
   const[gpsSearch,setGpsSearch]=useState("");const[histLoading,setHistLoading]=useState(false);const[shareLoading,setShareLoading]=useState(false);
   const[gpsAddSearch,setGpsAddSearch]=useState("");const[gpsAddTarget,setGpsAddTarget]=useState(null);const[gpsAddLat,setGpsAddLat]=useState(null);const[gpsAddLng,setGpsAddLng]=useState(null);
   const gpsResults=gpsSearch.trim().length>=2?orgs.filter(o=>{const q=gpsSearch.toLowerCase().replace(/[.\-\/]/g,"");return plocs[o.id]&&[o.name,o.nickname,o.cnpj?.replace(/[.\-\/]/g,"")].filter(Boolean).join(" ").toLowerCase().includes(q);}).slice(0,10):[];
@@ -40,6 +40,13 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
   const trocaTema=(t)=>{setTema(t);sS("jc:theme",t);document.documentElement.dataset.theme=t;};
   const isAdmin=user?.id===743088;
   const[sub,setSub]=useState("acoes"); // acoes | cadastros
+  const jaInstalado=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;
+  const ehIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  const instalar=async()=>{
+    if(instEvt){try{instEvt.prompt();const r=await instEvt.userChoice;if(r?.outcome==="accepted")alert("Aplicativo instalado! Procure o ícone TeamCheck na tela inicial.");}catch{}}
+    else if(ehIOS)alert("No iPhone/iPad:\n1. Toque no botão Compartilhar (quadrado com seta) na barra do Safari\n2. Role e toque em \"Adicionar à Tela de Início\"\n3. Toque em \"Adicionar\"\n\nO TeamCheck vira um app com ícone próprio.");
+    else alert("No Android (Chrome): toque nos 3 pontinhos ⋮ e depois em \"Instalar aplicativo\" (ou \"Adicionar à tela inicial\").\nNo computador: ícone de instalação na barra de endereço.");
+  };
   return(<div>
     {isAdmin&&<div style={{display:"flex",gap:5,background:S.cl,border:`1px solid ${S.brd}`,borderRadius:11,padding:4,marginBottom:16,maxWidth:420}}>
       {[["acoes","⚙️ Ações & Sync"],["cadastros","🗂️ Cadastros"]].map(([id,l])=>
@@ -63,7 +70,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
       <p style={{fontSize:12.5,color:S.t2,margin:0}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p className="mono" style={{fontSize:11.5,color:syncStatus.startsWith?.("Erro")?S.dng:S.pl,margin:"6px 0 0"}}>Sync {syncStatus||"aguardando..."}</p>
-      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v39.4</p>
+      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v40</p>
     </div>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
@@ -73,6 +80,7 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
       <ARow emo="🗺️" t="Definir jornada" d="Origem e destino do dia (casa, hotel...)" onClick={onShowDB}/>
       <ARow emo="🏨" t="Fechar roteiro do dia" d="Define o ponto final e conclui o dia" onClick={onShowEnd}/>
       <ARow emo={("Notification"in window&&Notification.permission==="granted")?"🔔":"🔕"} t={("Notification"in window&&Notification.permission==="granted")?"Notificações ativadas":"Ativar notificações"} d="Lembretes de tarefas agendadas" color={("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold} onClick={()=>{if(!("Notification"in window)){alert("Navegador nao suporta notificacoes");return;}Notification.requestPermission().then(p=>{if(p==="granted")alert("Notificacoes ativadas! Voce recebera lembretes de tarefas agendadas.");else alert("Notificacoes bloqueadas. Ative nas configuracoes do navegador.");});}}/>
+      <ARow emo="📲" t={jaInstalado?"Aplicativo instalado ✓":"Instalar aplicativo no celular"} d={jaInstalado?"Você já está usando o TeamCheck instalado":"Ícone próprio na tela inicial — funciona como app (Android e iPhone)"} color={jaInstalado?S.ok:undefined} onClick={jaInstalado?undefined:instalar} disabled={jaInstalado}/>
 
       {/* Admin area (Jordan only) */}
       {user?.id===743088&&<>
