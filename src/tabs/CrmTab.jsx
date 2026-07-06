@@ -80,7 +80,7 @@ function AtvCard({ a, onOrg, onDel, canDel }) {
 // ─────────────────────────────────────────────────────────────
 //  Tela do cliente — cabeçalho + Histórico | Contatos | Fotos | Dados
 // ─────────────────────────────────────────────────────────────
-function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv }) {
+function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange }) {
   const [sub, setSub] = useState("hist");
   const [info, setInfo] = useState(null);           // /api/crm/cliente
   const [atvs, setAtvs] = useState([]); const [ldA, setLdA] = useState(false);
@@ -163,7 +163,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
     try {
       for (const uid of agUsers) { const U = USERS.find(u => String(u.id) === String(uid));
         await fetch(`${DASH}/api/crm/atividades`, { method: "POST", headers: { "X-Session": token, "Content-Type": "application/json" }, body: JSON.stringify({ org_id: org.id, cnpj: cnpjN || null, org_nome: org.nickname || org.name, tipo: agTipo, texto: agTxt, origem: "tarefa", due_em: `${agData}T${agHora}:00-04:00`, agendor_id: null, user_id: Number(uid) || null, user_nome: U ? U.n : null }) }).catch(() => {}); }
-      alert("Tarefa agendada!"); setAgTask(false); setAgTxt(""); setAgData("");
+      alert("Tarefa agendada!"); setAgTask(false); setAgTxt(""); setAgData(""); onCrmChange && onCrmChange();
     } catch (e) { alert("Erro: " + (e.message || e)); } setAgLo(false); };
   const catCor = CC[org.cat] || S.ts;
   // Matriz RFV consolidada (mesma régua do Dashboard)
@@ -491,7 +491,7 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
 // ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, secao = "inicio", bump, focus, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl }) {
+export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl }) {
   // secao controlada pelo menu lateral do App: inicio | empresas | pessoas
   const [sel, setSel] = useState(null);
   // Abrir a ficha de um cliente vindo de outra tela (ex.: clique no card em PDVs)
@@ -519,7 +519,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, token, user, al
   const abrePorFeed = (a) => { const o = (allOrgs || []).find(x => x.id === a.org_id) || (a.cnpj ? (allOrgs || []).find(x => soDig(x.cnpj) === a.cnpj) : null); if (o) { setSel(o); setQ(""); } else alert("Cliente não está na base sincronizada. Sincronize os clientes."); };
 
   if (!visible) return null;
-  if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} />;
+  if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} />;
 
   return (<div>
     {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}

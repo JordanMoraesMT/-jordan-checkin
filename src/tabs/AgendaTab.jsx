@@ -4,7 +4,7 @@ import { Check } from "lucide-react";
 import { DASH, toLocalDate, todayLocal, TYPES, USERS, S, fT, fD, crmFire } from "../lib";
 import { LB, SegTabs, Chip, DateField, MonthCalendar } from "../components";
 
-function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
+function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
   const loadedRef=useRef(false);
   const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[err,setErr]=useState("");const isAdmin=user?.id===743088;
   const[view,setView]=useState("lista");// lista | calendario
@@ -26,7 +26,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
     }catch(e){console.warn("tarefas D1:",e);}
     setTasks(mapped);setErr(`${mapped.length} tarefas · atualizado ${fT(new Date())}`);
   }catch(e){console.warn("agenda:",e);setErr("Erro: "+e.message);}setLo(false);};
-  useEffect(()=>{if(!visible)return;if(!loadedRef.current){loadedRef.current=true;load();}const iv=setInterval(()=>{load();},300000);return()=>clearInterval(iv);},[visible]);// carrega só na 1ª abertura; auto-refresh 5min enquanto visível
+  useEffect(()=>{if(!visible)return;load();const iv=setInterval(()=>{load();},300000);return()=>clearInterval(iv);},[visible,bump]);// recarrega ao abrir e a cada mudança do CRM; auto-refresh 5min enquanto visível
   const markDone=async(t)=>{if(!confirm(`Finalizar "${t.text.slice(0,50)}..."?`))return;try{
     // v24: conclui só no D1 (fonte de verdade). Usa d1_id se houver, senao o id (agendor_id legado).
     const corpo=t.d1_id?{id:t.d1_id}:{agendor_id:t.id};
