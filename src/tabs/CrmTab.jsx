@@ -158,9 +158,11 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const [agTask, setAgTask] = useState(false);
   const [agTipo, setAgTipo] = useState("VISITA"); const [agTxt, setAgTxt] = useState("");
   const [agData, setAgData] = useState(""); const [agHora, setAgHora] = useState("09:00"); const [agLo, setAgLo] = useState(false);
-  const salvaTarefa = async () => { if (!agTxt.trim() || !agData) { alert("Preencha descrição e data."); return; } setAgLo(true);
+  const [agUsers, setAgUsers] = useState(() => [String(user?.id)]); // responsáveis (permite atribuir a outro)
+  const salvaTarefa = async () => { if (!agTxt.trim() || !agData) { alert("Preencha descrição e data."); return; } if (!agUsers.length) { alert("Escolha ao menos um responsável."); return; } setAgLo(true);
     try {
-      crmFire(token, "/api/crm/atividades", { org_id: org.id, cnpj: cnpjN || null, org_nome: org.nickname || org.name, tipo: agTipo, texto: agTxt, origem: "tarefa", due_em: `${agData}T${agHora}:00-04:00`, agendor_id: null });
+      for (const uid of agUsers) { const U = USERS.find(u => String(u.id) === String(uid));
+        await fetch(`${DASH}/api/crm/atividades`, { method: "POST", headers: { "X-Session": token, "Content-Type": "application/json" }, body: JSON.stringify({ org_id: org.id, cnpj: cnpjN || null, org_nome: org.nickname || org.name, tipo: agTipo, texto: agTxt, origem: "tarefa", due_em: `${agData}T${agHora}:00-04:00`, agendor_id: null, user_id: Number(uid) || null, user_nome: U ? U.n : null }) }).catch(() => {}); }
       alert("Tarefa agendada!"); setAgTask(false); setAgTxt(""); setAgData("");
     } catch (e) { alert("Erro: " + (e.message || e)); } setAgLo(false); };
   const catCor = CC[org.cat] || S.ts;
@@ -236,6 +238,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
         <DateField value={agData} onChange={setAgData} today={todayLocal()} placeholder="Data" style={{ flex: 2 }}/>
         <input type="time" value={agHora} onChange={e=>setAgHora(e.target.value)} style={{ ...inp, flex: 1 }}/>
       </div>
+      <p style={{ margin: "0 0 5px", fontSize: 11, color: S.ts, fontWeight: 600 }}>Responsável(eis)</p>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{USERS.map(u => { const on = agUsers.includes(String(u.id)); return <button key={u.id} type="button" onClick={() => setAgUsers(p => on ? p.filter(x => x !== String(u.id)) : [...p, String(u.id)])} style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: on ? 700 : 500, border: on ? "none" : `1px solid ${S.brd}`, background: on ? S.acc : S.card, color: on ? "#fff" : S.ts, cursor: "pointer" }}>{u.n.split(" ")[0]}</button>; })}</div>
       <div style={{ display: "flex", gap: 8 }}>
         <button onClick={salvaTarefa} disabled={agLo} style={{ flex: 1, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{agLo ? "Salvando..." : "Agendar"}</button>
         <button onClick={()=>setAgTask(false)} style={{ background: "transparent", color: S.dng, border: `1px solid ${S.dng}55`, borderRadius: 10, padding: "10px 14px", fontSize: 13, cursor: "pointer" }}>Cancelar</button>

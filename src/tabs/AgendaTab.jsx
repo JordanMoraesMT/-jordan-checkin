@@ -15,7 +15,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
   const[customTo,setCustomTo]=useState(todayLocal);
   const[userFilter,setUserFilter]=useState("all");// "all" | id do usuário (dinâmico via catálogo)
   const[showAdd,setShowAdd]=useState(false);const[addQ,setAddQ]=useState("");const[addOrg,setAddOrg]=useState(null);
-  const[addType,setAddType]=useState("VISITA");const[addText,setAddText]=useState("");const[addDate,setAddDate]=useState("");const[addTime,setAddTime]=useState("09:00");const[addLo,setAddLo]=useState(false);
+  const[addType,setAddType]=useState("VISITA");const[addText,setAddText]=useState("");const[addDate,setAddDate]=useState("");const[addTime,setAddTime]=useState("09:00");const[addLo,setAddLo]=useState(false);const[addUsers,setAddUsers]=useState(()=>[String(user.id)]);// responsáveis da tarefa (1+; permite atribuir a outro)
   const load=async()=>{setLo(true);setErr("");try{
     // Fonte única = D1 (tarefas com prazo).
     let mapped=[];
@@ -33,11 +33,12 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
     try{await fetch(`${DASH}/api/crm/tarefa-concluir`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(corpo)});}catch(e){console.warn("concluir D1:",e);}
     setTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true,finished:new Date().toISOString()}:x));setErr("Finalizada!");onCrmChange&&onCrmChange();
   }catch(e){console.warn("markDone:",e);alert("Erro: "+e.message);}};
-  const addTask=async()=>{if(!addOrg||!addText.trim())return;setAddLo(true);try{
+  const addTask=async()=>{if(!addOrg||!addText.trim()||!addUsers.length)return;setAddLo(true);try{
     const dueEm=addDate?`${addDate}T${addTime}:00-04:00`:null;
     const tp=(addType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(tp)?tp:"NOTA";
-    // v24: tarefa criada só no D1 (fonte de verdade). Sem Agendor.
-    crmFire(token,"/api/crm/atividades",{org_id:addOrg.id,cnpj:(addOrg.cnpj||"").replace(/\D/g,"")||null,org_nome:addOrg.nickname||addOrg.name,tipo:tipoOk,texto:addText,origem:"tarefa",due_em:dueEm,agendor_id:null});
+    // Uma atividade por responsável — envia user_id/user_nome (permite atribuir a outro usuário)
+    for(const uid of addUsers){const U=USERS.find(u=>String(u.id)===String(uid));
+      await fetch(`${DASH}/api/crm/atividades`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:addOrg.id,cnpj:(addOrg.cnpj||"").replace(/\D/g,"")||null,org_nome:addOrg.nickname||addOrg.name,tipo:tipoOk,texto:addText,origem:"tarefa",due_em:dueEm,agendor_id:null,user_id:Number(uid)||null,user_nome:U?U.n:null})}).catch(()=>{});}
     setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();onCrmChange&&onCrmChange();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
   // Filters
   const today=todayLocal();const dow=new Date().getDay();const weekStart=toLocalDate(new Date(Date.now()-dow*86400000));const weekEnd=toLocalDate(new Date(Date.now()+(6-dow)*86400000));
@@ -91,7 +92,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         <div style={{minWidth:210}}><SegTabs items={[["lista","📋 Lista"],["calendario","🗓️ Calendário"]]} value={view} onChange={setView} size={12.5}/></div>
         <button onClick={load} disabled={lo} style={{width:38,height:38,borderRadius:9,border:`1px solid ${S.inpBdr}`,background:S.inp,fontSize:14,padding:0}}>{lo?"…":"🔄"}</button>
-        <button onClick={()=>setShowAdd(true)} style={{display:"flex",alignItems:"center",gap:7,background:"var(--chrome)",color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:500,cursor:"pointer"}}>+ Nova tarefa</button>
+        <button onClick={()=>{setAddUsers([String(user.id)]);setShowAdd(true);}} style={{display:"flex",alignItems:"center",gap:7,background:"var(--chrome)",color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:500,cursor:"pointer"}}>+ Nova tarefa</button>
       </div>
     </div>
     {/* Barra de filtros (card padrão mockup) */}
@@ -138,7 +139,8 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
         <LB t="TIPO"><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:3}}>{TYPES.map(t=><button key={t.id} onClick={()=>setAddType(t.id)} style={{padding:5,fontSize:9,border:addType===t.id?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:addType===t.id?S.cl:S.bg,color:addType===t.id?S.pl:S.ts}}>{t.l}</button>)}</div></LB>
         <LB t="DESCRIÇÃO *"><textarea value={addText} onChange={e=>setAddText(e.target.value)} rows={2} placeholder="O que precisa ser feito?" style={{width:"100%"}}/></LB>
         <LB t="PRAZO"><div style={{display:"flex",gap:6}}><DateField value={addDate} onChange={setAddDate} today={todayLocal()} placeholder="Escolher data" style={{flex:1}}/><input type="time" value={addTime} onChange={e=>setAddTime(e.target.value)} style={{width:80}}/></div></LB>
-        <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={()=>{setShowAdd(false);setAddOrg(null);}} style={{flex:1}}>Cancelar</button><button onClick={addTask} disabled={addLo||!addText.trim()} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>{addLo?"...":"Criar Tarefa"}</button></div>
+        <LB t="RESPONSÁVEL(EIS)"><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{USERS.map(u=>{const on=addUsers.includes(String(u.id));return <button key={u.id} type="button" onClick={()=>setAddUsers(p=>on?p.filter(x=>x!==String(u.id)):[...p,String(u.id)])} style={{padding:"6px 12px",borderRadius:20,fontSize:12,fontWeight:on?700:500,border:on?"none":`1px solid ${S.brd}`,background:on?S.acc:S.bg,color:on?"#fff":S.ts,cursor:"pointer"}}>{u.n.split(" ")[0]}</button>;})}</div><p style={{fontSize:10.5,color:S.td,margin:"4px 0 0"}}>Marque um ou mais — cria a tarefa para cada responsável.</p></LB>
+        <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={()=>{setShowAdd(false);setAddOrg(null);}} style={{flex:1}}>Cancelar</button><button onClick={addTask} disabled={addLo||!addText.trim()||!addUsers.length} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>{addLo?"...":"Criar Tarefa"}</button></div>
       </>}
     </div></div>}
   </div>);}
