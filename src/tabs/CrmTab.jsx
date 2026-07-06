@@ -485,7 +485,7 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
 // ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, secao = "inicio", token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl }) {
+export function CrmTab({ visible, secao = "inicio", bump, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl }) {
   // secao controlada pelo menu lateral do App: inicio | empresas | pessoas
   const [sel, setSel] = useState(null);
   const [q, setQ] = useState("");
@@ -501,7 +501,7 @@ export function CrmTab({ visible, secao = "inicio", token, user, allOrgs, visits
       setFeed(d.atividades || []);
     } catch (e) { setErro(e.message); }
     setLd(false); };
-  useEffect(() => { if (visible && token) carregaFeed(); }, [visible, fTipo, fUser, fDias]);
+  useEffect(() => { if (visible && token) carregaFeed(); }, [visible, fTipo, fUser, fDias, bump]);
 
   const achados = useMemo(() => { const t = q.trim().toLowerCase(); if (t.length < 2) return [];
     const casa = o => (o.nickname || o.name || "").toLowerCase().includes(t) || soDig(o.cnpj).includes(soDig(t)) || (o.addr?.city_name || "").toLowerCase().includes(t);

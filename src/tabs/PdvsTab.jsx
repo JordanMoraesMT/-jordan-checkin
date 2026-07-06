@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { MapPin, Trophy, Search } from "lucide-react";
 import { PG, toLocalDate, todayLocal, CATS, CC, USERS, SECTORS, BRANDS, geoEstimate, S, fD, fDS, hav, DASH, gps, roadKm, csv, fixMojibake } from "../lib";
-import { OrgCard, MultiSelect, SearchSelect } from "../components";
+import { OrgCard, MultiSelect, SearchSelect, DateField } from "../components";
 
 function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,focusReq,rfv,excl}){
   const[search,setSearch]=useState("");const[catFilters,setCatFilters]=useState([]);const[cityFilter,setCityFilter]=useState("Todas");const[stateFilter,setStateFilter]=useState("Todos");const[segFilter,setSegFilter]=useState("Todos");const[prodFilter,setProdFilter]=useState("Todos");const[ownerFilter,setOwnerFilter]=useState("Todos");const[grupoFilter,setGrupoFilter]=useState("Todos");
@@ -98,9 +98,9 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
           {[30,60,90].map(n=><button key={n} onClick={()=>{const d=new Date();d.setDate(d.getDate()-n);setVisitFrom(toLocalDate(d));setVisitTo(todayLocal());setVisitMode("not_visited");setVc(PG);}} style={{padding:"6px 12px",fontSize:11.5,border:`1px solid ${S.inpBdr}`,color:S.ts,borderRadius:8,background:S.inp,cursor:"pointer"}}>{n}d</button>)}
         </div>
         {visitMode!=="all"&&<div style={{display:"flex",gap:6,marginBottom:11,alignItems:"center"}}>
-          <input type="date" value={visitFrom} onChange={e=>{setVisitFrom(e.target.value);setVc(PG);}} className="mono" style={{flex:1,fontSize:12,padding:"7px 8px"}}/>
+          <DateField value={visitFrom} onChange={v=>{setVisitFrom(v);setVc(PG);}} today={todayLocal()} placeholder="De" style={{flex:1}}/>
           <span style={{color:S.td,fontSize:11}}>a</span>
-          <input type="date" value={visitTo} onChange={e=>{setVisitTo(e.target.value);setVc(PG);}} className="mono" style={{flex:1,fontSize:12,padding:"7px 8px"}}/>
+          <DateField value={visitTo} onChange={v=>{setVisitTo(v);setVc(PG);}} today={todayLocal()} placeholder="Até" style={{flex:1}}/>
           <button onClick={()=>{setVisitMode("all");setVc(PG);}} style={{padding:"6px 10px",fontSize:11,color:S.dng,border:`1px solid ${S.dng}44`,borderRadius:8,background:"transparent"}}>✕</button>
         </div>}
         {/* Ordenação */}

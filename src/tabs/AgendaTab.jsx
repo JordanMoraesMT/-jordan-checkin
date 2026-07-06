@@ -2,11 +2,13 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Check } from "lucide-react";
 import { DASH, toLocalDate, todayLocal, TYPES, S, fT, fD, crmFire } from "../lib";
-import { LB, SegTabs, Chip } from "../components";
+import { LB, SegTabs, Chip, DateField, MonthCalendar } from "../components";
 
-function AgendaTab({visible,token,user,allOrgs}){
+function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
   const loadedRef=useRef(false);
   const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[err,setErr]=useState("");const isAdmin=user?.id===743088;
+  const[view,setView]=useState("lista");// lista | calendario
+  const[calDay,setCalDay]=useState(todayLocal());// dia selecionado no calendário
   const[filter,setFilter]=useState("pending");// pending | done
   const[period,setPeriod]=useState("all");// all | week | today | custom
   const[customFrom,setCustomFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return toLocalDate(d);});
@@ -29,14 +31,14 @@ function AgendaTab({visible,token,user,allOrgs}){
     // v24: conclui só no D1 (fonte de verdade). Usa d1_id se houver, senao o id (agendor_id legado).
     const corpo=t.d1_id?{id:t.d1_id}:{agendor_id:t.id};
     try{await fetch(`${DASH}/api/crm/tarefa-concluir`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(corpo)});}catch(e){console.warn("concluir D1:",e);}
-    setTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true,finished:new Date().toISOString()}:x));setErr("Finalizada!");
+    setTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true,finished:new Date().toISOString()}:x));setErr("Finalizada!");onCrmChange&&onCrmChange();
   }catch(e){console.warn("markDone:",e);alert("Erro: "+e.message);}};
   const addTask=async()=>{if(!addOrg||!addText.trim())return;setAddLo(true);try{
     const dueEm=addDate?`${addDate}T${addTime}:00-04:00`:null;
     const tp=(addType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(tp)?tp:"NOTA";
     // v24: tarefa criada só no D1 (fonte de verdade). Sem Agendor.
     crmFire(token,"/api/crm/atividades",{org_id:addOrg.id,cnpj:(addOrg.cnpj||"").replace(/\D/g,"")||null,org_nome:addOrg.nickname||addOrg.name,tipo:tipoOk,texto:addText,origem:"tarefa",due_em:dueEm,agendor_id:null});
-    setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
+    setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();onCrmChange&&onCrmChange();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
   // Filters
   const today=todayLocal();const dow=new Date().getDay();const weekStart=toLocalDate(new Date(Date.now()-dow*86400000));const weekEnd=toLocalDate(new Date(Date.now()+(6-dow)*86400000));
   const filtered=useMemo(()=>{const doneCutoff=toLocalDate(new Date(Date.now()-30*86400000));let list=tasks.filter(t=>filter==="pending"?!t.done:(t.done&&((t.finished||t.created||"").slice(0,10)>=doneCutoff)));
@@ -51,6 +53,9 @@ function AgendaTab({visible,token,user,allOrgs}){
   const futureT=filtered.filter(t=>!t.done&&t.due&&t.due.slice(0,10)>today);
   const noDueT=filtered.filter(t=>!t.due);
   const doneT=filtered.filter(t=>t.done);
+  // Calendário: pontinhos por dia (tarefas pendentes com prazo) e lista do dia selecionado
+  const marks=useMemo(()=>{const m={};tasks.forEach(t=>{if(t.due&&!t.done){const d=t.due.slice(0,10);m[d]=t.due.slice(0,10)<today?S.dng:S.gold;}});return m;},[tasks,today]);
+  const dayTasks=useMemo(()=>{const uid=userFilter==="alisson"?743347:userFilter==="jordan"?743088:null;return tasks.filter(t=>{const d=t.due?t.due.slice(0,10):null;if(d!==calDay)return false;if(!isAdmin)return t.userId===user.id;if(uid)return t.userId===uid;return true;}).sort((a,b)=>(a.due||"").localeCompare(b.due||""));},[tasks,calDay,userFilter,isAdmin,user.id]);
   // Add task: search orgs
   const addResults=addQ.trim().length>=2?allOrgs.filter(o=>[o.name,o.nickname,o.legalName,o.cnpj].filter(Boolean).some(f=>f.toLowerCase().includes(addQ.toLowerCase()))).slice(0,8):[];
   const renderTask=(t)=><div key={t.id} style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:13,padding:"14px 16px",marginBottom:11,display:"flex",gap:16,alignItems:"center"}}>
@@ -78,26 +83,45 @@ function AgendaTab({visible,token,user,allOrgs}){
         <div style={{fontSize:16,fontWeight:700,color:S.txt}}>Agenda</div>
         <div style={{fontSize:12,color:S.ts,marginTop:2}}>{err||`${filtered.length} tarefa(s)${filter==="pending"?" pendentes":" finalizadas"}`}</div>
       </div>
-      <div style={{display:"flex",gap:8}}>
+      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <div style={{minWidth:210}}><SegTabs items={[["lista","📋 Lista"],["calendario","🗓️ Calendário"]]} value={view} onChange={setView} size={12.5}/></div>
         <button onClick={load} disabled={lo} style={{width:38,height:38,borderRadius:9,border:`1px solid ${S.inpBdr}`,background:S.inp,fontSize:14,padding:0}}>{lo?"…":"🔄"}</button>
         <button onClick={()=>setShowAdd(true)} style={{display:"flex",alignItems:"center",gap:7,background:"var(--chrome)",color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:500,cursor:"pointer"}}>+ Nova tarefa</button>
       </div>
     </div>
     {/* Barra de filtros (card padrão mockup) */}
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"12px 14px",marginBottom:16,display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
-      <div style={{minWidth:200}}><SegTabs items={[["pending","Pendentes"],["done","Finalizadas"]]} value={filter} onChange={setFilter} size={12.5}/></div>
-      <div style={{width:1,height:22,background:S.brd}}/>
-      {[["all","Todas"],["week","Semana"],["today","Hoje"],["custom","Definir"]].map(([k,l])=><Chip key={k} on={period===k} color="var(--chrome)" onClick={()=>setPeriod(k)}>{l}</Chip>)}
+      {view==="lista"&&<>
+        <div style={{minWidth:200}}><SegTabs items={[["pending","Pendentes"],["done","Finalizadas"]]} value={filter} onChange={setFilter} size={12.5}/></div>
+        <div style={{width:1,height:22,background:S.brd}}/>
+        {[["all","Todas"],["week","Semana"],["today","Hoje"],["custom","Definir"]].map(([k,l])=><Chip key={k} on={period===k} color="var(--chrome)" onClick={()=>setPeriod(k)}>{l}</Chip>)}
+      </>}
       {isAdmin&&<><div style={{width:1,height:22,background:S.brd}}/>
       {[["all","Todos"],["jordan","Jordan"],["alisson","Alisson"]].map(([k,l])=><Chip key={k} on={userFilter===k} color={S.acc} onClick={()=>setUserFilter(k)}>{l}</Chip>)}</>}
-      {period==="custom"&&<div style={{display:"flex",gap:6,alignItems:"center",flexBasis:"100%"}}><input type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)} className="mono" style={{flex:1,fontSize:12,padding:"7px 8px"}}/><span style={{color:S.td,fontSize:11}}>a</span><input type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)} className="mono" style={{flex:1,fontSize:12,padding:"7px 8px"}}/></div>}
+      {view==="lista"&&period==="custom"&&<div style={{display:"flex",gap:6,alignItems:"center",flexBasis:"100%"}}><DateField value={customFrom} onChange={setCustomFrom} today={today} placeholder="De" style={{flex:1}}/><span style={{color:S.td,fontSize:11}}>a</span><DateField value={customTo} onChange={setCustomTo} today={today} placeholder="Até" style={{flex:1}}/></div>}
     </div>
+    {/* ── VISÃO CALENDÁRIO ── */}
+    {view==="calendario"&&<div style={{display:"grid",gridTemplateColumns:"minmax(0,340px) 1fr",gap:16,alignItems:"start"}}>
+      <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 16px 14px"}}>
+        <MonthCalendar value={calDay} today={today} marks={marks} onSelect={setCalDay}/>
+        <div style={{display:"flex",gap:12,marginTop:12,paddingTop:10,borderTop:`1px solid ${S.cl}`,fontSize:11,color:S.ts}}>
+          <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:S.gold}}/>Pendente</span>
+          <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:S.dng}}/>Atrasada</span>
+        </div>
+      </div>
+      <div>
+        <div style={{fontSize:14,fontWeight:700,color:S.txt,margin:"2px 4px 12px"}}>{fD(calDay+"T12:00")} · {dayTasks.length} tarefa(s)</div>
+        {dayTasks.length?dayTasks.map(renderTask):<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"2rem",textAlign:"center",color:S.ts,fontSize:13}}>Nenhuma tarefa neste dia.</div>}
+      </div>
+    </div>}
+    {view==="lista"&&<>
     {lo&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando...</p>}
     {!lo&&filter==="pending"&&<>{overdue.length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"0 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.dng}}>⚠️ Atrasadas ({overdue.length})</span></div>{overdue.map(renderTask)}</>}
       {todayT.filter(t=>!t.done).length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"14px 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.gold}}>📌 Hoje ({todayT.filter(t=>!t.done).length})</span></div>{todayT.filter(t=>!t.done).map(renderTask)}</>}
       {futureT.length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"14px 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.pl}}>🗓️ Próximas ({futureT.length})</span></div>{futureT.map(renderTask)}</>}</>}
     {!lo&&filter==="done"&&<>{doneT.length?doneT.map(renderTask):<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma finalizada no período</p>}</>}
     {!lo&&!filtered.length&&filter==="pending"&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma tarefa pendente</p>}
+    </>}
     {/* Add Task Modal */}
     {showAdd&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
       <p style={{fontWeight:600,fontSize:16,margin:"0 0 8px"}}>+ Nova Tarefa</p>
@@ -108,7 +132,7 @@ function AgendaTab({visible,token,user,allOrgs}){
         <div style={{background:S.cl,borderRadius:8,padding:8,marginBottom:8}}><p style={{fontSize:13,fontWeight:600,margin:0}}>{addOrg.name}</p><p style={{fontSize:10,color:S.ts,margin:0}}>{addOrg.cnpj||""} · {addOrg.addr?.city_name||""}</p></div>
         <LB t="TIPO"><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:3}}>{TYPES.map(t=><button key={t.id} onClick={()=>setAddType(t.id)} style={{padding:5,fontSize:9,border:addType===t.id?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:addType===t.id?S.cl:S.bg,color:addType===t.id?S.pl:S.ts}}>{t.l}</button>)}</div></LB>
         <LB t="DESCRIÇÃO *"><textarea value={addText} onChange={e=>setAddText(e.target.value)} rows={2} placeholder="O que precisa ser feito?" style={{width:"100%"}}/></LB>
-        <LB t="PRAZO"><div style={{display:"flex",gap:6}}><input type="date" value={addDate} onChange={e=>setAddDate(e.target.value)} style={{flex:1}}/><input type="time" value={addTime} onChange={e=>setAddTime(e.target.value)} style={{width:80}}/></div></LB>
+        <LB t="PRAZO"><div style={{display:"flex",gap:6}}><DateField value={addDate} onChange={setAddDate} today={todayLocal()} placeholder="Escolher data" style={{flex:1}}/><input type="time" value={addTime} onChange={e=>setAddTime(e.target.value)} style={{width:80}}/></div></LB>
         <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={()=>{setShowAdd(false);setAddOrg(null);}} style={{flex:1}}>Cancelar</button><button onClick={addTask} disabled={addLo||!addText.trim()} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>{addLo?"...":"Criar Tarefa"}</button></div>
       </>}
     </div></div>}
