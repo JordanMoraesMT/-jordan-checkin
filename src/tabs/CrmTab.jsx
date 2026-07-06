@@ -19,8 +19,8 @@ const TIPOS = [
 const tipoDe = (id) => TIPOS.find(t => t.id === id) || TIPOS[0];
 const soDig = (x) => String(x || "").replace(/\D/g, "");
 const fCnpj = (c) => { const d = soDig(c).padStart(14, "0"); return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5"); };
-const fDH = (iso) => { // datetime UTC do D1 -> Cuiabá
-  try { const d = new Date(iso.replace(" ", "T") + (iso.includes("Z") ? "" : "Z")); return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Cuiaba" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Cuiaba" }); } catch { return iso; }
+const fDH = (iso) => { // datetime do D1 -> Cuiabá (aceita "YYYY-MM-DD HH:MM:SS" UTC ou ISO com fuso)
+  try { const s = String(iso); const temFuso = /[zZ]$|[+\-]\d{2}:?\d{2}$/.test(s.slice(10)); const d = new Date(temFuso ? s : (s.replace(" ", "T") + "Z")); if (isNaN(d)) return s; return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Cuiaba" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Cuiaba" }); } catch { return String(iso); }
 };
 
 // fetch autenticado por sessão (mesma sessão do proxy) — JSON
@@ -76,7 +76,7 @@ function AtvCard({ a, onOrg, onDel, canDel, onFinish }) {
       </div>
       <p style={{ margin: 0, fontSize: 13.5, color: S.txt, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{a.texto}</p>
       {isTask && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-        {a.due_em ? <span style={{ fontSize: 11.5, fontFamily: "monospace", color: done ? S.ts : atrasada ? S.dng : S.gold }}>Prazo {fDH(a.due_em)}</span> : <span />}
+        {a.due_em ? <span style={{ fontSize: 11.5, fontFamily: "monospace", color: done ? S.ts : atrasada ? S.dng : S.gold }}>Prazo {fD(a.due_em)} {fT(a.due_em)}</span> : <span />}
         <button onClick={() => !done && onFinish && onFinish(a)} disabled={done || !onFinish} title={done ? "Tarefa finalizada" : "Marcar como finalizada"} style={{ display: "flex", alignItems: "center", gap: 8, background: done ? S.ok + "18" : S.inp, border: `1px solid ${done ? S.ok : S.inpBdr}`, borderRadius: 8, padding: "7px 12px", cursor: done ? "default" : (onFinish ? "pointer" : "default") }}>
           <span style={{ width: 17, height: 17, borderRadius: 5, border: `1.5px solid ${done ? S.ok : S.inpBdr}`, background: done ? S.ok : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>{done && <Check size={12} color="#fff" strokeWidth={3} />}</span>
           <span style={{ fontSize: 12.5, fontWeight: 600, color: done ? S.ok : S.ts }}>{done ? "Finalizada" : "Finalizar"}</span>

@@ -32,6 +32,10 @@ const S={bg:"var(--bg)",card:"var(--card)",cardSolid:"var(--card-solid)",cl:"var
 const PC=["#0AAEE8","#06B6D4","#12C265","#FFB020","#8B5CF6","#FF4D8D","#FB4B3A","#06C281","#38C6F5","#A78BFA","#34D399","#F59E0B"];
 const fT=d=>new Date(d).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:TZ});
 const fD=d=>new Date(d).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:TZ});
+// Datetime do D1: "YYYY-MM-DD HH:MM:SS" é UTC naïve → força Z; se já tiver fuso, respeita. Converte p/ Cuiabá.
+const d1date=s=>{const x=String(s||"");const temFuso=/[zZ]$|[+\-]\d{2}:?\d{2}$/.test(x.slice(10));return new Date(temFuso?x:(x.replace(" ","T")+"Z"));};
+const fTU=s=>{const d=d1date(s);return isNaN(d)?String(s):d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:TZ});};
+const fDU=s=>{const d=d1date(s);return isNaN(d)?String(s):d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:TZ});};
 const fDS=d=>new Date(d).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",timeZone:TZ});
 const mins=(a,b)=>Math.max(0,Math.round((new Date(b)-new Date(a))/60000));
 const hrsMin=m=>m>=60?`${Math.floor(m/60)}h${(m%60).toString().padStart(2,"0")}`:`${m}min`;
@@ -153,4 +157,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };
+export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };

@@ -1,6 +1,6 @@
 // TeamCheck — aba EquipeTab
 import { useState, useEffect, useMemo } from "react";
-import { toLocalDate, todayLocal, USERS, geoEstimate, S, fT, fD, mins, hrsMin, hav, DASH, csv, getBase, getEnd } from "../lib";
+import { toLocalDate, todayLocal, USERS, geoEstimate, S, fT, fD, fTU, fDU, mins, hrsMin, hav, DASH, csv, getBase, getEnd } from "../lib";
 import { LB, Kpi, DateField, SearchSelect } from "../components";
 
 function EquipeTab({sel,setSel,token,plocs,orgs,dayBases,user}){
@@ -49,12 +49,12 @@ function EquipeTab({sel,setSel,token,plocs,orgs,dayBases,user}){
     {tasks.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
       <Kpi k="Atividades" v={tasks.length}/>
       <Kpi k="Visitas" v={visitTasks.length}/>
-      <Kpi k="Início" v={firstTime?fT(firstTime):"-"}/>
+      <Kpi k="Início" v={firstTime?fTU(firstTime):"-"}/>
       <Kpi k="Jornada" v={hrsMin(workH)}/>
       <Kpi k="Km estimado" v={routeKm!=null?routeKm.toFixed(1):"-"} u={routeKm!=null?"km":""}/>
       <Kpi k="Localização" v={`${withGps}📍 ${withEst-withGps}🏙️`}/>
     </div>}
-    {tasks.length>0&&<button onClick={()=>{const rows=[["Data","Hora","Cliente","Tipo","Observação","GPS"]];tasks.forEach(t=>rows.push([fD(t.time),fT(t.time),t.org,t.type,t.text.slice(0,80),plocs[t.orgId]?"Sim":"Nao"]));rows.push([],["Km estimado",routeKm!=null?routeKm.toFixed(1):"-"],["Jornada",hrsMin(workH)],["Visitas",visitTasks.length]);csv(rows,`${first.toLowerCase()}-${sel}.csv`);}} style={{width:"100%",marginBottom:16,padding:10,fontSize:12.5,fontWeight:500,background:"transparent",border:`1px solid ${S.inpBdr}`,color:S.pl,borderRadius:8}}>📊 Exportar relatório de {first}</button>}
+    {tasks.length>0&&<button onClick={()=>{const rows=[["Data","Hora","Cliente","Tipo","Observação","GPS"]];tasks.forEach(t=>rows.push([fDU(t.time),fTU(t.time),t.org,t.type,t.text.slice(0,80),plocs[t.orgId]?"Sim":"Nao"]));rows.push([],["Km estimado",routeKm!=null?routeKm.toFixed(1):"-"],["Jornada",hrsMin(workH)],["Visitas",visitTasks.length]);csv(rows,`${first.toLowerCase()}-${sel}.csv`);}} style={{width:"100%",marginBottom:16,padding:10,fontSize:12.5,fontWeight:500,background:"transparent",border:`1px solid ${S.inpBdr}`,color:S.pl,borderRadius:8}}>📊 Exportar relatório de {first}</button>}
     {!lo&&!tasks.length&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma atividade nesta data</p>}
     {tasks.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"18px 20px"}}>
       <div style={{fontSize:14,fontWeight:600,color:S.txt,marginBottom:12}}>Rota do dia</div>
@@ -65,7 +65,7 @@ function EquipeTab({sel,setSel,token,plocs,orgs,dayBases,user}){
           <div style={{flex:1,minWidth:0}}>
             <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10}}>
               <span style={{fontSize:13.5,fontWeight:600,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.org}</span>
-              <span className="mono" style={{fontSize:11.5,color:S.td,flexShrink:0}}>{fT(t.time)}</span>
+              <span className="mono" style={{fontSize:11.5,color:S.td,flexShrink:0}}>{fTU(t.time)}</span>
             </div>
             <p style={{fontSize:12,color:S.ts,margin:"3px 0 0",lineHeight:1.5,wordBreak:"break-word"}}>{t.type} — {t.text}</p>
           </div>
