@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Check } from "lucide-react";
 import { DASH, toLocalDate, todayLocal, TYPES, USERS, S, fT, fD, crmFire } from "../lib";
-import { LB, SegTabs, Chip, DateField, MonthCalendar } from "../components";
+import { LB, SegTabs, Chip, DateField, MonthCalendar, TarefaModal } from "../components";
 
 function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
   const loadedRef=useRef(false);
@@ -14,8 +14,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
   const[customFrom,setCustomFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return toLocalDate(d);});
   const[customTo,setCustomTo]=useState(todayLocal);
   const[userFilter,setUserFilter]=useState("all");// "all" | id do usuário (dinâmico via catálogo)
-  const[showAdd,setShowAdd]=useState(false);const[addQ,setAddQ]=useState("");const[addOrg,setAddOrg]=useState(null);
-  const[addType,setAddType]=useState("VISITA");const[addText,setAddText]=useState("");const[addDate,setAddDate]=useState("");const[addTime,setAddTime]=useState("09:00");const[addLo,setAddLo]=useState(false);const[addUsers,setAddUsers]=useState(()=>[String(user.id)]);// responsáveis da tarefa (1+; permite atribuir a outro)
+  const[showAdd,setShowAdd]=useState(false);
   const load=async()=>{setLo(true);setErr("");try{
     // Fonte única = D1 (tarefas com prazo).
     let mapped=[];
@@ -33,13 +32,6 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
     try{await fetch(`${DASH}/api/crm/tarefa-concluir`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(corpo)});}catch(e){console.warn("concluir D1:",e);}
     setTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true,finished:new Date().toISOString()}:x));setErr("Finalizada!");onCrmChange&&onCrmChange();
   }catch(e){console.warn("markDone:",e);alert("Erro: "+e.message);}};
-  const addTask=async()=>{if(!addOrg||!addText.trim()||!addUsers.length)return;setAddLo(true);try{
-    const dueEm=addDate?`${addDate}T${addTime}:00-04:00`:null;
-    const tp=(addType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(tp)?tp:"NOTA";
-    // Uma atividade por responsável — envia user_id/user_nome (permite atribuir a outro usuário)
-    for(const uid of addUsers){const U=USERS.find(u=>String(u.id)===String(uid));
-      await fetch(`${DASH}/api/crm/atividades`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:addOrg.id,cnpj:(addOrg.cnpj||"").replace(/\D/g,"")||null,org_nome:addOrg.nickname||addOrg.name,tipo:tipoOk,texto:addText,origem:"tarefa",due_em:dueEm,agendor_id:null,user_id:Number(uid)||null,user_nome:U?U.n:null})}).catch(()=>{});}
-    setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();onCrmChange&&onCrmChange();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
   // Filters
   const today=todayLocal();const dow=new Date().getDay();const weekStart=toLocalDate(new Date(Date.now()-dow*86400000));const weekEnd=toLocalDate(new Date(Date.now()+(6-dow)*86400000));
   // Casa a tarefa ao usuário selecionado (id do catálogo). Prioriza userName (o que o selo mostra); usa userId como reserva.
@@ -63,7 +55,6 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
   const marks=useMemo(()=>{const m={};tasks.forEach(t=>{if(t.due&&!t.done&&userMatch(t,calWho)){const d=t.due.slice(0,10);if(m[d]!==S.dng)m[d]=t.due.slice(0,10)<today?S.dng:S.gold;}});return m;},[tasks,today,calWho]);
   const dayTasks=useMemo(()=>tasks.filter(t=>{const d=t.due?t.due.slice(0,10):null;if(d!==calDay)return false;return userMatch(t,calWho);}).sort((a,b)=>(a.due||"").localeCompare(b.due||"")),[tasks,calDay,calWho]);
   // Add task: search orgs
-  const addResults=addQ.trim().length>=2?allOrgs.filter(o=>[o.name,o.nickname,o.legalName,o.cnpj].filter(Boolean).some(f=>f.toLowerCase().includes(addQ.toLowerCase()))).slice(0,8):[];
   const renderTask=(t)=><div key={t.id} style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:13,padding:"14px 16px",marginBottom:11,display:"flex",gap:16,alignItems:"center"}}>
     <div style={{flex:1,minWidth:0}}>
       <div style={{display:"flex",gap:9,alignItems:"center",flexWrap:"wrap",marginBottom:5}}>
@@ -92,7 +83,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
       <div style={{display:"flex",gap:8,alignItems:"center"}}>
         <div style={{minWidth:210}}><SegTabs items={[["lista","📋 Lista"],["calendario","🗓️ Calendário"]]} value={view} onChange={setView} size={12.5}/></div>
         <button onClick={load} disabled={lo} style={{width:38,height:38,borderRadius:9,border:`1px solid ${S.inpBdr}`,background:S.inp,fontSize:14,padding:0}}>{lo?"…":"🔄"}</button>
-        <button onClick={()=>{setAddUsers([String(user.id)]);setShowAdd(true);}} style={{display:"flex",alignItems:"center",gap:7,background:"var(--chrome)",color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:500,cursor:"pointer"}}>+ Nova tarefa</button>
+        <button onClick={()=>setShowAdd(true)} style={{display:"flex",alignItems:"center",gap:7,background:"var(--chrome)",color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:500,cursor:"pointer"}}>+ Nova tarefa</button>
       </div>
     </div>
     {/* Barra de filtros (card padrão mockup) */}
@@ -129,20 +120,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
     {!lo&&!filtered.length&&filter==="pending"&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma tarefa pendente</p>}
     </>}
     {/* Add Task Modal */}
-    {showAdd&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:50,padding:16}}><div style={{background:S.card,borderRadius:16,padding:"1.5rem",width:"100%",maxWidth:420,maxHeight:"90vh",overflowY:"auto"}}>
-      <p style={{fontWeight:600,fontSize:16,margin:"0 0 8px"}}>+ Nova Tarefa</p>
-      {!addOrg?<><input value={addQ} onChange={e=>setAddQ(e.target.value)} placeholder="Buscar cliente..." style={{width:"100%",marginBottom:6,fontSize:13}} autoFocus/>
-        {addResults.map(o=><div key={o.id} onClick={()=>{setAddOrg(o);setAddQ("");}} style={{padding:"8px",background:S.cl,borderRadius:6,marginBottom:3,cursor:"pointer",fontSize:12}}><b>{o.name}</b><span style={{color:S.ts,marginLeft:6,fontSize:10}}>{o.addr?.city_name||""}</span></div>)}
-        <button onClick={()=>setShowAdd(false)} style={{width:"100%",marginTop:8}}>Cancelar</button>
-      </>:<>
-        <div style={{background:S.cl,borderRadius:8,padding:8,marginBottom:8}}><p style={{fontSize:13,fontWeight:600,margin:0}}>{addOrg.name}</p><p style={{fontSize:10,color:S.ts,margin:0}}>{addOrg.cnpj||""} · {addOrg.addr?.city_name||""}</p></div>
-        <LB t="TIPO"><div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:3}}>{TYPES.map(t=><button key={t.id} onClick={()=>setAddType(t.id)} style={{padding:5,fontSize:9,border:addType===t.id?`2px solid ${S.pri}`:`1px solid ${S.brd}`,background:addType===t.id?S.cl:S.bg,color:addType===t.id?S.pl:S.ts}}>{t.l}</button>)}</div></LB>
-        <LB t="DESCRIÇÃO *"><textarea value={addText} onChange={e=>setAddText(e.target.value)} rows={2} placeholder="O que precisa ser feito?" style={{width:"100%"}}/></LB>
-        <LB t="PRAZO"><div style={{display:"flex",gap:6}}><DateField value={addDate} onChange={setAddDate} today={todayLocal()} placeholder="Escolher data" style={{flex:1}}/><input type="time" value={addTime} onChange={e=>setAddTime(e.target.value)} style={{width:80}}/></div></LB>
-        <LB t="RESPONSÁVEL(EIS)"><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{USERS.map(u=>{const on=addUsers.includes(String(u.id));return <button key={u.id} type="button" onClick={()=>setAddUsers(p=>on?p.filter(x=>x!==String(u.id)):[...p,String(u.id)])} style={{padding:"6px 12px",borderRadius:20,fontSize:12,fontWeight:on?700:500,border:on?"none":`1px solid ${S.brd}`,background:on?S.acc:S.bg,color:on?"#fff":S.ts,cursor:"pointer"}}>{u.n.split(" ")[0]}</button>;})}</div><p style={{fontSize:10.5,color:S.td,margin:"4px 0 0"}}>Marque um ou mais — cria a tarefa para cada responsável.</p></LB>
-        <div style={{display:"flex",gap:8,marginTop:8}}><button onClick={()=>{setShowAdd(false);setAddOrg(null);}} style={{flex:1}}>Cancelar</button><button onClick={addTask} disabled={addLo||!addText.trim()||!addUsers.length} style={{flex:1,background:S.acc,border:"none",fontWeight:600}}>{addLo?"...":"Criar Tarefa"}</button></div>
-      </>}
-    </div></div>}
+    <TarefaModal open={showAdd} onClose={()=>setShowAdd(false)} token={token} user={user} allOrgs={allOrgs} onCreated={()=>{load();onCrmChange&&onCrmChange();}}/>
   </div>);}
 
 export { AgendaTab };

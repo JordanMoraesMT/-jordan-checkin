@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar } from "lucide-react";
 import { S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, todayLocal } from "../lib";
-import { SearchSelect, MultiSelect, DateField } from "../components";
+import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
 const DASH = "https://dashboard.jordanmt.com";
 const TIPOS = [
@@ -115,10 +115,12 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
 
   // ── composer do histórico ──
   const [nTipo, setNTipo] = useState("NOTA"); const [nTxt, setNTxt] = useState(""); const [espelha, setEspelha] = useState(true); const [salvando, setSalvando] = useState(false);
-  const salvaAtv = async () => { if (!nTxt.trim() || salvando) return; setSalvando(true); setMsg("");
+  const [nUsers, setNUsers] = useState(() => [String(user?.id)]);// responsáveis do registro (igual à Agenda)
+  const salvaAtv = async () => { if (!nTxt.trim() || salvando) return; if (!nUsers.length) { alert("Escolha ao menos um responsável."); return; } setSalvando(true); setMsg("");
     try {
-      await crm(token, "/api/crm/atividades", { method: "POST", body: JSON.stringify({ org_id: org.id, cnpj: cnpjN || null, org_nome: org.nickname || org.name, tipo: nTipo, texto: nTxt.trim() }) });
-      setNTxt(""); carregaAtvs();
+      for (const uid of nUsers) { const U = USERS.find(u => String(u.id) === String(uid));
+        await crm(token, "/api/crm/atividades", { method: "POST", body: JSON.stringify({ org_id: org.id, cnpj: cnpjN || null, org_nome: org.nickname || org.name, tipo: nTipo, texto: nTxt.trim(), user_id: Number(uid) || null, user_nome: U ? U.n : null }) }); }
+      setNTxt(""); carregaAtvs(); onCrmChange && onCrmChange();
     } catch (e) { setMsg("Erro ao salvar: " + e.message); }
     setSalvando(false); };
   const delAtv = async (a) => { if (!confirm("Excluir esta atividade do CRM?")) return; try { await crm(token, `/api/crm/atividades?id=${a.id}`, { method: "DELETE" }); setAtvs(p => p.filter(x => x.id !== a.id)); } catch (e) { alert("Erro: " + e.message); } };
@@ -253,8 +255,12 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       <Crd>
         <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6 }}>{TIPOS.map(t => <Chip key={t.id} on={nTipo === t.id} color={t.c} onClick={() => setNTipo(t.id)}>{t.l}</Chip>)}</div>
         <textarea value={nTxt} onChange={e => setNTxt(e.target.value)} rows={3} placeholder="Escreva a atividade / observação..." style={{ ...inp, resize: "vertical", marginTop: 4 }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+          <span style={{ fontSize: 11, color: S.ts, fontWeight: 600, marginRight: 2 }}>Responsável:</span>
+          {USERS.map(u => { const on = nUsers.includes(String(u.id)); return <button key={u.id} type="button" onClick={() => setNUsers(p => on ? p.filter(x => x !== String(u.id)) : [...p, String(u.id)])} style={{ padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: on ? 700 : 500, border: on ? "none" : `1px solid ${S.brd}`, background: on ? S.acc : S.card, color: on ? "#fff" : S.ts, cursor: "pointer" }}>{u.n.split(" ")[0]}</button>; })}
+        </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-          <button onClick={salvaAtv} disabled={salvando || !nTxt.trim()} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: nTxt.trim() ? S.acc : S.cl, color: nTxt.trim() ? "#fff" : S.td, border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Send size={14} />{salvando ? "Salvando..." : "Registrar"}</button>
+          <button onClick={salvaAtv} disabled={salvando || !nTxt.trim() || !nUsers.length} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: nTxt.trim() ? S.acc : S.cl, color: nTxt.trim() ? "#fff" : S.td, border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Send size={14} />{salvando ? "Salvando..." : "Registrar"}</button>
         </div>
       </Crd>
       {ldA && <p style={{ fontSize: 12, color: S.ts }}>Carregando histórico...</p>}
@@ -499,6 +505,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   const [q, setQ] = useState("");
   const [feed, setFeed] = useState([]); const [ld, setLd] = useState(false); const [erro, setErro] = useState("");
   const [fTipo, setFTipo] = useState(""); const [fUser, setFUser] = useState(""); const [fDias, setFDias] = useState(90);
+  const [showTarefa, setShowTarefa] = useState(false);// modal "Nova tarefa" no Início (mesmo da Agenda)
 
   const carregaFeed = async () => { setLd(true); setErro("");
     try {
@@ -525,6 +532,10 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
     {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
     {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} />}
     {secao === "inicio" && <div>
+    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+      <button onClick={() => setShowTarefa(true)} style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--chrome)", color: "#fff", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}><Calendar size={15}/> Nova tarefa</button>
+    </div>
+    <TarefaModal open={showTarefa} onClose={() => setShowTarefa(false)} token={token} user={user} allOrgs={allOrgs} onCreated={() => { carregaFeed(); onCrmChange && onCrmChange(); }} />
     {/* Busca de cliente */}
     <div style={{ position: "relative", marginBottom: 10 }}>
       <Search size={16} color={S.td} style={{ position: "absolute", left: 12, top: 12 }} />
