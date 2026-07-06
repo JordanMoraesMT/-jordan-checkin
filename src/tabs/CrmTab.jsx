@@ -20,7 +20,7 @@ const tipoDe = (id) => TIPOS.find(t => t.id === id) || TIPOS[0];
 const soDig = (x) => String(x || "").replace(/\D/g, "");
 const fCnpj = (c) => { const d = soDig(c).padStart(14, "0"); return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5"); };
 const fDH = (iso) => { // datetime UTC do D1 -> Cuiabá
-  try { const d = new Date(iso.replace(" ", "T") + (iso.includes("Z") ? "" : "Z")); return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Cuiaba" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Cuiaba" }); } catch { return iso; }
+  try { const d = new Date(iso.replace(" ", "T") + (iso.includes("Z") ? "" : "Z")); return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Cuiaba" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Cuiaba" }); } catch { return iso; }
 };
 
 // fetch autenticado por sessão (mesma sessão do proxy) — JSON
