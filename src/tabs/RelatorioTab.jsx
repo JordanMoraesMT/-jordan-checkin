@@ -2,7 +2,7 @@
 import { useState, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { HOMES, toLocalDate, todayLocal, USERS, S, PC, fT, fD, fDS, mins, hrsMin, hav, csv, getBase, getEnd, getVCoord, getVEndCoord } from "../lib";
-import { BaseEditInline, Kpi, SegTabs } from "../components";
+import { BaseEditInline, Kpi, SegTabs, DateField } from "../components";
 
 function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const[sd,setSd]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return toLocalDate(d);});
@@ -71,9 +71,9 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
       <button onClick={()=>setSelUser("team")} style={{flex:1,textAlign:"center",padding:11,borderRadius:11,fontSize:13.5,fontWeight:selUser==="team"?600:500,background:S.card,border:selUser==="team"?`1.5px solid ${S.acc}`:`1px solid ${S.brd}`,color:selUser==="team"?S.acc:S.ts,cursor:"pointer"}}>Alisson Henrique</button>
     </div>}
     <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center"}}>
-      <input type="date" value={sd} onChange={e=>setSd(e.target.value)} className="mono" style={{flex:1,fontSize:13,padding:"9px 12px"}}/>
+      <DateField value={sd} onChange={setSd} today={todayLocal()} placeholder="Início" style={{flex:1}}/>
       <span style={{color:S.ts,fontSize:13}}>até</span>
-      <input type="date" value={ed} onChange={e=>setEd(e.target.value)} className="mono" style={{flex:1,fontSize:13,padding:"9px 12px"}}/>
+      <DateField value={ed} onChange={setEd} today={todayLocal()} placeholder="Fim" style={{flex:1}}/>
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
       <Kpi k="Visitas" v={pv.length}/>

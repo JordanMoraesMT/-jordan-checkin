@@ -1,5 +1,6 @@
 // TeamCheck — componentes compartilhados (login, card, banner, modais)
 import { useState, useEffect, useMemo, useRef, memo } from "react";
+import { createPortal } from "react-dom";
 import { BarChart3, LogIn, LogOut, MessageCircle, Phone, Navigation, Pencil, UserPlus, Check, ChevronDown, Search, X, Calendar as CalIcon } from "lucide-react";
 import { crmFire, API, DASH, HOMES, todayLocal, TYPES, BRANDS, SECTORS, CAT_IDS, ORIGINS, CC, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, strip, fetchCNPJ, MIN_OBS } from "./lib";
 
@@ -70,32 +71,47 @@ const Chip=({on,color=S.pl,children,onClick})=><button onClick={onClick} style={
 // ─── Seletores com busca por digitação (padrão Dashboard) ───
 // Normaliza opções: aceita ["A","B"] ou [["a","Rótulo A"],["b","Rótulo B"]]
 const normOpts=(opts)=>(opts||[]).map(o=>Array.isArray(o)?o:[o,o]);
-const panel={position:"absolute",top:"calc(100% + 4px)",left:0,right:0,zIndex:60,background:"var(--card-solid)",border:`1px solid ${S.brd}`,borderRadius:10,boxShadow:"0 12px 32px rgba(0,0,0,.28)",overflow:"hidden"};
+const panelBase={zIndex:9999,background:"var(--card-solid)",border:`1px solid ${S.brd}`,borderRadius:10,boxShadow:"0 16px 40px rgba(0,0,0,.4)",overflow:"hidden"};
 const srchBox={display:"flex",alignItems:"center",gap:8,padding:"8px 10px",borderBottom:`1px solid ${S.brd}`,background:S.cl};
 const srchInp={flex:1,border:"none",background:"transparent",fontSize:13,color:S.txt,outline:"none",padding:0};
+// Ancora o painel ao botão (posição fixa recalculada em scroll/resize) — evita sobreposição por contexto de empilhamento (backdrop-filter dos cards)
+function useAnchorRect(open){
+  const btnRef=useRef(null);const[rect,setRect]=useState(null);
+  useEffect(()=>{if(!open){setRect(null);return;}
+    const m=()=>{const el=btnRef.current;if(el)setRect(el.getBoundingClientRect());};
+    m();window.addEventListener("scroll",m,true);window.addEventListener("resize",m);
+    return()=>{window.removeEventListener("scroll",m,true);window.removeEventListener("resize",m);};
+  },[open]);
+  return[btnRef,rect];
+}
+function useOutside(open,close,btnRef,panelRef){
+  useEffect(()=>{if(!open)return;const h=e=>{if(btnRef.current&&btnRef.current.contains(e.target))return;if(panelRef.current&&panelRef.current.contains(e.target))return;close();};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[open]);
+}
 
 // SELECT único com busca por digitação (substitui <select> nativo)
 function SearchSelect({value,onChange,options,placeholder="Selecione",style}){
   const opts=useMemo(()=>normOpts(options),[options]);
-  const[open,setOpen]=useState(false);const[q,setQ]=useState("");const ref=useRef(null);
-  useEffect(()=>{if(!open)return;const h=e=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setQ("");}};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[open]);
+  const[open,setOpen]=useState(false);const[q,setQ]=useState("");
+  const[btnRef,rect]=useAnchorRect(open);const panelRef=useRef(null);
+  const close=()=>{setOpen(false);setQ("");};
+  useOutside(open,close,btnRef,panelRef);
   const cur=opts.find(o=>o[0]===value);const label=cur?cur[1]:placeholder;const isPlaceholder=!cur||cur[0]==="";
   const filt=q.trim()?opts.filter(o=>o[1].toLowerCase().includes(q.trim().toLowerCase())):opts;
-  return(<div ref={ref} style={{position:"relative",zIndex:open?200:undefined,...style}}>
-    <button type="button" onClick={()=>{setOpen(o=>!o);setQ("");}} style={{width:"100%",display:"flex",alignItems:"center",gap:6,background:S.inp,border:`1px solid ${open?S.pri:S.inpBdr}`,borderRadius:10,padding:"8px 10px",fontSize:12.5,color:isPlaceholder?S.ts:S.txt,cursor:"pointer",textAlign:"left"}}>
+  return(<div style={{position:"relative",...style}}>
+    <button ref={btnRef} type="button" onClick={()=>{setOpen(o=>!o);setQ("");}} style={{width:"100%",display:"flex",alignItems:"center",gap:6,background:S.inp,border:`1px solid ${open?S.pri:S.inpBdr}`,borderRadius:10,padding:"8px 10px",fontSize:12.5,color:isPlaceholder?S.ts:S.txt,cursor:"pointer",textAlign:"left"}}>
       <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{label}</span>
       <ChevronDown size={15} color={S.td} style={{flexShrink:0,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}/>
     </button>
-    {open&&<div style={panel}>
+    {open&&rect&&createPortal(<div ref={panelRef} style={{position:"fixed",top:rect.bottom+4,left:rect.left,width:Math.max(rect.width,180),...panelBase}}>
       <div style={srchBox}><Search size={14} color={S.td}/><input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar..." style={srchInp}/></div>
-      <div style={{maxHeight:240,overflowY:"auto"}}>
+      <div style={{maxHeight:260,overflowY:"auto"}}>
         {filt.length===0&&<p style={{margin:0,padding:"12px",fontSize:12.5,color:S.ts,textAlign:"center"}}>Nada encontrado</p>}
-        {filt.map(([v,l])=><button key={v} type="button" onClick={()=>{onChange(v);setOpen(false);setQ("");}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:v===value?S.pri+"18":"transparent",border:"none",borderBottom:`1px solid ${S.cl}`,padding:"9px 12px",fontSize:12.5,color:v===value?S.pl:S.txt,fontWeight:v===value?700:400,cursor:"pointer"}}>
+        {filt.map(([v,l])=><button key={v} type="button" onClick={()=>{onChange(v);close();}} style={{display:"flex",alignItems:"center",gap:8,width:"100%",textAlign:"left",background:v===value?S.pri+"18":"transparent",border:"none",borderBottom:`1px solid ${S.cl}`,padding:"9px 12px",fontSize:12.5,color:v===value?S.pl:S.txt,fontWeight:v===value?700:400,cursor:"pointer"}}>
           <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{l}</span>
           {v===value&&<Check size={14} color={S.pri} style={{flexShrink:0}}/>}
         </button>)}
       </div>
-    </div>}
+    </div>,document.body)}
   </div>);
 }
 
@@ -103,19 +119,21 @@ function SearchSelect({value,onChange,options,placeholder="Selecione",style}){
 function MultiSelect({values,onChange,options,placeholder="Selecione",allLabel="Todos",colorFor,style}){
   const opts=useMemo(()=>normOpts(options),[options]);
   const sel=values||[];
-  const[open,setOpen]=useState(false);const[q,setQ]=useState("");const ref=useRef(null);
-  useEffect(()=>{if(!open)return;const h=e=>{if(ref.current&&!ref.current.contains(e.target)){setOpen(false);setQ("");}};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[open]);
+  const[open,setOpen]=useState(false);const[q,setQ]=useState("");
+  const[btnRef,rect]=useAnchorRect(open);const panelRef=useRef(null);
+  const close=()=>{setOpen(false);setQ("");};
+  useOutside(open,close,btnRef,panelRef);
   const toggle=(v)=>{onChange(sel.includes(v)?sel.filter(x=>x!==v):[...sel,v]);};
   const filt=q.trim()?opts.filter(o=>o[1].toLowerCase().includes(q.trim().toLowerCase())):opts;
   const label=sel.length===0?allLabel:sel.length===1?(opts.find(o=>o[0]===sel[0])?.[1]||sel[0]):`${sel.length} selecionados`;
-  return(<div ref={ref} style={{position:"relative",zIndex:open?200:undefined,...style}}>
-    <button type="button" onClick={()=>{setOpen(o=>!o);setQ("");}} style={{width:"100%",display:"flex",alignItems:"center",gap:6,background:sel.length?S.pri+"14":S.inp,border:`1px solid ${open?S.pri:sel.length?S.pri+"88":S.inpBdr}`,borderRadius:10,padding:"8px 10px",fontSize:12.5,color:sel.length?S.pl:S.ts,fontWeight:sel.length?600:400,cursor:"pointer",textAlign:"left"}}>
+  return(<div style={{position:"relative",...style}}>
+    <button ref={btnRef} type="button" onClick={()=>{setOpen(o=>!o);setQ("");}} style={{width:"100%",display:"flex",alignItems:"center",gap:6,background:sel.length?S.pri+"14":S.inp,border:`1px solid ${open?S.pri:sel.length?S.pri+"88":S.inpBdr}`,borderRadius:10,padding:"8px 10px",fontSize:12.5,color:sel.length?S.pl:S.ts,fontWeight:sel.length?600:400,cursor:"pointer",textAlign:"left"}}>
       <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{placeholder}: {label}</span>
       <ChevronDown size={15} color={sel.length?S.pri:S.td} style={{flexShrink:0,transform:open?"rotate(180deg)":"none",transition:"transform .15s"}}/>
     </button>
-    {open&&<div style={panel}>
+    {open&&rect&&createPortal(<div ref={panelRef} style={{position:"fixed",top:rect.bottom+4,left:rect.left,width:Math.max(rect.width,200),...panelBase}}>
       <div style={srchBox}><Search size={14} color={S.td}/><input autoFocus value={q} onChange={e=>setQ(e.target.value)} placeholder="Buscar..." style={srchInp}/>{sel.length>0&&<button type="button" onClick={()=>onChange([])} title="Limpar" style={{background:"transparent",border:"none",cursor:"pointer",padding:0,display:"flex"}}><X size={15} color={S.dng}/></button>}</div>
-      <div style={{maxHeight:260,overflowY:"auto"}}>
+      <div style={{maxHeight:280,overflowY:"auto"}}>
         {filt.length===0&&<p style={{margin:0,padding:"12px",fontSize:12.5,color:S.ts,textAlign:"center"}}>Nada encontrado</p>}
         {filt.map(([v,l])=>{const on=sel.includes(v);const dot=colorFor?colorFor(v):null;return(<button key={v} type="button" onClick={()=>toggle(v)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",textAlign:"left",background:on?S.pri+"12":"transparent",border:"none",borderBottom:`1px solid ${S.cl}`,padding:"9px 12px",fontSize:12.5,color:S.txt,cursor:"pointer"}}>
           <span style={{width:17,height:17,borderRadius:5,flexShrink:0,border:`1.5px solid ${on?S.pri:S.inpBdr}`,background:on?S.pri:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>{on&&<Check size={12} color="#fff" strokeWidth={3}/>}</span>
@@ -123,7 +141,7 @@ function MultiSelect({values,onChange,options,placeholder="Selecione",allLabel="
           <span style={{flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:on?600:400}}>{l}</span>
         </button>);})}
       </div>
-    </div>}
+    </div>,document.body)}
   </div>);
 }
 export { Kpi, SegTabs, Chip, SearchSelect, MultiSelect };
@@ -167,22 +185,24 @@ function MonthCalendar({value,onSelect,marks={},today,compact}){
 }
 
 // Campo de data com popover de calendário (substitui <input type="date"> nativo)
-function DateField({value,onChange,placeholder="Data",today,marks,style,align="left"}){
-  const[open,setOpen]=useState(false);const ref=useRef(null);
-  useEffect(()=>{if(!open)return;const h=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[open]);
-  return(<div ref={ref} style={{position:"relative",zIndex:open?200:undefined,...style}}>
-    <button type="button" onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,background:S.inp,border:`1px solid ${open?S.pri:S.inpBdr}`,borderRadius:10,padding:"9px 11px",fontSize:13,color:value?S.txt:S.ts,cursor:"pointer",textAlign:"left"}}>
+function DateField({value,onChange,placeholder="Data",today,marks,style}){
+  const[open,setOpen]=useState(false);
+  const[btnRef,rect]=useAnchorRect(open);const panelRef=useRef(null);
+  useOutside(open,()=>setOpen(false),btnRef,panelRef);
+  const W=300;const left=rect?Math.max(8,Math.min(rect.left,window.innerWidth-W-8)):0;
+  return(<div style={{position:"relative",...style}}>
+    <button ref={btnRef} type="button" onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,background:S.inp,border:`1px solid ${open?S.pri:S.inpBdr}`,borderRadius:10,padding:"9px 11px",fontSize:13,color:value?S.txt:S.ts,cursor:"pointer",textAlign:"left"}}>
       <CalIcon size={15} color={S.td} style={{flexShrink:0}}/>
       <span style={{flex:1}}>{value?fmtBR(value):placeholder}</span>
       <ChevronDown size={14} color={S.td} style={{flexShrink:0,transform:open?"rotate(180deg)":"none"}}/>
     </button>
-    {open&&<div style={{position:"absolute",top:"calc(100% + 6px)",[align==="right"?"right":"left"]:0,zIndex:300,background:"var(--card-solid)",border:`1px solid ${S.brd}`,borderRadius:14,boxShadow:"0 16px 40px rgba(0,0,0,.35)",padding:14,width:290}}>
+    {open&&rect&&createPortal(<div ref={panelRef} style={{position:"fixed",top:rect.bottom+6,left,zIndex:9999,background:"var(--card-solid)",border:`1px solid ${S.brd}`,borderRadius:14,boxShadow:"0 16px 40px rgba(0,0,0,.4)",padding:14,width:W}}>
       <MonthCalendar value={value} today={today} marks={marks} onSelect={d=>{onChange&&onChange(d);setOpen(false);}}/>
       <div style={{display:"flex",justifyContent:"space-between",marginTop:10,borderTop:`1px solid ${S.cl}`,paddingTop:10}}>
         <button type="button" onClick={()=>{onChange&&onChange("");setOpen(false);}} style={{background:"transparent",border:"none",color:S.dng,fontSize:12,fontWeight:600,cursor:"pointer",padding:0}}>Limpar</button>
         {today&&<button type="button" onClick={()=>{onChange&&onChange(today);setOpen(false);}} style={{background:"transparent",border:"none",color:S.pl,fontSize:12,fontWeight:600,cursor:"pointer",padding:0}}>Hoje</button>}
       </div>
-    </div>}
+    </div>,document.body)}
   </div>);
 }
 export { MonthCalendar, DateField };

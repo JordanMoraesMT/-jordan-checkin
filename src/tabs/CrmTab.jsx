@@ -3,8 +3,8 @@
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar } from "lucide-react";
-import { S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv } from "../lib";
-import { SearchSelect } from "../components";
+import { S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, todayLocal } from "../lib";
+import { SearchSelect, MultiSelect, DateField } from "../components";
 
 const DASH = "https://dashboard.jordanmt.com";
 const TIPOS = [
@@ -233,7 +233,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       </div>
       <textarea value={agTxt} onChange={e=>setAgTxt(e.target.value)} placeholder="Descrição da tarefa..." rows={2} style={{ ...inp, resize: "vertical", marginBottom: 8 }}/>
       <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-        <input type="date" value={agData} onChange={e=>setAgData(e.target.value)} style={{ ...inp, flex: 2 }}/>
+        <DateField value={agData} onChange={setAgData} today={todayLocal()} placeholder="Data" style={{ flex: 2 }}/>
         <input type="time" value={agHora} onChange={e=>setAgHora(e.target.value)} style={{ ...inp, flex: 1 }}/>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
@@ -407,24 +407,25 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
   const rfvDe = (o) => { if (!rfv) return null; const k = soDig(o.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; };
   const PREF = "jc:empresas-prefs";
   const p0 = sL(PREF, {});
+  const arr = v => Array.isArray(v) ? v : [];
   const [q, setQ] = useState("");
-  const [fCat, setFCat] = useState(p0.fCat || ""); const [fResp, setFResp] = useState(p0.fResp || "");
-  const [fRfv, setFRfv] = useState(p0.fRfv || ""); const [fAbc, setFAbc] = useState(p0.fAbc || ""); const [fSr, setFSr] = useState(p0.fSr || ""); const [fCid, setFCid] = useState(p0.fCid || "");
+  const [fCat, setFCat] = useState(arr(p0.fCat)); const [fResp, setFResp] = useState(arr(p0.fResp));
+  const [fRfv, setFRfv] = useState(arr(p0.fRfv)); const [fAbc, setFAbc] = useState(arr(p0.fAbc)); const [fSr, setFSr] = useState(arr(p0.fSr)); const [fCid, setFCid] = useState(arr(p0.fCid));
   useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fAbc, fSr, fCid }); }, [fCat, fResp, fRfv, fAbc, fSr, fCid]);
   const [ordem, setOrdem] = useState(1); // 1 = A→Z, -1 = Z→A
   const [vc, setVc] = useState(60);
-  const resps = useMemo(() => { const s = new Set(USERS.map(u => u.n)); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);/* v29: catálogo ∪ dados */
+  const resps = useMemo(() => { const s = new Set(USERS.map(u => u.n)); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
   const cidades = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const c = o.addr?.city_name || o.addr?.city; if (c) s.add(c); }); return [...s].sort(); }, [allOrgs]);
   const lista = useMemo(() => {
-    let l = (q.trim() || fCat === "Excluido") ? [ ...(allOrgs || []), ...(excl || []) ] : (allOrgs || []);
+    let l = (q.trim() || fCat.includes("Excluido")) ? [ ...(allOrgs || []), ...(excl || []) ] : (allOrgs || []);
     if (q.trim()) { const n = q.toLowerCase().replace(/[.\-\/]/g, "");
       const casa = o => [o.name, o.nickname, o.legalName, soDig(o.cnpj), o.addr?.city_name, o.email, o.phone].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(n);
-      l = l.filter(casa); /* v27: excluídos entram só na busca OU ao filtrar categoria Excluido */ }
-    if (fCat) l = l.filter(o => o.cat === fCat);
-    if (fResp) l = l.filter(o => o.owner === fResp);
-    if (fCid) l = l.filter(o => (o.addr?.city_name || o.addr?.city) === fCid);
-    if (fRfv || fAbc || fSr) l = l.filter(o => { const r = rfvDe(o); if (!r) return false;
-      if (fRfv && r.rfv !== fRfv) return false; if (fAbc && r.abc !== fAbc) return false; if (fSr && r.status !== fSr) return false; return true; });
+      l = l.filter(casa); }
+    if (fCat.length) l = l.filter(o => fCat.includes(o.cat));
+    if (fResp.length) l = l.filter(o => fResp.includes(o.owner));
+    if (fCid.length) l = l.filter(o => fCid.includes(o.addr?.city_name || o.addr?.city));
+    if (fRfv.length || fAbc.length || fSr.length) l = l.filter(o => { const r = rfvDe(o); if (!r) return false;
+      if (fRfv.length && !fRfv.includes(r.rfv)) return false; if (fAbc.length && !fAbc.includes(r.abc)) return false; if (fSr.length && !fSr.includes(r.status)) return false; return true; });
     return [...l].sort((a, b) => ordem * (a.nickname || a.name || "").localeCompare(b.nickname || b.name || ""));
   }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fAbc, fSr, ordem, rfv]);
   const th = { textAlign: "left", padding: "8px 10px", fontSize: 10.5, fontWeight: 800, color: S.ts, textTransform: "uppercase", letterSpacing: .4, whiteSpace: "nowrap", borderBottom: `2px solid ${S.brd}` };
@@ -439,17 +440,17 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
       <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Buscar por nome, CNPJ, cidade, e-mail ou telefone..." style={{ ...inp, paddingLeft: 34 }} />
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-      <SearchSelect value={fCat} onChange={v => { setFCat(v); setVc(60); }} placeholder="Categoria" style={{ flex: 1 }} options={[["", "Categoria: todas"], ...[...CATS, "Excluido"].map(c => [c, c])]} />
-      <SearchSelect value={fResp} onChange={v => { setFResp(v); setVc(60); }} placeholder="Responsável" style={{ flex: 1 }} options={[["", "Responsável: todos"], ...resps.map(r => [r, r])]} />
+      <MultiSelect values={fCat} onChange={v => { setFCat(v); setVc(60); }} placeholder="Categoria" allLabel="todas" style={{ flex: 1 }} colorFor={c => CC[c] || S.pri} options={[...CATS, "Excluido"]} />
+      <MultiSelect values={fResp} onChange={v => { setFResp(v); setVc(60); }} placeholder="Responsável" allLabel="todos" style={{ flex: 1 }} options={resps} />
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-      <SearchSelect value={fRfv} onChange={v => { setFRfv(v); setVc(60); }} placeholder="Classe RFV" style={{ flex: 1 }} options={[["", "Classe RFV: todas"], ...["Campeão", "Leal", "Em Crescimento", "Em Risco", "Inativo"].map(x => [x, x])]} />
-      <SearchSelect value={fAbc} onChange={v => { setFAbc(v); setVc(60); }} placeholder="Curva ABC" style={{ flex: 1 }} options={[["", "Curva ABC: todas"], ...["A", "B", "C"].map(x => [x, x])]} />
+      <MultiSelect values={fRfv} onChange={v => { setFRfv(v); setVc(60); }} placeholder="Classe RFV" allLabel="todas" style={{ flex: 1 }} options={["Campeão", "Leal", "Em Crescimento", "Em Risco", "Inativo"]} />
+      <MultiSelect values={fAbc} onChange={v => { setFAbc(v); setVc(60); }} placeholder="Curva ABC" allLabel="todas" style={{ flex: 1 }} options={["A", "B", "C"]} />
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-      <SearchSelect value={fSr} onChange={v => { setFSr(v); setVc(60); }} placeholder="Status Recompra" style={{ flex: 1 }} options={[["", "Status Recompra: todos"], ...["Em Dia", "Momento de Recompra", "Atrasado"].map(x => [x, x])]} />
-      <SearchSelect value={fCid} onChange={v => { setFCid(v); setVc(60); }} placeholder="Cidade" style={{ flex: 1 }} options={[["", "Cidade: todas"], ...cidades.map(x => [x, x])]} />
-      <button onClick={() => { setFCat(""); setFResp(""); setFRfv(""); setFAbc(""); setFSr(""); setFCid(""); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
+      <MultiSelect values={fSr} onChange={v => { setFSr(v); setVc(60); }} placeholder="Status Recompra" allLabel="todos" style={{ flex: 1 }} options={["Em Dia", "Momento de Recompra", "Atrasado"]} />
+      <MultiSelect values={fCid} onChange={v => { setFCid(v); setVc(60); }} placeholder="Cidade" allLabel="todas" style={{ flex: 1 }} options={cidades} />
+      <button onClick={() => { setFCat([]); setFResp([]); setFRfv([]); setFAbc([]); setFSr([]); setFCid([]); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
     </div>
     <div style={{ overflowX: "auto", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: S.shadow }}>
       <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 720 }}>

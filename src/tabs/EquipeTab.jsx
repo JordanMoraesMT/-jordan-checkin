@@ -1,7 +1,7 @@
 // TeamCheck — aba EquipeTab
 import { useState, useEffect } from "react";
-import { toLocalDate, geoEstimate, S, fT, fD, mins, hrsMin, hav, DASH, csv, getBase, getEnd } from "../lib";
-import { LB, Kpi } from "../components";
+import { toLocalDate, todayLocal, geoEstimate, S, fT, fD, mins, hrsMin, hav, DASH, csv, getBase, getEnd } from "../lib";
+import { LB, Kpi, DateField } from "../components";
 
 function EquipeTab({sel,setSel,token,plocs,orgs,dayBases}){
   const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[routeKm,setRouteKm]=useState(null);const[err,setErr]=useState("");
@@ -41,7 +41,7 @@ function EquipeTab({sel,setSel,token,plocs,orgs,dayBases}){
         {err&&<div style={{fontSize:12,color:err.startsWith("ERRO")?S.dng:S.ts,marginTop:2}}>{err}</div>}
       </div>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
-        <input type="date" value={sel} onChange={e=>setSel(e.target.value)} className="mono" style={{fontSize:13,padding:"9px 12px"}}/>
+        <DateField value={sel} onChange={setSel} today={todayLocal()} placeholder="Data" style={{width:170}}/>
         <button onClick={load} disabled={lo} style={{background:"var(--chrome)",color:"#fff",border:"none",borderRadius:9,padding:"10px 18px",fontSize:13,fontWeight:500}}>{lo?"Carregando...":"Atualizar"}</button>
       </div>
     </div>

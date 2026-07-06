@@ -2,50 +2,45 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { MapPin, Trophy, Search } from "lucide-react";
 import { PG, toLocalDate, todayLocal, CATS, CC, USERS, SECTORS, BRANDS, geoEstimate, S, fD, fDS, hav, DASH, gps, roadKm, csv, fixMojibake } from "../lib";
-import { OrgCard, MultiSelect, SearchSelect, DateField } from "../components";
+import { OrgCard, MultiSelect, DateField } from "../components";
 
 function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,focusReq,rfv,excl}){
-  const[search,setSearch]=useState("");const[catFilters,setCatFilters]=useState([]);const[cityFilter,setCityFilter]=useState("Todas");const[stateFilter,setStateFilter]=useState("Todos");const[segFilter,setSegFilter]=useState("Todos");const[prodFilter,setProdFilter]=useState("Todos");const[ownerFilter,setOwnerFilter]=useState("Todos");const[grupoFilter,setGrupoFilter]=useState("Todos");
+  const[search,setSearch]=useState("");
+  // Todos os filtros de seleção são multi-seleção (combináveis). Vazio = todos.
+  const[catSel,setCatSel]=useState([]);const[citySel,setCitySel]=useState([]);const[ufSel,setUfSel]=useState([]);const[segSel,setSegSel]=useState([]);const[ownerSel,setOwnerSel]=useState([]);const[grupoSel,setGrupoSel]=useState([]);
+  const[fRfv,setFRfv]=useState([]);const[fSr,setFSr]=useState([]);const[fInd,setFInd]=useState([]);
   const[visitMode,setVisitMode]=useState("all");const[visitFrom,setVisitFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return toLocalDate(d);});const[visitTo,setVisitTo]=useState(todayLocal);
   const[nearMe,setNearMe]=useState(null);const[nearLoading,setNearLoading]=useState(false);const[nearRoad,setNearRoad]=useState({});const[sortMode,setSortMode]=useState("alpha");
   const[vc,setVc]=useState(PG);
-  const[fRfv,setFRfv]=useState("");const[fAbc,setFAbc]=useState("");const[fSr,setFSr]=useState("");const[fInd,setFInd]=useState("");
   // Matriz RFV consolidada (D1): resolve por CNPJ (normalizado) ou org_id
   const rfvDe=useCallback(o=>{if(!rfv)return null;const k=(o.cnpj||"").replace(/\D/g,"");if(k&&rfv.byCnpj[k.padStart(14,"0")])return rfv.byCnpj[k.padStart(14,"0")];return rfv.byOrg[o.id]||null;},[rfv]);
-  const cities=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const c=o.addr?.city_name||o.addr?.city;if(c)s.add(c);});return["Todas",...[...s].sort()];},[orgs]);
-  const states=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.addr?.state)s.add(o.addr.state);});return["Todos",...[...s].sort()];},[orgs]);
-  const segments=useMemo(()=>{const s=new Set(SECTORS.map(x=>x.n));orgs.forEach(o=>{if(o.sector)s.add(o.sector);});return["Todos",...[...s].sort()];},[orgs]);/* v29: catálogo ∪ dados */
-  const products=useMemo(()=>{const s=new Set(BRANDS);orgs.forEach(o=>{if(o.products)(o.products.split(", ")).forEach(p=>{if(p&&!p.startsWith("P_"))s.add(p);});});return["Todos",...[...s].sort()];},[orgs]);/* v29: catálogo ∪ dados */
-  const owners=useMemo(()=>{const s=new Set(USERS.map(u=>u.n));orgs.forEach(o=>{if(o.owner)s.add(o.owner);});return["Todos",...[...s].sort()];},[orgs]);/* v29: catálogo ∪ dados */
-  const grupos=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const g=fixMojibake((o.grupo||"").replace("Grupo: ","").trim());if(g)s.add(g);});return["Todos",...[...s].sort()];},[orgs]);
+  const cities=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const c=o.addr?.city_name||o.addr?.city;if(c)s.add(c);});return[...s].sort();},[orgs]);
+  const states=useMemo(()=>{const s=new Set();orgs.forEach(o=>{if(o.addr?.state)s.add(o.addr.state);});return[...s].sort();},[orgs]);
+  const segments=useMemo(()=>{const s=new Set(SECTORS.map(x=>x.n));orgs.forEach(o=>{if(o.sector)s.add(o.sector);});return[...s].sort();},[orgs]);
+  const owners=useMemo(()=>{const s=new Set(USERS.map(u=>u.n));orgs.forEach(o=>{if(o.owner)s.add(o.owner);});return[...s].sort();},[orgs]);
+  const grupos=useMemo(()=>{const s=new Set();orgs.forEach(o=>{const g=fixMojibake((o.grupo||"").replace("Grupo: ","").trim());if(g)s.add(g);});return[...s].sort();},[orgs]);
   const lastVisits=useMemo(()=>{const m={};visits.forEach(v=>{if(v.checkoutTime&&(!m[v.orgId]||v.checkinTime>m[v.orgId].time))m[v.orgId]={time:v.checkinTime,who:v.userName||user?.name||""};});return m;},[visits]);
-  // Build visit lookup by org: {orgId: [{time, who},...]}
   const visitsByOrg=useMemo(()=>{const m={};visits.forEach(v=>{if(v.checkoutTime){if(!m[v.orgId])m[v.orgId]=[];m[v.orgId].push({time:v.checkinTime,who:v.userName||""});}});return m;},[visits]);
 
   const fo=useMemo(()=>{let list=orgs;
-    if(catFilters.length)list=list.filter(o=>catFilters.includes(o.cat));
-    if(stateFilter!=="Todos")list=list.filter(o=>o.addr?.state===stateFilter);
-    if(cityFilter!=="Todas")list=list.filter(o=>(o.addr?.city_name||o.addr?.city)===cityFilter);
-    if(segFilter!=="Todos")list=list.filter(o=>o.sector===segFilter);
-    if(prodFilter!=="Todos")list=list.filter(o=>o.products?.includes(prodFilter));
-    if(ownerFilter!=="Todos")list=list.filter(o=>o.owner===ownerFilter);
-    if(grupoFilter!=="Todos")list=list.filter(o=>(o.grupo||"").replace("Grupo: ","")===grupoFilter);
-    // Visit date range filter
+    if(catSel.length)list=list.filter(o=>catSel.includes(o.cat));
+    if(ufSel.length)list=list.filter(o=>ufSel.includes(o.addr?.state));
+    if(citySel.length)list=list.filter(o=>citySel.includes(o.addr?.city_name||o.addr?.city));
+    if(segSel.length)list=list.filter(o=>segSel.includes(o.sector));
+    if(ownerSel.length)list=list.filter(o=>ownerSel.includes(o.owner));
+    if(grupoSel.length)list=list.filter(o=>grupoSel.includes((o.grupo||"").replace("Grupo: ","")));
     if(visitMode==="visited"){list=list.filter(o=>{const vl=visitsByOrg[o.id];if(!vl)return false;return vl.some(v=>{const d=toLocalDate(v.time);return d>=visitFrom&&d<=visitTo;});});
-      // Visitados: most recent first
       list=list.sort((a,b)=>{const la=lastVisits[a.id]?.time||"";const lb=lastVisits[b.id]?.time||"";return lb.localeCompare(la);});}
     if(visitMode==="not_visited"){list=list.filter(o=>{const vl=visitsByOrg[o.id];if(!vl)return true;return !vl.some(v=>{const d=toLocalDate(v.time);return d>=visitFrom&&d<=visitTo;});});
-      // Sem visita: oldest first (most neglected on top)
       list=list.sort((a,b)=>{const la=lastVisits[a.id]?.time||"0";const lb=lastVisits[b.id]?.time||"0";return la.localeCompare(lb);});}
-    if(fRfv||fAbc||fSr||fInd){list=list.filter(o=>{const r=rfvDe(o);if(!r)return false;if(fRfv&&r.rfv!==fRfv)return false;if(fAbc&&r.abc!==fAbc)return false;if(fSr&&r.status!==fSr)return false;if(fInd&&!(r.inds||"").split(",").includes(fInd))return false;return true;});}
-    if(search.trim()){const q=search.toLowerCase().replace(/[.\-\/]/g,"");const casa=o=>[o.name,o.nickname,o.legalName,o.cnpj?.replace(/[.\-\/]/g,""),o.addr?.city,o.addr?.city_name,o.addr?.district,o.addr?.state,o.cat,o.sector,o.products,o.people].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g,"").includes(q);list=list.filter(casa);/* v27: excluídos NÃO aparecem em PDVs — só na lista de empresas do CRM */}
+    if(fRfv.length||fSr.length||fInd.length){list=list.filter(o=>{const r=rfvDe(o);if(!r)return false;if(fRfv.length&&!fRfv.includes(r.rfv))return false;if(fSr.length&&!fSr.includes(r.status))return false;if(fInd.length&&!(r.inds||"").split(",").some(i=>fInd.includes(i.trim())))return false;return true;});}
+    if(search.trim()){const q=search.toLowerCase().replace(/[.\-\/]/g,"");const casa=o=>[o.name,o.nickname,o.legalName,o.cnpj?.replace(/[.\-\/]/g,""),o.addr?.city,o.addr?.city_name,o.addr?.district,o.addr?.state,o.cat,o.sector,o.products,o.people].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g,"").includes(q);list=list.filter(casa);}
     if(sortMode==="near"&&nearMe){
       const withGPS=list.filter(o=>plocs[o.id]).map(o=>({...o,dist:hav(nearMe.lat,nearMe.lng,plocs[o.id].lat,plocs[o.id].lng),distType:"gps"}));
       const noGPS=list.filter(o=>!plocs[o.id]).map(o=>{const geo=geoEstimate(o);if(geo)return{...o,dist:hav(nearMe.lat,nearMe.lng,geo[0],geo[1]),distType:"bairro"};return{...o,dist:9999,distType:"sem_ref"};});
       withGPS.sort((a,b)=>a.dist-b.dist);noGPS.sort((a,b)=>a.dist-b.dist);
       list=[...withGPS,...noGPS];
     }else if(sortMode==="rfv"){
-      // Ordena pela Matriz RFV real (D1): classe > score > faturamento; sem histórico de compra vai ao fim (A→Z)
       const ORD={"Campeão":5,"Leal":4,"Em Crescimento":3,"Em Risco":2,"Inativo":1};
       list=list.map(o=>({o,r:rfvDe(o)})).sort((a,b)=>{
         if(!!a.r!==!!b.r)return a.r?-1:1;
@@ -54,7 +49,7 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
       }).map(x=>x.o);
     }else{list=list.sort((a,b)=>(a.name||"").localeCompare(b.name||""));}
     return list;
-  },[orgs,search,catFilters,cityFilter,stateFilter,segFilter,prodFilter,ownerFilter,grupoFilter,visitMode,visitFrom,visitTo,visitsByOrg,lastVisits,nearMe,plocs,sortMode,rfvDe,fRfv,fAbc,fSr,fInd,excl]);
+  },[orgs,search,catSel,citySel,ufSel,segSel,ownerSel,grupoSel,visitMode,visitFrom,visitTo,visitsByOrg,lastVisits,nearMe,plocs,sortMode,rfvDe,fRfv,fSr,fInd,excl]);
 
   useEffect(()=>{
     if(sortMode!=="near"||!nearMe||!fo.length)return;
@@ -65,11 +60,13 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
     })();return()=>{cancelled=true;};
   },[sortMode,nearMe,fo.slice(0,10).map(o=>o.id).join()]);
 
-  const toggleCat=c=>{setCatFilters(prev=>prev.includes(c)?prev.filter(x=>x!==c):[...prev,c]);setVc(PG);};
-  useEffect(()=>{if(!focusReq)return;setSearch("");setCatFilters([]);setVisitMode("all");setVc(PG);const t=setTimeout(()=>{const el=document.getElementById("org-"+focusReq.id);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});else if(focusReq.name)setSearch(focusReq.name);},200);return()=>clearTimeout(t);},[focusReq]);
+  const limparTudo=()=>{setCatSel([]);setCitySel([]);setUfSel([]);setSegSel([]);setOwnerSel([]);setGrupoSel([]);setFRfv([]);setFSr([]);setFInd([]);setVisitMode("all");setSearch("");setSortMode("alpha");setNearMe(null);setVc(PG);};
+  useEffect(()=>{if(!focusReq)return;setSearch("");setCatSel([]);setVisitMode("all");setVc(PG);const t=setTimeout(()=>{const el=document.getElementById("org-"+focusReq.id);if(el)el.scrollIntoView({behavior:"smooth",block:"center"});else if(focusReq.name)setSearch(focusReq.name);},200);return()=>clearTimeout(t);},[focusReq]);
   const handleOut=useCallback(o2=>onCheckout(o2),[onCheckout]);
   const handleEdit=useCallback(o2=>onEdit(o2),[onEdit]);
   const handlePerson=useCallback(o2=>onPerson(o2),[onPerson]);
+  // cidades disponíveis conforme UF selecionada (filtros combinam entre si)
+  const cityOpts=useMemo(()=>ufSel.length?cities.filter(c=>orgs.some(o=>(o.addr?.city_name||o.addr?.city)===c&&ufSel.includes(o.addr?.state))):cities,[cities,ufSel,orgs]);
   return(<div style={{display:visible?"block":"none"}}>
         {/* ── Card de filtros (padrão Dashboard/mockup) ── */}
         <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"14px 14px 12px",marginBottom:14}}>
@@ -78,18 +75,18 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
           <input value={search} onChange={e=>{setSearch(e.target.value);setVc(PG);}} placeholder="Nome, razão social, CNPJ, cidade, segmento…" style={{flex:1,border:"none",background:"transparent",padding:"9px 0"}}/>
         </div>
         <div style={{display:"flex",gap:8,marginBottom:11,alignItems:"center",flexWrap:"wrap"}}>
-          <MultiSelect values={catFilters} onChange={v=>{setCatFilters(v);setVc(PG);}} placeholder="Status" allLabel="Todos" style={{flex:1,minWidth:200}} colorFor={c=>CC[c]||S.pri} options={CATS}/>
-          <button onClick={()=>{setCatFilters([]);setCityFilter("Todas");setStateFilter("Todos");setSegFilter("Todos");setProdFilter("Todos");setOwnerFilter("Todos");setGrupoFilter("Todos");setVisitMode("all");setSearch("");setSortMode("alpha");setNearMe(null);setFRfv("");setFAbc("");setFSr("");setFInd("");setVc(PG);}} style={{padding:"8px 13px",fontSize:12,border:`1px solid ${S.dng}44`,color:S.dng,borderRadius:10,background:"transparent",whiteSpace:"nowrap",cursor:"pointer"}}>✕ Limpar</button>
+          <MultiSelect values={catSel} onChange={v=>{setCatSel(v);setVc(PG);}} placeholder="Status" allLabel="Todos" style={{flex:1,minWidth:200}} colorFor={c=>CC[c]||S.pri} options={CATS}/>
+          <button onClick={limparTudo} style={{padding:"8px 13px",fontSize:12,border:`1px solid ${S.dng}44`,color:S.dng,borderRadius:10,background:"transparent",whiteSpace:"nowrap",cursor:"pointer"}}>✕ Limpar</button>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:8,marginBottom:11}}>
-          <SearchSelect value={stateFilter} onChange={v=>{setStateFilter(v);setCityFilter("Todas");setVc(PG);}} placeholder="UF" options={states.map(s=>[s,s==="Todos"?"UF":s])}/>
-          <SearchSelect value={cityFilter} onChange={v=>{setCityFilter(v);setVc(PG);}} placeholder="Cidade" options={cities.filter(c=>c==="Todas"||stateFilter==="Todos"||orgs.some(o=>(o.addr?.city_name||o.addr?.city)===c&&o.addr?.state===stateFilter)).map(c=>[c,c==="Todas"?"Cidade":c])}/>
-          <SearchSelect value={segFilter} onChange={v=>{setSegFilter(v);setVc(PG);}} placeholder="Segmento" options={segments.map(s=>[s,s==="Todos"?"Segmento":s])}/>
-          <SearchSelect value={ownerFilter} onChange={v=>{setOwnerFilter(v);setVc(PG);}} placeholder="Responsável" options={owners.map(o=>[o,o==="Todos"?"Responsável":o])}/>
-          <SearchSelect value={grupoFilter} onChange={v=>{setGrupoFilter(v);setVc(PG);}} placeholder="Grupo" options={grupos.map(g=>[g,g==="Todos"?"Grupo":g])}/>
-          <SearchSelect value={fRfv} onChange={v=>{setFRfv(v);setVc(PG);}} placeholder="Classe RFV" options={[["","Classe RFV"],...["Campeão","Leal","Em Crescimento","Em Risco","Inativo"].map(x=>[x,x])]}/>
-          <SearchSelect value={fSr} onChange={v=>{setFSr(v);setVc(PG);}} placeholder="Recompra" options={[["","Recompra"],...["Em Dia","Momento de Recompra","Atrasado"].map(x=>[x,x])]}/>
-          <SearchSelect value={fInd} onChange={v=>{setFInd(v);setVc(PG);}} placeholder="Indústria" options={[["","Indústria"],...["TRAMONTINA","PADO","Zagonel","Ruvolo","Santana","Festcolor","Plastilit","Hiper Têxtil"].map(x=>[x,x])]}/>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:8,marginBottom:11}}>
+          <MultiSelect values={ufSel} onChange={v=>{setUfSel(v);setCitySel([]);setVc(PG);}} placeholder="UF" allLabel="Todas" options={states}/>
+          <MultiSelect values={citySel} onChange={v=>{setCitySel(v);setVc(PG);}} placeholder="Cidade" allLabel="Todas" options={cityOpts}/>
+          <MultiSelect values={segSel} onChange={v=>{setSegSel(v);setVc(PG);}} placeholder="Segmento" allLabel="Todos" options={segments}/>
+          <MultiSelect values={ownerSel} onChange={v=>{setOwnerSel(v);setVc(PG);}} placeholder="Responsável" allLabel="Todos" options={owners}/>
+          <MultiSelect values={grupoSel} onChange={v=>{setGrupoSel(v);setVc(PG);}} placeholder="Grupo" allLabel="Todos" options={grupos}/>
+          <MultiSelect values={fRfv} onChange={v=>{setFRfv(v);setVc(PG);}} placeholder="Classe RFV" allLabel="Todas" options={["Campeão","Leal","Em Crescimento","Em Risco","Inativo"]}/>
+          <MultiSelect values={fSr} onChange={v=>{setFSr(v);setVc(PG);}} placeholder="Recompra" allLabel="Todos" options={["Em Dia","Momento de Recompra","Atrasado"]}/>
+          <MultiSelect values={fInd} onChange={v=>{setFInd(v);setVc(PG);}} placeholder="Indústria" allLabel="Todas" options={["TRAMONTINA","PADO","Zagonel","Ruvolo","Santana","Festcolor","Plastilit","Hiper Têxtil"]}/>
         </div>
         {/* Filtro por visita (período) */}
         <div style={{display:"flex",gap:6,marginBottom:visitMode!=="all"?8:11,flexWrap:"wrap"}}>
@@ -117,7 +114,7 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
           <span style={{fontSize:12.5,color:S.ts,fontWeight:500}}>Exibindo <b style={{color:S.txt}}>{fo.length}</b> de {orgs.length} pontos de venda{visitMode==="not_visited"?` · sem visita ${fDS(visitFrom+"T12:00")}→${fDS(visitTo+"T12:00")}`:visitMode==="visited"?` · visitados ${fDS(visitFrom+"T12:00")}→${fDS(visitTo+"T12:00")}`:""}{syncing&&` (${syncMsg})`}</span>
           <span style={{fontSize:11.5,color:S.td}}>{sortMode==="near"?"por proximidade":sortMode==="rfv"?(rfv?"Matriz RFV (Campeão → Inativo)":"Matriz RFV indisponível (A→Z)"):"ordenado A → Z"}</span>
         </div>
-          <div style={{display:"flex",flexDirection:"column",gap:12}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={onCheckin} onOut={handleOut} onEdit={handleEdit} onPerson={handlePerson} onQuick={onQuick} ldId={ldId} plocs={plocs} lastVisit={lastVisits[o.id]||null} rfvInfo={rfvDe(o)} lastOrder={null/*TODO: Dashboard Phase 2*/} nearRoad={nearRoad}/>)}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:12}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={onCheckin} onOut={handleOut} onEdit={handleEdit} onPerson={handlePerson} onQuick={onQuick} ldId={ldId} plocs={plocs} lastVisit={lastVisits[o.id]||null} rfvInfo={rfvDe(o)} lastOrder={null} nearRoad={nearRoad}/>)}</div>
           {vc<fo.length&&<button onClick={()=>setVc(p=>p+PG)} style={{width:"100%",marginTop:12,padding:14,fontSize:14,fontWeight:500}}>Ver mais ({fo.length-vc})</button>}
           <button onClick={()=>{const rows=[["Nome","CNPJ","Endereço","Bairro","Cidade","UF","Categoria","Segmento","Produtos","Responsável","Grupo","Dt Última Visita","Visitado por","Dias s/ Visita","Classe RFV","Status Recompra","Última Compra","Fat. 12m"]];fo.forEach(o=>{const lv=lastVisits[o.id];const dias=lv?Math.floor((Date.now()-new Date(lv.time))/86400000):"";const rv=rfvDe(o);rows.push([o.name,o.cnpj||"",`${o.addr?.street||""} ${o.addr?.number||""}`.trim(),o.addr?.district||"",o.addr?.city_name||o.addr?.city||"",o.addr?.state||"",o.cat||"",o.sector||"",o.products||"",o.owner||"",o.grupo?.replace("Grupo: ","")||"",lv?fD(lv.time):"Sem visita",lv?lv.who:"",dias,rv?rv.rfv:"",rv?rv.status:"",rv&&rv.ultima?fD(rv.ultima+"T12:00"):"",rv?rv.fat12m:""]);});csv(rows,`clientes-filtrados-${fD(new Date())}.csv`);}} style={{width:"100%",marginTop:8,padding:12,fontSize:13,background:S.pri+"22",border:`1px solid ${S.pri}55`,color:S.pl,fontWeight:500}}>📊 Exportar {fo.length} clientes (Excel)</button>
           {search.replace(/[.\-\/]/g,"").length>=11&&fo.length===0&&<button onClick={async()=>{try{const r=await fetch(`${DASH}/api/crm/clientes?q=${search.replace(/[.\-\/]/g,"")}&limit=20`,{headers:{"X-Session":token},cache:"no-store"});const d=await r.json();if(d&&d.ok&&d.clientes?.length)setOrgs(p=>{const ids=new Set(p.map(o=>o.id));return[...d.clientes.filter(f=>!ids.has(f.id)),...p];});}catch(e){console.warn("cnpjSearch:",e);}}} style={{width:"100%",marginTop:8,padding:14,background:S.acc,border:"none",fontWeight:500}}>Buscar CNPJ no cadastro</button>}
