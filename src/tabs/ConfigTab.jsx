@@ -4,6 +4,25 @@ import { HOMES, TZ, S, DASH, csv, getBase, getEnd, sL, sS } from "../lib";
 import { HotelGeoInput, ProgressBar } from "../components";
 import { ConfigCatalogos } from "./ConfigCatalogos";
 
+// Parser de CSV que respeita aspas ("") — casa com o export do helper csv() (delimitador ; e aspas)
+function parseCSV(text){
+  const lines=text.replace(/\r\n?/g,"\n").split("\n").filter(l=>l.length);
+  if(!lines.length)return[];
+  const semi=(lines[0].match(/;/g)||[]).length,comma=(lines[0].match(/,/g)||[]).length;
+  const delim=semi>=comma?";":",";
+  const rows=[];
+  for(const line of lines){
+    const out=[];let cur="",inQ=false;
+    for(let i=0;i<line.length;i++){const ch=line[i];
+      if(inQ){if(ch==='"'){if(line[i+1]==='"'){cur+='"';i++;}else inQ=false;}else cur+=ch;}
+      else{if(ch==='"')inQ=true;else if(ch===delim){out.push(cur);cur="";}else cur+=ch;}
+    }
+    out.push(cur);rows.push(out.map(s=>s.trim()));
+  }
+  return rows;
+}
+const soDig=x=>String(x||"").replace(/\D/g,"");
+
 const ARow=({emo,t,d,onClick,disabled,color})=><div onClick={disabled?undefined:onClick} style={{display:"flex",alignItems:"center",gap:12,background:S.card,border:`1px solid ${S.brd}`,borderRadius:11,padding:"13px 16px",cursor:disabled?"default":"pointer",opacity:disabled?.6:1}}>
   <span style={{width:34,height:34,borderRadius:9,background:S.cl,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}}>{emo}</span>
   <div style={{flex:1,minWidth:0}}>
@@ -44,14 +63,12 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
       <p style={{fontSize:12.5,color:S.t2,margin:0}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p className="mono" style={{fontSize:11.5,color:syncStatus.startsWith?.("Erro")?S.dng:S.pl,margin:"6px 0 0"}}>Sync {syncStatus||"aguardando..."}</p>
-      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v21</p>
+      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v33</p>
     </div>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:9,marginBottom:16}}>
-      <ARow emo="🔄" t={syncing?syncMsg:"Sincronizar clientes"} d="Baixa a carteira completa de clientes (D1)" onClick={onSync} disabled={syncing}/>
-      <ARow emo="📥" t={histLoading?"Carregando histórico...":"Carregar histórico"} d="Últimos 90 dias de visitas registradas" onClick={async()=>{setHistLoading(true);await onLoadHistory();setHistLoading(false);}} disabled={histLoading}/>
-      <ARow emo="⚡" t="Forçar sincronização" d="Puxa agora o estado da equipe e GPS" onClick={onSyncPull}/>
+      <ARow emo="⚡" t="Forçar sincronização" d="Baixa a carteira, o histórico e o estado da equipe/GPS" onClick={async()=>{setHistLoading(true);await onSync();await onLoadHistory();setHistLoading(false);onSyncPull();}} disabled={syncing||histLoading}/>
       <ARow emo="📡" t={shareLoading?"Enviando GPS...":`Compartilhar ${Object.keys(plocs).length} GPS com equipe`} d="Publica as localizações salvas neste aparelho" onClick={async()=>{if(!confirm("Compartilhar GPS com equipe?"))return;setShareLoading(true);await onShareGPS();setShareLoading(false);}} disabled={shareLoading}/>
       <ARow emo="🗺️" t="Definir jornada" d="Origem e destino do dia (casa, hotel...)" onClick={onShowDB}/>
       <ARow emo="🏨" t="Fechar roteiro do dia" d="Define o ponto final e conclui o dia" onClick={onShowEnd}/>
@@ -99,11 +116,19 @@ function ConfigTab({user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStat
         <button onClick={()=>{const dt=prompt("Data para limpar visitas (DD/MM/AAAA):");if(!dt)return;const[d,m,y]=dt.split("/");const target=`${y}-${m}-${d}`;const count=visits.filter(v=>v.checkinTime?.startsWith(target)).length;if(!count){alert("Nenhuma visita nessa data.");return;}if(confirm(`Tem certeza que deseja excluir ${count} visitas de ${dt}?\nEssa ação não pode ser desfeita.`))onClearVisits(target);}} style={{color:S.gold}}>🗓️ Limpar visitas (por data)</button>
         <button onClick={async()=>{if(!confirm("Forçar reload completo?\nIsto vai limpar cache e re-sincronizar todos os dados.\nVocê não perderá nada.\n\nUsado para corrigir caracteres especiais corrompidos."))return;try{if("caches" in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister();}}catch{}localStorage.removeItem("jc:prefill");window.location.reload(true);}} style={{color:S.acc}}>♻️ Forçar reload (corrigir caracteres)</button>
         <button onClick={()=>{if(confirm(`Tem certeza que deseja apagar TODOS os ${Object.keys(plocs).length} GPS salvos?\nEssa ação não pode ser desfeita.`))onClearAllGPS();}} style={{color:S.gold}}>📍 Limpar todos GPS PDVs</button>
-        {/* Bulk update grupos */}
+        {/* Bulk update grupos (empresas) — com modelo pré-preenchido */}
         <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginTop:8}}>
-          <p style={{fontSize:12,fontWeight:500,margin:"0 0 6px"}}>📋 Atualizar grupos em massa</p>
-          <p style={{fontSize:10,color:S.ts,margin:"0 0 8px"}}>CSV com colunas: CNPJ, Grupo</p>
-          <input type="file" accept=".csv" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;const text=await file.text();const lines=text.split(/\r?\n/).filter(Boolean);const rows=lines.slice(1).map(l=>{const[c,g]=l.split(/[,;]/);return{cnpj:(c||"").replace(/\D/g,""),grupo:(g||"").trim().replace(/^"|"$/g,"")};}).filter(r=>r.cnpj&&r.grupo);if(!rows.length){alert("CSV vazio ou formato inválido.\nFormato: CNPJ,Grupo\n12345678000190,REDE MATEUS");e.target.value="";return;}if(!confirm(`Atualizar grupos em ${rows.length} clientes?\nIsto vai atualizar o grupo no cadastro (D1).`)){e.target.value="";return;}let ok=0,fail=0,notfound=0;const log=[];for(const r of rows){const org=allOrgs.find(o=>o.cnpj?.replace(/\D/g,"")===r.cnpj);if(!org){notfound++;log.push(`${r.cnpj}: não encontrado`);continue;}try{await fetch(`${DASH}/api/crm/cliente-upsert`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:org.id,cnpj:(org.cnpj||"").replace(/\D/g,"")||null,grupo:r.grupo})});ok++;log.push(`✅ ${org.name.slice(0,30)} → ${r.grupo}`);}catch(x){fail++;log.push(`❌ ${org.name.slice(0,30)}: ${x.message}`);}}alert(`Concluído!\n✅ ${ok} atualizados\n❌ ${fail} falharam\n⚠️ ${notfound} não encontrados\n\nLog:\n${log.slice(0,20).join("\n")}${log.length>20?`\n... +${log.length-20} mais`:""}`);e.target.value="";if(ok)await doSync();}} style={{width:"100%",fontSize:11,padding:6}}/>
+          <p style={{fontSize:12,fontWeight:600,margin:"0 0 4px",color:S.txt}}>🏢 Atualizar grupos em massa</p>
+          <p style={{fontSize:10.5,color:S.ts,margin:"0 0 8px"}}>Baixe o modelo já preenchido com sua carteira, edite a coluna <b>Grupo</b> e reenvie. Colunas: CNPJ · Empresa · Grupo.</p>
+          <button onClick={()=>{const rows=[["CNPJ","Empresa","Grupo"]];[...allOrgs].sort((a,b)=>(a.name||a.nickname||"").localeCompare(b.name||b.nickname||"")).forEach(o=>rows.push([o.cnpj||"",o.name||o.nickname||"",(o.grupo||"").replace(/^Grupo:\s*/i,"").trim()]));csv(rows,`Jordan_Modelo_Grupos_${new Date().toISOString().slice(0,10)}.csv`);}} style={{width:"100%",marginBottom:8,padding:"9px",fontSize:12,fontWeight:600,background:S.pri+"18",border:`1px solid ${S.pri}66`,color:S.pl,borderRadius:9,cursor:"pointer"}}>📥 Baixar modelo (empresas)</button>
+          <input type="file" accept=".csv" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;const text=await file.text();const rows=parseCSV(text);const body=rows.slice(1).map(cols=>({cnpj:soDig(cols[0]),grupo:(cols[cols.length-1]||"").trim()})).filter(r=>r.cnpj&&r.grupo);if(!body.length){alert("CSV vazio ou inválido.\nUse o modelo baixado (CNPJ · Empresa · Grupo).");e.target.value="";return;}if(!confirm(`Atualizar grupos em ${body.length} clientes no cadastro (D1)?`)){e.target.value="";return;}let ok=0,fail=0,notfound=0;const log=[];for(const r of body){const org=allOrgs.find(o=>soDig(o.cnpj)===r.cnpj);if(!org){notfound++;log.push(`${r.cnpj}: não encontrado`);continue;}try{await fetch(`${DASH}/api/crm/cliente-upsert`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:org.id,cnpj:soDig(org.cnpj)||null,grupo:r.grupo})});ok++;log.push(`✅ ${(org.name||"").slice(0,30)} → ${r.grupo}`);}catch(x){fail++;log.push(`❌ ${(org.name||"").slice(0,30)}: ${x.message}`);}}alert(`Concluído!\n✅ ${ok} atualizados\n❌ ${fail} falharam\n⚠️ ${notfound} não encontrados\n\n${log.slice(0,20).join("\n")}${log.length>20?`\n... +${log.length-20} mais`:""}`);e.target.value="";if(ok)await doSync();}} style={{width:"100%",fontSize:11,padding:6}}/>
+        </div>
+        {/* Bulk update pessoas (contatos) — com modelo pré-preenchido */}
+        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginTop:8}}>
+          <p style={{fontSize:12,fontWeight:600,margin:"0 0 4px",color:S.txt}}>👥 Atualizar pessoas em massa</p>
+          <p style={{fontSize:10.5,color:S.ts,margin:"0 0 8px"}}>Baixe o modelo com os contatos, edite e reenvie. Linhas com <b>ID</b> são atualizadas; linhas sem ID (com CNPJ) criam contato novo. Colunas: ID · Nome · Empresa · CNPJ · Cargo · Telefone · WhatsApp · Email.</p>
+          <button onClick={async()=>{try{const r=await fetch(`${DASH}/api/crm/contatos-todos`,{headers:{"X-Session":token},cache:"no-store"});const d=await r.json();const cts=(d&&d.contatos)||[];const rows=[["ID","Nome","Empresa","CNPJ","Cargo","Telefone","WhatsApp","Email"]];cts.forEach(c=>rows.push([c.id||"",c.nome||"",c.empresa||"",c.cnpj||"",c.cargo||"",c.telefone||"",c.whatsapp||"",c.email||""]));csv(rows,`Jordan_Modelo_Pessoas_${new Date().toISOString().slice(0,10)}.csv`);}catch(x){alert("Não consegui baixar os contatos: "+x.message);}}} style={{width:"100%",marginBottom:8,padding:"9px",fontSize:12,fontWeight:600,background:S.pri+"18",border:`1px solid ${S.pri}66`,color:S.pl,borderRadius:9,cursor:"pointer"}}>📥 Baixar modelo (pessoas)</button>
+          <input type="file" accept=".csv" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;const text=await file.text();const rows=parseCSV(text);const hdr=(rows[0]||[]).map(h=>h.toLowerCase());const ix=n=>hdr.findIndex(h=>h.includes(n));const iId=ix("id"),iNome=ix("nome"),iCnpj=ix("cnpj"),iCargo=ix("cargo"),iTel=ix("telefone"),iWa=ix("whats"),iMail=ix("mail");const body=rows.slice(1).map(c=>({id:iId>=0?(c[iId]||"").trim():"",nome:iNome>=0?(c[iNome]||"").trim():"",cnpj:iCnpj>=0?soDig(c[iCnpj]):"",cargo:iCargo>=0?(c[iCargo]||"").trim():"",telefone:iTel>=0?(c[iTel]||"").trim():"",whatsapp:iWa>=0?(c[iWa]||"").trim():"",email:iMail>=0?(c[iMail]||"").trim():""})).filter(r=>r.id||(r.nome&&r.cnpj));if(!body.length){alert("CSV vazio ou inválido.\nUse o modelo baixado (Pessoas).");e.target.value="";return;}if(!confirm(`Processar ${body.length} contatos?\nCom ID = atualizar · sem ID = criar novo.`)){e.target.value="";return;}let upd=0,cri=0,fail=0,notfound=0;const log=[];for(const r of body){try{if(r.id){await fetch(`${DASH}/api/crm/contatos`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({id:r.id,nome:r.nome,cargo:r.cargo,telefone:r.telefone,whatsapp:r.whatsapp,email:r.email})});upd++;log.push(`✏️ ${r.nome.slice(0,28)}`);}else{const org=allOrgs.find(o=>soDig(o.cnpj)===r.cnpj);if(!org){notfound++;log.push(`⚠️ ${r.nome.slice(0,24)}: CNPJ ${r.cnpj} não achado`);continue;}await fetch(`${DASH}/api/crm/contatos`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({nome:r.nome,cargo:r.cargo,telefone:r.telefone,whatsapp:r.whatsapp,email:r.email,org_id:org.id,cnpj:r.cnpj||null})});cri++;log.push(`➕ ${r.nome.slice(0,28)} → ${(org.name||"").slice(0,20)}`);}}catch(x){fail++;log.push(`❌ ${r.nome.slice(0,24)}: ${x.message}`);}}alert(`Concluído!\n✏️ ${upd} atualizados\n➕ ${cri} criados\n❌ ${fail} falharam\n⚠️ ${notfound} sem CNPJ\n\n${log.slice(0,20).join("\n")}${log.length>20?`\n... +${log.length-20} mais`:""}`);e.target.value="";}} style={{width:"100%",fontSize:11,padding:6}}/>
         </div>
       </>}
       <button onClick={()=>{if(confirm("Deseja realmente desconectar?\nVoce precisara inserir o token novamente."))onLogout();}} style={{color:S.dng,marginTop:8}}>🚪 Desconectar</button>

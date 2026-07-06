@@ -1,6 +1,6 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, lazy, Suspense } from "react";
-import { Store, Map as MapIcon, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser } from "lucide-react";
+import { Store, Map as MapIcon, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact } from "lucide-react";
 import { API, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
 import { Login, Banner, NoteModal, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
@@ -185,13 +185,15 @@ export default function App(){
   const isAdmin=user?.id===743088;
   const NAVG=[
     {grp:"CAMPO",itens:[{id:"pdvs",I:Store,l:"PDVs"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"agenda",I:Calendar,l:"Agenda"}]},
-    {grp:"CLIENTES",itens:[{id:"crm",I:BookUser,l:"CRM"}]},
+    {grp:"CRM",itens:[{id:"crm_inicio",I:BookUser,l:"Início"},{id:"crm_empresas",I:Building2,l:"Empresas"},{id:"crm_pessoas",I:Contact,l:"Pessoas"}]},
     {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true}]:[]),{id:"relatorio",I:BarChart3,l:"Relatório"}]},
     {grp:"SISTEMA",itens:[{id:"config",I:Settings,l:"Configurações"}]},
   ];
-  const TITULOS={pdvs:["PDVS","Pontos de venda"],crm:["CRM","Empresas & atividades"],rotas:["ROTAS","Roteiro do dia"],relatorio:["RELATÓRIO","Período, jornada & km"],equipe:["EQUIPE","Produtividade"],agenda:["AGENDA","Tarefas & follow-ups"],config:["CONFIGURAÇÕES","Sistema"]};
-  const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"crm",I:BookUser,l:"CRM"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
+  const TITULOS={pdvs:["PDVS","Pontos de venda"],crm_inicio:["CRM","Feed de atividades"],crm_empresas:["EMPRESAS","Carteira de clientes"],crm_pessoas:["PESSOAS","Contatos"],rotas:["ROTAS","Roteiro do dia"],relatorio:["RELATÓRIO","Período, jornada & km"],equipe:["EQUIPE","Produtividade"],agenda:["AGENDA","Tarefas & follow-ups"],config:["CONFIGURAÇÕES","Sistema"]};
+  // Bottom nav (mobile): CRM entra como atalho único (→ Início); Empresas/Pessoas ficam na gaveta lateral
+  const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"crm_inicio",I:BookUser,l:"CRM"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
   const tabs=isAdmin?[...baseTabs.slice(0,3),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(3)]:baseTabs;
+  const navAtivo=(id)=>id.startsWith("crm")?tab.startsWith("crm"):tab===id;
   const irPara=(id)=>{setTab(id);if(mob)setNavOpen(false);};
   const sair=()=>{setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);};
   const dataHoje=fD(new Date());
@@ -211,7 +213,7 @@ export default function App(){
         {NAVG.map((g,gi)=>(
           <div key={gi} style={{marginBottom:10}}>
             <div style={{fontSize:9,color:S.navGrp,textTransform:"uppercase",letterSpacing:1.5,padding:"10px 10px 5px",fontWeight:600,whiteSpace:"nowrap"}}>{g.grp}</div>
-            {g.itens.map(it=>{const act=tab===it.id;return(
+            {g.itens.map(it=>{const act=navAtivo(it.id);return(
               <div key={it.id} className="navit" onClick={()=>irPara(it.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,cursor:"pointer",marginBottom:2,background:act?S.navActive:"transparent",color:act?S.navActiveFg:S.nav,fontSize:12,fontWeight:act?600:400,whiteSpace:"nowrap"}}>
                 <it.I size={16} strokeWidth={act?2.2:1.7} style={{flexShrink:0}}/>
                 <span style={{flex:1}}>{it.l}</span>
@@ -257,7 +259,7 @@ export default function App(){
       {canCloseRoute&&tab!=="config"&&<div style={{background:S.acc+"18",border:`1px solid ${S.acc}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.acc,margin:"0 0 8px"}}>✅ {todayVisits.length} visita(s) hoje — Fechar roteiro?</p><button onClick={()=>setShowEndDay(true)} style={{width:"100%",padding:10,fontSize:13,background:S.acc,border:"none",fontWeight:600,borderRadius:8,color:"#fff"}}>🏨 Fechar Roteiro do Dia</button></div>}
 
       <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} focusReq={focusReq} rfv={rfvMap} excl={exclOrgs}/>
-      <CrmTab visible={tab==="crm"} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs}/>
+      <CrmTab visible={tab.startsWith("crm")} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs}/>
       {tab==="rotas"&&<RotasTab sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
       {tab==="relatorio"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando relatório…</p>}><RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/></Suspense>}
       {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} token={token} plocs={plocs} orgs={orgs} dayBases={dayBases}/>}
@@ -285,7 +287,7 @@ export default function App(){
     <button onClick={()=>{const el=document.querySelector(".jc-main");if(el)el.scrollTo({top:0,behavior:"smooth"});}} style={{position:"fixed",bottom:mob?84:24,right:16,width:44,height:44,borderRadius:50,background:S.pri,border:"none",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 3px 12px ${S.pri}66`,zIndex:30,cursor:"pointer",padding:0}}><ChevronUp size={22} strokeWidth={2.5} color="#fff"/></button>
 
     {/* BOTTOM NAV — só no celular (agilidade de campo); no desktop a navegação é a sidebar */}
-    {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=><button key={t.id} onClick={()=>{setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:tab===t.id?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:tab===t.id?700:400,color:tab===t.id?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={tab===t.id?2.2:1.6}/>{t.l}</button>)}</div></div>}
+    {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=>{const act=navAtivo(t.id);return <button key={t.id} onClick={()=>{setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:act?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:act?700:400,color:act?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={act?2.2:1.6}/>{t.l}</button>;})}</div></div>}
 
     {coTarget&&<NoteModal org={coTarget} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
     {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const n={...p,[k]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}

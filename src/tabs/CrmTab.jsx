@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar } from "lucide-react";
 import { S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv } from "../lib";
-import { AgendaTab } from "./AgendaTab";
+import { SearchSelect } from "../components";
 
 const DASH = "https://dashboard.jordanmt.com";
 const TIPOS = [
@@ -439,28 +439,16 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
       <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Buscar por nome, CNPJ, cidade, e-mail ou telefone..." style={{ ...inp, paddingLeft: 34 }} />
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-      <select value={fCat} onChange={e => { setFCat(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
-        <option value="">Categoria: todas</option>{[...CATS, "Excluido"].map(c => <option key={c} value={c}>{c}</option>)}
-      </select>
-      <select value={fResp} onChange={e => { setFResp(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
-        <option value="">Responsável: todos</option>{resps.map(r => <option key={r} value={r}>{r}</option>)}
-      </select>
+      <SearchSelect value={fCat} onChange={v => { setFCat(v); setVc(60); }} placeholder="Categoria" style={{ flex: 1 }} options={[["", "Categoria: todas"], ...[...CATS, "Excluido"].map(c => [c, c])]} />
+      <SearchSelect value={fResp} onChange={v => { setFResp(v); setVc(60); }} placeholder="Responsável" style={{ flex: 1 }} options={[["", "Responsável: todos"], ...resps.map(r => [r, r])]} />
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-      <select value={fRfv} onChange={e => { setFRfv(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
-        <option value="">Classe RFV: todas</option>{["Campeão","Leal","Em Crescimento","Em Risco","Inativo"].map(x => <option key={x} value={x}>{x}</option>)}
-      </select>
-      <select value={fAbc} onChange={e => { setFAbc(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
-        <option value="">Curva ABC: todas</option>{["A","B","C"].map(x => <option key={x} value={x}>{x}</option>)}
-      </select>
+      <SearchSelect value={fRfv} onChange={v => { setFRfv(v); setVc(60); }} placeholder="Classe RFV" style={{ flex: 1 }} options={[["", "Classe RFV: todas"], ...["Campeão", "Leal", "Em Crescimento", "Em Risco", "Inativo"].map(x => [x, x])]} />
+      <SearchSelect value={fAbc} onChange={v => { setFAbc(v); setVc(60); }} placeholder="Curva ABC" style={{ flex: 1 }} options={[["", "Curva ABC: todas"], ...["A", "B", "C"].map(x => [x, x])]} />
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-      <select value={fSr} onChange={e => { setFSr(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
-        <option value="">Status Recompra: todos</option>{["Em Dia","Momento de Recompra","Atrasado"].map(x => <option key={x} value={x}>{x}</option>)}
-      </select>
-      <select value={fCid} onChange={e => { setFCid(e.target.value); setVc(60); }} style={{ ...inp, flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
-        <option value="">Cidade: todas</option>{cidades.map(x => <option key={x} value={x}>{x}</option>)}
-      </select>
+      <SearchSelect value={fSr} onChange={v => { setFSr(v); setVc(60); }} placeholder="Status Recompra" style={{ flex: 1 }} options={[["", "Status Recompra: todos"], ...["Em Dia", "Momento de Recompra", "Atrasado"].map(x => [x, x])]} />
+      <SearchSelect value={fCid} onChange={v => { setFCid(v); setVc(60); }} placeholder="Cidade" style={{ flex: 1 }} options={[["", "Cidade: todas"], ...cidades.map(x => [x, x])]} />
       <button onClick={() => { setFCat(""); setFResp(""); setFRfv(""); setFAbc(""); setFSr(""); setFCid(""); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
     </div>
     <div style={{ overflowX: "auto", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: S.shadow }}>
@@ -497,8 +485,8 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
 // ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl }) {
-  const [secao, setSecao] = useState("inicio"); // inicio | tarefas | empresas (menu fiel ao Agendor)
+export function CrmTab({ visible, secao = "inicio", token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl }) {
+  // secao controlada pelo menu lateral do App: inicio | empresas | pessoas
   const [sel, setSel] = useState(null);
   const [q, setQ] = useState("");
   const [feed, setFeed] = useState([]); const [ld, setLd] = useState(false); const [erro, setErro] = useState("");
@@ -525,13 +513,7 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
   if (!visible) return null;
   if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} />;
 
-  const secoes = [["inicio", "Início"], ["tarefas", "Tarefas"], ["empresas", "Empresas"], ["pessoas", "Pessoas"]];
   return (<div>
-    {/* Menu do CRM — fiel ao topo do Agendor (Início | Tarefas | Empresas) */}
-    <div style={{ display: "flex", gap: 5, marginBottom: 16, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 11, padding: 4, maxWidth: 560 }}>
-      {secoes.map(([id, l]) => <button key={id} onClick={() => setSecao(id)} style={{ flex: 1, border: "none", background: secao === id ? "var(--card-solid)" : "transparent", borderRadius: 8, padding: "9px 2px", fontSize: 13, fontWeight: secao === id ? 600 : 500, color: secao === id ? S.pl : S.ts, boxShadow: secao === id ? "0 1px 2px rgba(3,73,100,.14)" : "none", cursor: "pointer" }}>{l}</button>)}
-    </div>
-    {secao === "tarefas" && <AgendaTab visible={true} token={token} user={user} allOrgs={allOrgs} />}
     {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
     {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} />}
     {secao === "inicio" && <div>
@@ -553,17 +535,13 @@ export function CrmTab({ visible, token, user, allOrgs, visits, plocs, onEdit, o
       {TIPOS.map(t => <Chip key={t.id} on={fTipo === t.id} color={t.c} onClick={() => setFTipo(fTipo === t.id ? "" : t.id)}>{t.l}</Chip>)}
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
-      <select value={fUser} onChange={e => setFUser(e.target.value)} style={{ ...inp, width: "auto", flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
-        <option value="">Toda a equipe</option><option value="743088">Jordan</option><option value="743347">Alisson</option>
-      </select>
-      <select value={fDias} onChange={e => setFDias(+e.target.value)} style={{ ...inp, width: "auto", flex: 1, padding: "8px 10px", fontSize: 12.5 }}>
-        <option value={7}>7 dias</option><option value={30}>30 dias</option><option value={90}>3 meses</option><option value={180}>6 meses</option><option value={365}>12 meses</option>
-      </select>
-      <button onClick={carregaFeed} style={{ width: 38, height: 38, borderRadius: 10, background: S.pl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><RefreshCw size={16} color="#fff" className={ld ? "spin" : ""} /></button>
+      <SearchSelect value={fUser} onChange={setFUser} placeholder="Equipe" style={{ flex: 1 }} options={[["", "Toda a equipe"], ["743088", "Jordan"], ["743347", "Alisson"]]} />
+      <SearchSelect value={String(fDias)} onChange={v => setFDias(+v)} placeholder="Período" style={{ flex: 1 }} options={[["7", "7 dias"], ["30", "30 dias"], ["90", "3 meses"], ["180", "6 meses"], ["365", "12 meses"]]} />
+      <button onClick={carregaFeed} style={{ width: 38, height: 38, borderRadius: 10, background: S.pl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}><RefreshCw size={16} color="#fff" className={ld ? "spin" : ""} /></button>
     </div>
 
     <p style={{ fontSize: 12, color: S.ts, margin: "0 0 8px" }}>{ld ? "Carregando atividades..." : `${feed.length} atividade(s) no período`}</p>
-    {erro && <Crd style={{ borderColor: S.dng + "66" }}><p style={{ margin: 0, fontSize: 12.5, color: S.dng }}>Erro ao carregar o feed: {erro}</p><p style={{ margin: "4px 0 0", fontSize: 11.5, color: S.ts }}>Verifique se o Dashboard está na v185+ (rotas CRM) e se você está logado.</p></Crd>}
+    {erro && <Crd style={{ borderColor: S.dng + "66" }}><p style={{ margin: 0, fontSize: 12.5, color: S.dng }}>Erro ao carregar o feed: {erro}</p><p style={{ margin: "4px 0 0", fontSize: 11.5, color: S.ts }}>Verifique se o Dashboard está no ar (rotas CRM) e se você está logado.</p></Crd>}
     {!ld && !erro && !feed.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Sem atividades no período. Elas aparecem aqui a cada check-out, ligação, WhatsApp ou registro manual na tela do cliente.</p></Crd>}
     {feed.map(a => <AtvCard key={a.id} a={a} onOrg={abrePorFeed} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={async (x) => { if (!confirm("Excluir esta atividade do CRM?")) return; try { await crm(token, `/api/crm/atividades?id=${x.id}`, { method: "DELETE" }); setFeed(p => p.filter(y => y.id !== x.id)); } catch (e) { alert("Erro: " + e.message); } }} />)}
   </div>}

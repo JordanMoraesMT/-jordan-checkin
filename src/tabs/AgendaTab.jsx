@@ -1,5 +1,6 @@
 // TeamCheck — aba AgendaTab
 import { useState, useEffect, useMemo, useRef } from "react";
+import { Check } from "lucide-react";
 import { DASH, toLocalDate, todayLocal, TYPES, S, fT, fD, crmFire } from "../lib";
 import { LB, SegTabs, Chip } from "../components";
 
@@ -61,12 +62,15 @@ function AgendaTab({visible,token,user,allOrgs}){
       </div>
       <p style={{fontSize:12.5,color:S.ts,margin:0,lineHeight:1.5,wordBreak:"break-word"}}>{t.text}</p>
       <div style={{display:"flex",alignItems:"center",gap:10,marginTop:7,flexWrap:"wrap"}}>
-        <span className="mono" style={{fontSize:11.5,fontWeight:600,color:t.done?S.ok:t.due&&t.due.slice(0,10)<today?S.dng:S.td}}>{t.due?`Prazo ${fD(t.due)} ${fT(t.due)}`:`Criada ${fD(t.created)}`}</span>
+        <span className="mono" style={{fontSize:11.5,fontWeight:600,color:t.done?S.td:t.due&&t.due.slice(0,10)<today?S.dng:S.td,textDecoration:t.done?"line-through":"none"}}>{t.due?`Prazo ${fD(t.due)} ${fT(t.due)}`:`Criada ${fD(t.created)}`}</span>
         {t.done&&t.finished&&<><span style={{width:3,height:3,borderRadius:"50%",background:S.td}}/><span className="mono" style={{fontSize:11.5,color:S.ok}}>Finalizada {fD(t.finished)}</span></>}
       </div>
     </div>
-    {!t.done&&<button onClick={()=>markDone(t)} style={{background:S.inp,border:`1px solid ${S.ok}66`,color:S.ok,borderRadius:8,padding:"9px 16px",fontSize:12.5,fontWeight:600,cursor:"pointer",flexShrink:0}}>Finalizar</button>}
-    {t.done&&<span style={{fontSize:18,flexShrink:0}}>✅</span>}
+    {/* Caixa de seleção: marca a tarefa como finalizada (padrão Dashboard) */}
+    <button onClick={()=>!t.done&&markDone(t)} title={t.done?"Tarefa finalizada":"Marcar como finalizada"} style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,background:t.done?S.ok+"18":S.inp,border:`1px solid ${t.done?S.ok:S.inpBdr}`,borderRadius:8,padding:"8px 12px",cursor:t.done?"default":"pointer"}}>
+      <span style={{width:19,height:19,borderRadius:5,flexShrink:0,border:`1.6px solid ${t.done?S.ok:S.td}`,background:t.done?S.ok:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>{t.done&&<Check size={13} color="#fff" strokeWidth={3}/>}</span>
+      <span style={{fontSize:12.5,fontWeight:600,color:t.done?S.ok:S.ts}}>{t.done?"Finalizada":"Finalizar"}</span>
+    </button>
   </div>;
   return(<div style={{display:visible?"block":"none"}}>
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,marginBottom:16,flexWrap:"wrap"}}>
