@@ -1,7 +1,7 @@
 // TeamCheck — aba AgendaTab
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Check } from "lucide-react";
-import { DASH, toLocalDate, todayLocal, TYPES, S, fT, fD, crmFire } from "../lib";
+import { DASH, toLocalDate, todayLocal, TYPES, USERS, S, fT, fD, crmFire } from "../lib";
 import { LB, SegTabs, Chip, DateField, MonthCalendar } from "../components";
 
 function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
@@ -13,7 +13,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
   const[period,setPeriod]=useState("all");// all | week | today | custom
   const[customFrom,setCustomFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return toLocalDate(d);});
   const[customTo,setCustomTo]=useState(todayLocal);
-  const[userFilter,setUserFilter]=useState("all");// all | jordan | alisson
+  const[userFilter,setUserFilter]=useState("all");// "all" | id do usuário (dinâmico via catálogo)
   const[showAdd,setShowAdd]=useState(false);const[addQ,setAddQ]=useState("");const[addOrg,setAddOrg]=useState(null);
   const[addType,setAddType]=useState("VISITA");const[addText,setAddText]=useState("");const[addDate,setAddDate]=useState("");const[addTime,setAddTime]=useState("09:00");const[addLo,setAddLo]=useState(false);
   const load=async()=>{setLo(true);setErr("");try{
@@ -41,9 +41,10 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
     setShowAdd(false);setAddOrg(null);setAddText("");setAddDate("");await load();onCrmChange&&onCrmChange();}catch(e){alert("Erro: "+e.message);}setAddLo(false);};
   // Filters
   const today=todayLocal();const dow=new Date().getDay();const weekStart=toLocalDate(new Date(Date.now()-dow*86400000));const weekEnd=toLocalDate(new Date(Date.now()+(6-dow)*86400000));
-  // Casa a tarefa ao usuário por userId OU pelo nome (o selo usa userName; algumas tarefas vêm sem userId)
-  const userMatch=(t,who)=>{if(who==="all")return true;const nm=who==="alisson"?"alisson":"jordan";const uid=who==="alisson"?743347:743088;if(t.userName)return t.userName.toLowerCase().includes(nm);return t.userId!=null&&String(t.userId)===String(uid);};
-  const meWho=user.id===743347?"alisson":"jordan";
+  // Casa a tarefa ao usuário selecionado (id do catálogo). Prioriza userName (o que o selo mostra); usa userId como reserva.
+  const norm=s=>(s||"").toLowerCase().trim();
+  const userMatch=(t,uid)=>{if(uid==="all"||uid==null)return true;const U=USERS.find(u=>String(u.id)===String(uid));const tn=norm(t.userName);if(tn&&U){const full=norm(U.n),first=norm(U.n.split(" ")[0]);return tn===full||tn.includes(first);}return t.userId!=null&&String(t.userId)===String(uid);};
+  const meWho=String(user.id);
   const filtered=useMemo(()=>{const doneCutoff=toLocalDate(new Date(Date.now()-30*86400000));let list=tasks.filter(t=>filter==="pending"?!t.done:(t.done&&((t.finished||t.created||"").slice(0,10)>=doneCutoff)));
     if(!isAdmin)list=list.filter(t=>userMatch(t,meWho));else if(userFilter!=="all")list=list.filter(t=>userMatch(t,userFilter));
     if(period==="today")list=list.filter(t=>(t.due&&t.due.slice(0,10)===today)||(t.created&&toLocalDate(t.created)===today));
@@ -101,7 +102,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange}){
         {[["all","Todas"],["week","Semana"],["today","Hoje"],["custom","Definir"]].map(([k,l])=><Chip key={k} on={period===k} color="var(--chrome)" onClick={()=>setPeriod(k)}>{l}</Chip>)}
       </>}
       {isAdmin&&<><div style={{width:1,height:22,background:S.brd}}/>
-      {[["all","Todos"],["jordan","Jordan"],["alisson","Alisson"]].map(([k,l])=><Chip key={k} on={userFilter===k} color={S.acc} onClick={()=>setUserFilter(k)}>{l}</Chip>)}</>}
+      {[["all","Todos"],...USERS.map(u=>[String(u.id),u.n.split(" ")[0]])].map(([k,l])=><Chip key={k} on={String(userFilter)===k} color={S.acc} onClick={()=>setUserFilter(k)}>{l}</Chip>)}</>}
       {view==="lista"&&period==="custom"&&<div style={{display:"flex",gap:6,alignItems:"center",flexBasis:"100%"}}><DateField value={customFrom} onChange={setCustomFrom} today={today} placeholder="De" style={{flex:1}}/><span style={{color:S.td,fontSize:11}}>a</span><DateField value={customTo} onChange={setCustomTo} today={today} placeholder="Até" style={{flex:1}}/></div>}
     </div>
     {/* ── VISÃO CALENDÁRIO ── */}

@@ -263,7 +263,7 @@ export default function App(){
       <CrmTab visible={tab.startsWith("crm")} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs}/>
       {tab==="rotas"&&<RotasTab sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
       {tab==="relatorio"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando relatório…</p>}><RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/></Suspense>}
-      {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} token={token} plocs={plocs} orgs={orgs} dayBases={dayBases}/>}
+      {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} token={token} plocs={plocs} orgs={orgs} dayBases={dayBases} user={user}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs} onCrmChange={()=>setCrmBump(b=>b+1)}/>
 
       {tab==="config"&&<ConfigTab user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}

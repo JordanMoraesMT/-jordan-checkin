@@ -7,19 +7,20 @@ import { BaseEditInline, Kpi, SegTabs, DateField } from "../components";
 function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const[sd,setSd]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return toLocalDate(d);});
   const[ed,setEd]=useState(todayLocal());
-  const[selUser,setSelUser]=useState("me");
+  const[selUser,setSelUser]=useState(()=>String(user.id));// id do usuário (default: eu)
   const[editDay,setEditDay]=useState(null);
-  const otherId=user.id===743088?743347:743088;
-  const repUserId=selUser==="me"?user.id:otherId;
-  const repUserName=selUser==="me"?user.name:(USERS.find(u=>u.id===otherId)?.n||"Alisson");
+  const isMe=String(selUser)===String(user.id);
+  const repUserId=isMe?user.id:selUser;
+  const repUserName=isMe?user.name:(USERS.find(u=>String(u.id)===String(selUser))?.n||"");
+  const nrm=s=>(s||"").toLowerCase().trim();
   // DEFINITIVE: Use SAME visits array for both modes (KV-synced, single source of truth)
-  // Filter by userName to separate Jordan's visits from Alisson's
+  // Filtra por userName (o selo/registro). Visitas sem userName entram só em "Meus dados".
   const pvAll=useMemo(()=>{
     const filtered=visits.filter(v=>{
       if(!v.checkoutTime)return false;
       if(v.taskType&&v.taskType!=="VISITA")return false;
-      if(selUser==="me"&&v.userName&&v.userName!==user.name)return false;
-      if(selUser==="team"&&v.userName!==repUserName)return false;
+      if(isMe){if(v.userName&&nrm(v.userName)!==nrm(user.name))return false;}
+      else{if(nrm(v.userName)!==nrm(repUserName))return false;}
       const d=toLocalDate(v.checkinTime);
       return d>=sd&&d<=ed;
     });
@@ -33,15 +34,15 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
       if(vDur>exDur)map.set(key,v);
     }
     return Array.from(map.values()).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
-  },[visits,sd,ed,selUser,user.name,repUserName]);
+  },[visits,sd,ed,selUser,user.name,user.id,repUserName]);
   // pv = only VALID visits (used for counts, km, jornada)
   const pv=useMemo(()=>pvAll.filter(v=>!v.divergent),[pvAll]);
   // bdAll = grouped by day including divergent (for visual display with ⚠️ flag)
   const bdAll=useMemo(()=>{const m={};pvAll.forEach(v=>{const k=toLocalDate(v.checkinTime);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pvAll]);
   const bd=useMemo(()=>{const m={};pv.forEach(v=>{const k=toLocalDate(v.checkinTime);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pv]);
-  // FIX: when team, check for admin-set base (keyed as "userId_date"), fallback to team home
-  const getRepBase=(dt)=>{if(selUser==="team"){const k=repUserId+"_"+dt;if(dayBases[k]?.start)return dayBases[k].start;if(dayBases[k])return dayBases[k];return HOMES[repUserId]||null;}return getBase(dayBases,dt,repUserId);};
-  const getRepEnd=(dt)=>{if(selUser==="team"){const k=repUserId+"_"+dt;if(dayBases[k]?.end)return dayBases[k].end;return getRepBase(dt);}return getEnd(dayBases,dt,repUserId);};
+  // base do dia: para outro usuário usa chave "userId_date"; para mim, resolução padrão
+  const getRepBase=(dt)=>{if(!isMe){const k=repUserId+"_"+dt;if(dayBases[k]?.start)return dayBases[k].start;if(dayBases[k])return dayBases[k];return HOMES[repUserId]||null;}return getBase(dayBases,dt,repUserId);};
+  const getRepEnd=(dt)=>{if(!isMe){const k=repUserId+"_"+dt;if(dayBases[k]?.end)return dayBases[k].end;return getRepBase(dt);}return getEnd(dayBases,dt,repUserId);};
   // FIX: use repUserId (correct user) for base resolution
   const calcDayKm=(dvs,dt)=>{if(!dvs?.length)return 0;let km=0;const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
     const b2=getRepBase(dt);const eb=getRepEnd(dt);
@@ -66,9 +67,9 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
     const firstCheckin=pv.length&&pv[0]?.checkinTime?fT(pv[0].checkinTime):"-";
     const lastCheckout=pv.length&&pv[pv.length-1]?.checkoutTime?fT(pv[pv.length-1].checkoutTime):"-";
     return(<div>
-    {user?.id===743088&&<div style={{display:"flex",gap:10,marginBottom:14}}>
-      <button onClick={()=>setSelUser("me")} style={{flex:1,textAlign:"center",padding:11,borderRadius:11,fontSize:13.5,fontWeight:selUser==="me"?600:500,background:S.card,border:selUser==="me"?`1.5px solid var(--chrome)`:`1px solid ${S.brd}`,color:selUser==="me"?S.pl:S.ts,cursor:"pointer"}}>Meus dados</button>
-      <button onClick={()=>setSelUser("team")} style={{flex:1,textAlign:"center",padding:11,borderRadius:11,fontSize:13.5,fontWeight:selUser==="team"?600:500,background:S.card,border:selUser==="team"?`1.5px solid ${S.acc}`:`1px solid ${S.brd}`,color:selUser==="team"?S.acc:S.ts,cursor:"pointer"}}>Alisson Henrique</button>
+    {user?.id===743088&&<div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+      <button onClick={()=>setSelUser(String(user.id))} style={{flex:"1 1 140px",textAlign:"center",padding:11,borderRadius:11,fontSize:13.5,fontWeight:isMe?600:500,background:S.card,border:isMe?`1.5px solid var(--chrome)`:`1px solid ${S.brd}`,color:isMe?S.pl:S.ts,cursor:"pointer"}}>Meus dados</button>
+      {USERS.filter(u=>String(u.id)!==String(user.id)).map(u=>{const on=String(selUser)===String(u.id);return <button key={u.id} onClick={()=>setSelUser(String(u.id))} style={{flex:"1 1 140px",textAlign:"center",padding:11,borderRadius:11,fontSize:13.5,fontWeight:on?600:500,background:S.card,border:on?`1.5px solid ${S.acc}`:`1px solid ${S.brd}`,color:on?S.acc:S.ts,cursor:"pointer"}}>{u.n}</button>;})}
     </div>}
     <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center"}}>
       <DateField value={sd} onChange={setSd} today={todayLocal()} placeholder="Início" style={{flex:1}}/>
@@ -101,8 +102,8 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
       </div>);})()}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(340px,1fr))",gap:16,alignItems:"start"}}>
     <div>
-{bd.length>0&&(selUser==="me"||user?.id===743088)&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"10px 14px",marginBottom:12}}>
-      <div style={{fontSize:14,fontWeight:600,color:S.txt,marginBottom:10}}>Origem / Destino {selUser==="team"?"(Alisson)":""} por dia <span style={{fontSize:11,fontWeight:400,color:S.td}}>· toque para corrigir</span></div>
+{bd.length>0&&(isMe||user?.id===743088)&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"10px 14px",marginBottom:12}}>
+      <div style={{fontSize:14,fontWeight:600,color:S.txt,marginBottom:10}}>Origem / Destino {!isMe?`(${repUserName})`:""} por dia <span style={{fontSize:11,fontWeight:400,color:S.td}}>· toque para corrigir</span></div>
       {bd.map(([dt])=>{const sb=getRepBase(dt);const eb=getRepEnd(dt);return(
         <div key={dt} className="hr" onClick={()=>setEditDay(editDay===dt?null:dt)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"9px 8px",borderRadius:8,cursor:"pointer"}}>
           <span className="mono" style={{fontSize:12.5,fontWeight:600,color:S.t2}}>{fDS(dt+"T12:00")}</span>
@@ -110,7 +111,7 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
           <span style={{width:28,height:28,borderRadius:7,border:`1px solid ${S.inpBdr}`,background:S.inp,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>✏️</span>
         </div>);})}
     </div>}
-    {editDay&&<BaseEditInline day={editDay} dayBases={dayBases} userId={repUserId} dayKey={selUser==="team"?repUserId+"_"+editDay:editDay} plocs={plocs} lastVisitCoord={bd.find(([d])=>d===editDay)?getVEndCoord([...bd.find(([d])=>d===editDay)[1]].sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime))[0],plocs):null} onSave={(d,start,end)=>{onEditBase(d,start,end,selUser==="team"?repUserId:null);setEditDay(null);}} onCancel={()=>setEditDay(null)}/>}
+    {editDay&&<BaseEditInline day={editDay} dayBases={dayBases} userId={repUserId} dayKey={!isMe?repUserId+"_"+editDay:editDay} plocs={plocs} lastVisitCoord={bd.find(([d])=>d===editDay)?getVEndCoord([...bd.find(([d])=>d===editDay)[1]].sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime))[0],plocs):null} onSave={(d,start,end)=>{onEditBase(d,start,end,!isMe?repUserId:null);setEditDay(null);}} onCancel={()=>setEditDay(null)}/>}
     <div style={{display:"flex",gap:6,marginBottom:12}}>
       {/* FIX: Export with correct user name and bases */}
       <button onClick={()=>{const rows=[["Data","Vendedor","Origem","Destino","Visitas","Km","Jornada","Clientes"]];bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));if(!sr.length)return;const b2=getRepBase(dt);const eb=getRepEnd(dt);const dk=calcDayKm(dvs,dt);rows.push([fD(dt+"T12:00"),repUserName,b2?.label||"Casa",eb?.label||"Casa",dvs.length,dk.toFixed(1),hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)),dvs.map(v=>v.orgName).join(", ")]);});rows.push([],["TOTAL","","","",pv.length,totKm.toFixed(1),hrsMin(workH),""]);csv(rows,`km-${repUserName}-${sd}-${ed}.csv`);}} style={{flex:1,textAlign:"center",padding:9,borderRadius:8,fontSize:12.5,fontWeight:500,border:`1px solid ${S.inpBdr}`,color:S.t2,background:"transparent"}}>Exportar resumo</button>
