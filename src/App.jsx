@@ -67,7 +67,9 @@ export default function App(){
     const r2=await fetch(`${API}?sync=${otherId}`);const d2=await r2.json();
     setTeamActive(d2.active||null);
     const r3=await fetch(`${API}?sync=plocs`);const d3=await r3.json();
-    if(d3.active){const deleted=sL("jc:deletedGPS",[]);setPlocs(prev=>{const cloud={...d3.active};deleted.forEach(id=>{delete cloud[id];});const m={...cloud,...prev};sS("jc:pdvLocs",m);return m;});}
+    // v44: GPS durável do D1 (crm_gps) entra no merge — sobrevive a qualquer perda do KV
+    let d1gps={};try{const rg=await fetch(`${DASH_CRM}/api/crm/gps`,{headers:{"X-Session":token}});const dg=await rg.json();(dg.gps||[]).forEach(g=>{if(g.org_id)d1gps[g.org_id]={lat:g.lat,lng:g.lng};});}catch(e){}
+    if(d3.active||Object.keys(d1gps).length){const deleted=sL("jc:deletedGPS",[]);setPlocs(prev=>{const cloud={...d1gps,...(d3.active||{})};deleted.forEach(id=>{delete cloud[id];});const m={...cloud,...prev};sS("jc:pdvLocs",m);return m;});}
     setSyncStatus(`OK ${fT(new Date())} | eu:${d.active?"ativo":"--"}${user?.id===743088?` | equipe:${d2.active?d2.active.orgName:"--"}`:""}`);
   }catch(e){setSyncStatus("Erro: "+e.message);}};
   useEffect(()=>{if(!token||!user)return;syncPull();syncVisitLoad();syncDayBasesLoad();const iv=setInterval(()=>{syncPull();syncDayBasesLoad();},15000);return()=>clearInterval(iv);},[token,user]);
