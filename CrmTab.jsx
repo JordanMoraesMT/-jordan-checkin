@@ -1,156 +1,166 @@
-// TeamCheck — biblioteca: constantes, utilitários e API Agendor
-const API="https://agendor-proxy.administrativo-fc3.workers.dev";
-const OSRM="https://router.project-osrm.org/route/v1/driving";
-let HOMES={743088:{lat:-15.677694,lng:-55.954778,label:"Casa Jordan"},743347:{lat:-15.653611,lng:-56.026833,label:"Casa Alisson"}};
-const LUNCH_START=12,LUNCH_END=13,PG=20;
-// ─── Timezone: Cuiabá (UTC-4, sem horário de verão) ───
-const TZ="America/Cuiaba";
-const toLocalDate=(d)=>{const dt=new Date(d);return dt.toLocaleDateString("en-CA",{timeZone:TZ});};// YYYY-MM-DD
-const todayLocal=()=>toLocalDate(new Date());
-const TYPES=[{id:"VISITA",l:"Visita"},{id:"LIGACAO",l:"Ligação"},{id:"EMAIL",l:"E-mail"},{id:"REUNIAO",l:"Reunião"},{id:"WHATSAPP",l:"WhatsApp"},{id:"PROPOSTA",l:"Proposta"}];
-// Backend próprio (D1 via Worker do Dashboard) — fase de transição: gravar em AMBOS (Agendor + D1)
-const DASH="https://dashboard.jordanmt.com";
-const crmFire=(token,path,body,method="POST")=>{try{fetch(DASH+path,{method,headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(body)}).catch(()=>{});}catch{}};
-let CATS=["Ativo","Prospecção","Perdido","Prospectar","Somente Visita","Inativo","Online - B2B"]; // v28: default; sobrescrito por loadCatalogos(). Excluído fica fora do PDV
-let BRANDS=["TRAMONTINA","PADO","HIPER TEXTIL","PLASTILIT","FESTCOLOR","ZAGONEL","RUVOLO","SANTANA"];
-let SECTORS=[{id:4512997,n:"Açougues"},{id:4513651,n:"Agropecuarias"},{id:4513000,n:"Atacados"},{id:4512998,n:"Decoração"},{id:4513649,n:"Eletromoveis"},{id:4724740,n:"Embalagens"},{id:4513001,n:"Garden"},{id:4512999,n:"Mat. Construção"},{id:4513019,n:"Outros"},{id:4513020,n:"Papelaria"},{id:4513650,n:"Presenteiros"},{id:4512995,n:"Supermercados"},{id:4512996,n:"Variedades"}];
-let CAT_IDS=[{id:3186598,n:"Ativo"},{id:3186011,n:"Prospecção"},{id:4165331,n:"Perdido"},{id:3186012,n:"Prospectar"},{id:3186601,n:"Somente Visita"},{id:3186600,n:"Inativo"},{id:4136717,n:"Online - B2B"},{id:3187967,n:"Excluido"}];
-let ORIGINS=[{id:1981672,n:"Carteira"},{id:1979723,n:"Indicação"},{id:1980476,n:"Prospecção"},{id:1979725,n:"Site"},{id:1980477,n:"Instagram"},{id:1980478,n:"Leads"}];
-let USERS=[{id:743088,n:"Jordan Moraes"},{id:743347,n:"Alisson Henrique"}];
-let CC={Ativo:"#10B981",Inativo:"#F59E0B","Online - B2B":"#0578A6","Somente Visita":"#EC4899",Prospecção:"#8B5CF6",Perdido:"#78716C",Prospectar:"#5B8DEF",Excluido:"#DC2626"};
-const CITY_GEO={"Cuiabá":[-15.5989,-56.0949],"Cuiaba":[-15.5989,-56.0949],"Várzea Grande":[-15.6460,-56.1322],"Varzea Grande":[-15.6460,-56.1322],"Tangará da Serra":[-14.6229,-57.4947],"Tangara da Serra":[-14.6229,-57.4947],"Cáceres":[-16.0725,-57.6770],"Caceres":[-16.0725,-57.6770],"Pontes e Lacerda":[-15.2264,-59.3411],"Campo Novo do Parecis":[-13.6629,-57.8914],"Campo Novo dos Parecis":[-13.6629,-57.8914],"Campo Verde":[-15.5444,-55.1628],"Rondonópolis":[-16.4673,-54.6372],"Rondonopolis":[-16.4673,-54.6372],"Mirassol d Oeste":[-15.6779,-58.0948],"Primavera do Leste":[-15.5615,-54.2817],"Sapezal":[-12.9878,-58.7652],"Araputanga":[-15.4723,-58.3438],"São José dos Quatro Marcos":[-15.6270,-58.1755],"Sorriso":[-12.5428,-55.7112],"Sinop":[-11.8642,-55.5095],"Lucas do Rio Verde":[-13.0490,-55.9048],"Nova Mutum":[-13.8321,-56.0813],"Barra do Garças":[-15.8867,-52.2566],"Diamantino":[-14.4080,-56.4437],"Poconé":[-16.2558,-56.6232],"Jaciara":[-15.9620,-54.9696]};
-const BRG={"ubirajara":"O","ribeirao do lipa":"O","colorado":"O","mariana":"O","santa marta":"O","despraiado":"O","quilombo":"O","duque de caxias":"O","ribeirao da ponte":"O","santa rosa":"O","barra do pari":"O","santa isabel":"O","cidade verde":"O","cidade alta":"O","jardim cuiaba":"O","goiabeira":"O","popular":"O","centro-norte":"O","centro norte":"O","centro-sul":"O","centro sul":"O","porto":"O","coophamil":"O","novo terceiro":"O","araes":"O","alvorada":"O","florianopolis":"N","vitoria":"N","paraiso":"N","nova conquista":"N","primeiro de marco":"N","tres barras":"N","morada da serra":"N","morada do ouro":"N","centro politico":"N","paiaguas":"N","cpa":"N","novo tempo":"N","fabio leite":"N","novo horizonte":"L","planalto":"L","itamarati":"L","novo mato grosso":"L","sol nascente":"L","eldorado":"L","sao carlos":"L","sao roque":"L","santa ines":"L","carumbe":"L","bela vista":"L","dom bosco":"L","terra nova":"L","aclimacao":"L","canjica":"L","bosque da saude":"L","bau":"L","lixeira":"L","bandeirantes":"L","areao":"L","leblon":"L","pedregal":"L","italia":"L","morada dos nobres":"L","santa cruz":"L","recanto dos passaros":"L","imperial":"L","universitario":"L","cachoeira das garcas":"L","boa esperanca":"L","ufmt":"L","americas":"L","pico do amor":"L","pocao":"L","dom aquino":"L","terceiro":"L","paulista":"L","europa":"L","campo velho":"L","tropical":"L","petropolis":"L","california":"L","shangri":"L","praeiro":"L","ana pupina":"L","osmar cabral":"S","sao joao del rei":"S","fortaleza":"S","santa laura":"S","sao sebastiao":"S","pascoal ramos":"S","pedra 90":"S","pedra noventa":"S","nova esperanca":"S","industriario":"S","passaredo":"S","sao francisco":"S","lagoa azul":"S","tijucal":"S","altos do coxipo":"S","presidente":"S","coxipo":"S","sao jose":"S","ohara":"S","palmeiras":"S","jordao":"S","vista alegre":"S","gramado":"S","coophema":"S","sao goncalo":"S","georgia":"S","aparecida":"S","comodoro":"S","mossoro":"S","atalaia":"S","parque cuiaba":"S","distrito industrial":"S","capao do pequi":"VN","canelas":"VN","cristo rei":"VN","gloria":"VC","ikaray":"VS","aeroporto":"VL","jardim dos estados":"VC","marajoara":"VS","mapim":"VO","novo mundo":"VN","parque del rey":"VL","parque do lago":"VS","primavera":"VN","sao matheus":"VS","vitoria regia":"VL","ponte nova":"VC","planalto ipiranga":"VN","costa verde":"VL"};
-const RGC={O:[-15.601,-56.115],N:[-15.565,-56.080],L:[-15.610,-56.060],S:[-15.650,-56.065],C:[-15.601,-56.097],VC:[-15.646,-56.132],VN:[-15.630,-56.125],VS:[-15.665,-56.140],VL:[-15.645,-56.110],VO:[-15.650,-56.155]};
-function geoEstimate(o){const b=(o.addr?.district||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9 ]/g,"");for(const[k,r]of Object.entries(BRG)){if(b.includes(k))return RGC[r];}const c=o.addr?.city_name||o.addr?.city||"";return CITY_GEO[c]||null;}
-// Paleta espelhada do Dashboard (theme.js, tema claro): acentos C.pri/C.green/C.gold/C.red,
-// superfícies --bg/--card/--alt/--bdr, textos --t1/--t3, chrome #0578A6/#036690 e sombra de card.
-const S={bg:"var(--bg)",card:"var(--card)",cardSolid:"var(--card-solid)",cl:"var(--alt)",pri:"#0AAEE8",pl:"var(--link)",acc:"#12C265",gold:"#FFB020",dng:"#FB4B3A",purple:"#8B5CF6",cyan:"#06B6D4",txt:"var(--t1)",t2:"var(--t2)",ts:"var(--t3)",td:"var(--t4)",brd:"var(--bdr)",inp:"var(--inp)",inpBdr:"var(--inp-bdr)",ok:"#12C265",
-  chrome:"var(--chrome)",chromeTop:"var(--chrome-top)",chromeFg:"var(--chrome-fg)",chromeFg2:"var(--nav-fg)",chromeBdr:"var(--chrome-bdr)",
-  nav:"var(--nav-fg)",navGrp:"var(--nav-grp)",navActive:"var(--nav-active-bg)",navActiveFg:"var(--nav-active-fg)",navFg:"var(--nav-fg)",navHover:"var(--nav-hover)",
-  shadow:"var(--card-shadow)",track:"var(--track)",seam:"var(--seam-shadow)",contentShadow:"var(--content-shadow)",mono:"'IBM Plex Mono',ui-monospace,monospace"};
-// paleta de gráficos — idêntica ao Dashboard (theme.js → PC)
-const PC=["#0AAEE8","#06B6D4","#12C265","#FFB020","#8B5CF6","#FF4D8D","#FB4B3A","#06C281","#38C6F5","#A78BFA","#34D399","#F59E0B"];
-const fT=d=>new Date(d).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:TZ});
-const fD=d=>new Date(d).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:TZ});
-const fDS=d=>new Date(d).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",timeZone:TZ});
-const mins=(a,b)=>Math.max(0,Math.round((new Date(b)-new Date(a))/60000));
-const hrsMin=m=>m>=60?`${Math.floor(m/60)}h${(m%60).toString().padStart(2,"0")}`:`${m}min`;
-const hourDec=d=>{const t=new Date(d);return t.getHours()+t.getMinutes()/60;};
-const hav=(a,b,c,d)=>{const R=6371,x=((c-a)*Math.PI)/180,y=((d-b)*Math.PI)/180;const z=Math.sin(x/2)**2+Math.cos((a*Math.PI)/180)*Math.cos((c*Math.PI)/180)*Math.sin(y/2)**2;return R*2*Math.atan2(Math.sqrt(z),Math.sqrt(1-z));};
-function sL(k,f){try{return JSON.parse(localStorage.getItem(k))||f;}catch{return f;}}
-function sS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("sync:",e);}}
-// 2º parâmetro carrega a SESSÃO (o Worker injeta o token do Agendor no servidor)
-// Config (catálogos no D1 via Worker /api/config): usuários, segmentos, status, indústrias, origens
-async function cfgApi(token, method="GET", body=null){
-  const r=await fetch(`${API}/api/config`,{method,cache:"no-store",
-    headers:{"X-Session":token,"Content-Type":"application/json; charset=utf-8"},
-    ...(body?{body:JSON.stringify(body)}:{})});
-  if(!r.ok){let b="";try{b=await r.text();}catch{}const e=new Error(`config ${r.status}`);e.body=b;throw e;}
-  return r.json();
-}
-// Carrega catálogos do D1 (/api/config) e substitui as listas fixas. Chamado no sync → novos cadastros aparecem sozinhos.
-async function loadCatalogos(token){
-  try{
-    const d=await cfgApi(token,"GET");
-    const it=(d&&d.itens)||[];
-    const by=t=>it.filter(x=>x.tipo===t&&x.ativo!==0).sort((a,b)=>(a.ordem||0)-(b.ordem||0));
-    const st=by("status");
-    if(st.length){
-      CAT_IDS=st.map(x=>({id:x.agendor_id,n:x.nome}));
-      CATS=st.filter(x=>x.nome!=="Excluido").map(x=>x.nome);
-      CC=Object.fromEntries(st.map(x=>[x.nome,x.cor||"#78716C"]));
-    }
-    const sg=by("segmento");  if(sg.length)  SECTORS=sg.map(x=>({id:x.agendor_id,n:x.nome}));
-    const or=by("origem");    if(or.length)  ORIGINS=or.map(x=>({id:x.agendor_id,n:x.nome}));
-    const ind=by("industria");if(ind.length) BRANDS=ind.map(x=>x.nome);
-    const us=by("usuario");
-    if(us.length){
-      USERS=us.map(x=>({id:x.agendor_id,n:x.nome}));
-      const h={};
-      for(const x of us){let e={};try{e=JSON.parse(x.extra||"{}");}catch{} if(e.homeLat!=null&&e.homeLng!=null)h[x.agendor_id]={lat:e.homeLat,lng:e.homeLng,label:"Casa "+String(x.nome||"").split(" ")[0]};}
-      if(Object.keys(h).length) HOMES=h;
-    }
-    return true;
-  }catch(e){console.warn("catalogos:",e);return false;}
-}
-function trAg(m){const s=String(m||"").trim();const map=[[/contact email is invalid|email is invalid/i,"E-mail inválido (precisa ter @ e domínio)"],[/name is missing|name can't be blank/i,"Nome é obrigatório"],[/cnpj is invalid/i,"CNPJ inválido"],[/cnpj has already been taken/i,"CNPJ já cadastrado (pode estar na lixeira do Agendor)"],[/cpf is invalid/i,"CPF inválido"],[/cpf has already been taken/i,"CPF já cadastrado"],[/whatsapp.*invalid/i,"WhatsApp inválido"],[/(mobile|phone).*invalid/i,"Telefone inválido"],[/organization.*(missing|blank|required)/i,"Empresa é obrigatória"],[/has already been taken/i,"Já cadastrado no Agendor"],[/is missing|can't be blank|is required/i,"Campo obrigatório não preenchido"],[/is invalid/i,"Campo com formato inválido"]];for(const[re,pt]of map){if(re.test(s))return pt;}return s;}
-function agErr(e){let arr=[];if(e&&e.body){try{const j=JSON.parse(e.body);if(Array.isArray(j.errors))arr=j.errors.map(x=>typeof x==="string"?x:(x.message||x.field||JSON.stringify(x)));else if(j.message)arr=[j.message];else if(j.error)arr=[j.error];}catch{if(e.body)arr=[e.body];}}if(!arr.length){const m=(e&&e.message)||"Erro";arr=[/^\d{3}$/.test(m)?("Erro "+m+" (dados inválidos)"):m];}const pt=[...new Set(arr.map(trAg).filter(Boolean))];return pt.join(" · ");}
-function gps(){return new Promise((r,j)=>{if(!navigator.geolocation)return j(new Error("GPS"));navigator.geolocation.getCurrentPosition(p=>r({lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)}),j,{enableHighAccuracy:true,timeout:15000,maximumAge:0});});}
-async function roadKm(a,b,c,d){try{const r=await fetch(`${OSRM}/${b},${a};${d},${c}?overview=false`);const j=await r.json();if(j.code==="Ok"&&j.routes?.[0])return{km:j.routes[0].distance/1000,dur:Math.round(j.routes[0].duration/60)};}catch{}return{km:hav(a,b,c,d)*1.3,dur:0};}
-function csv(rows,fn){const b="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");Object.assign(document.createElement("a"),{href:URL.createObjectURL(new Blob([b],{type:"text/csv;charset=utf-8"})),download:fn}).click();}
-// ROBUST encoding fix: tries multiple strategies, picks the best result
-function fixMojibake(s){
-  if(!s||typeof s!=="string")return s;
-  // Quick path: if no high-bit chars or replacement char, return as-is
-  let hasIssue=false;
-  for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);if(c>=0x80){hasIssue=true;break;}}
-  if(!hasIssue)return s;
-  
-  const candidates=[s];
-  
-  // Strategy 1: U+FFFD replacement → known terms
-  if(s.indexOf("\uFFFD")>=0){
-    let r=s
-      .replace(/CONSTRU\uFFFD+O/gi,"CONSTRUÇÃO")
-      .replace(/CONSTRU\uFFFD+ES/gi,"CONSTRUÇÕES")
-      .replace(/MAT\uFFFDRIAS/gi,"MATÉRIAS")
-      .replace(/MAT\uFFFDRIA/gi,"MATÉRIA")
-      .replace(/PRE\uFFFDO/gi,"PREÇO")
-      .replace(/Cuiab\uFFFD/g,"Cuiabá")
-      .replace(/V\uFFFDrzea/g,"Várzea")
-      .replace(/Cap\uFFFDo/g,"Capão")
-      .replace(/Bel\uFFFDm/g,"Belém")
-      .replace(/Bras\uFFFDlia/g,"Brasília")
-      .replace(/J\uFFFDlio/g,"Júlio")
-      .replace(/Mour\uFFFDo/g,"Mourão")
-      .replace(/Guimar\uFFFDes/g,"Guimarães")
-      .replace(/Aren\uFFFDpolis/g,"Arenápolis")
-      .replace(/Campin\uFFFDpolis/g,"Campinápolis")
-      .replace(/Chapad\uFFFDo/g,"Chapadão")
-      .replace(/ALIAN\uFFFDA/g,"ALIANÇA")
-      .replace(/REPRESENTA\uFFFD\uFFFDES/gi,"REPRESENTAÇÕES")
-      .replace(/representa\uFFFD\uFFFDes/gi,"representações");
-    candidates.push(r);
-  }
-  
-  // Strategy 2: Treat as Latin-1, re-decode as UTF-8
-  try{
-    const bytes=new Uint8Array(s.length);
-    let allFit=true;
-    for(let i=0;i<s.length;i++){const c=s.charCodeAt(i);if(c>255){allFit=false;break;}bytes[i]=c;}
-    if(allFit){
-      const decoded=new TextDecoder("utf-8",{fatal:false}).decode(bytes);
-      candidates.push(decoded);
-    }
-  }catch{}
-  
-  // Strategy 3: Last-resort character substitutions for common Portuguese
-  let r3=s.replace(/\uFFFD/g,"a"); // Replace unknown with 'a' (most common vowel)
-  candidates.push(r3);
-  
-  // Pick best: fewest replacement chars, fewest control chars
-  let best=candidates[0],bestScore=-1;
-  for(const c of candidates){
-    if(!c||typeof c!=="string")continue;
-    let score=100;
-    score-=(c.match(/\uFFFD/g)||[]).length*20;
-    score-=(c.match(/[\x00-\x08\x0B-\x1F\x7F-\x9F]/g)||[]).length*10;
-    // Prefer Portuguese-looking results (has á, é, ç, ã, ô, etc)
-    if(/[áéíóúâêîôûãõçÁÉÍÓÚÂÊÎÔÛÃÕÇ]/.test(c))score+=15;
-    if(score>bestScore){bestScore=score;best=c;}
-  }
-  return best;
-}
-function strip(o){const a=o.address||{};const desc=fixMojibake(o.description||"");return{id:o.id,name:fixMojibake(o.name||""),nickname:fixMojibake(o.nickname||""),legalName:fixMojibake(o.legalName||""),cnpj:o.cnpj||"",cat:o.category?.name||"",sector:o.sector?.name||"",products:(o.products||[]).map(p=>p.name).join(", "),owner:o.ownerUser?.name||"",ownerId:o.ownerUser?.id||null,grupo:desc.startsWith("Grupo:")?desc:"",addr:{street:fixMojibake(a.streetName||a.street||""),number:a.streetNumber||a.number||"",district:fixMojibake(a.district||a.neighborhood||""),city:fixMojibake(a.city||""),city_name:fixMojibake(a.city_name||a.city||""),state:a.state||""},people:(o.people||[]).map(p=>p.name).join(", "),email:o.contact?.email||"",phone:o.contact?.whatsapp||o.contact?.work||o.contact?.mobile||"",ranking:o.ranking||0};}
-async function fetchCNPJ(cnpj){const clean=cnpj.replace(/[.\-\/]/g,"");try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);if(r.ok)return r.json();}catch{}const r2=await fetch(`${API}?cnpj=${clean}`);if(!r2.ok)throw new Error("CNPJ nao encontrado");return r2.json();}
-// ─── Helper: get base for date (backward compatible) ───
-function getBase(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBases[date];if(!b)return HOMES[userId]||null;if(b.start)return b.start;return b;}
-function getEnd(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBases[date];if(b?.end)return b.end;return getBase(dayBases,date,userId);}
-// ─── Helper: only real visits (check-in based, not WhatsApp/calls) ───
-function isRealVisit(v){if(!v.checkoutTime)return false;if(v.taskType&&v.taskType!=="VISITA")return false;if(v.divergent)return false;return true;}
-// ─── Helper: resolve GPS from visit directly OR from plocs by orgId ───
-function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs&&v.orgId&&plocs[v.orgId])return{lat:plocs[v.orgId].lat,lng:plocs[v.orgId].lng};return null;}
-function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
-const MIN_OBS=50;
+// TeamCheck — aba RelatorioTab
+import { useState, useMemo } from "react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { HOMES, toLocalDate, todayLocal, USERS, S, PC, fT, fD, fDS, mins, hrsMin, hav, csv, getBase, getEnd, getVCoord, getVEndCoord } from "../lib";
+import { BaseEditInline, Kpi, SegTabs, DateField } from "../components";
 
-export { API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS };
+function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
+  const[sd,setSd]=useState(todayLocal);// v41: inicial e final abrem no dia presente
+  const[ed,setEd]=useState(todayLocal());
+  const[selUser,setSelUser]=useState(()=>String(user.id));// id do usuário (default: eu)
+  const[editDay,setEditDay]=useState(null);
+  const isMe=String(selUser)===String(user.id);
+  const repUserId=isMe?user.id:selUser;
+  const repUserName=isMe?user.name:(USERS.find(u=>String(u.id)===String(selUser))?.n||"");
+  const nrm=s=>(s||"").toLowerCase().trim();
+  // DEFINITIVE: Use SAME visits array for both modes (KV-synced, single source of truth)
+  // Filtra por userName (o selo/registro). Visitas sem userName entram só em "Meus dados".
+  const pvAll=useMemo(()=>{
+    const filtered=visits.filter(v=>{
+      if(!v.checkoutTime)return false;
+      if(v.taskType&&v.taskType!=="VISITA")return false;
+      if(isMe){if(v.userName&&nrm(v.userName)!==nrm(user.name))return false;}
+      else{if(nrm(v.userName)!==nrm(repUserName))return false;}
+      const d=toLocalDate(v.checkinTime);
+      return d>=sd&&d<=ed;
+    });
+    const map=new Map();
+    for(const v of filtered){
+      const key=v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime);
+      const existing=map.get(key);
+      if(!existing){map.set(key,v);continue;}
+      const exDur=new Date(existing.checkoutTime)-new Date(existing.checkinTime);
+      const vDur=new Date(v.checkoutTime)-new Date(v.checkinTime);
+      if(vDur>exDur)map.set(key,v);
+    }
+    return Array.from(map.values()).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+  },[visits,sd,ed,selUser,user.name,user.id,repUserName]);
+  // pv = only VALID visits (used for counts, km, jornada)
+  const pv=useMemo(()=>pvAll.filter(v=>!v.divergent),[pvAll]);
+  // bdAll = grouped by day including divergent (for visual display with ⚠️ flag)
+  const bdAll=useMemo(()=>{const m={};pvAll.forEach(v=>{const k=toLocalDate(v.checkinTime);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pvAll]);
+  const bd=useMemo(()=>{const m={};pv.forEach(v=>{const k=toLocalDate(v.checkinTime);if(!m[k])m[k]=[];m[k].push(v);});return Object.entries(m).sort(([a],[b])=>b.localeCompare(a));},[pv]);
+  // base do dia: para outro usuário usa chave "userId_date"; para mim, resolução padrão
+  const getRepBase=(dt)=>{if(!isMe){const k=repUserId+"_"+dt;if(dayBases[k]?.start)return dayBases[k].start;if(dayBases[k])return dayBases[k];return HOMES[repUserId]||null;}return getBase(dayBases,dt,repUserId);};
+  const getRepEnd=(dt)=>{if(!isMe){const k=repUserId+"_"+dt;if(dayBases[k]?.end)return dayBases[k].end;return getRepBase(dt);}return getEnd(dayBases,dt,repUserId);};
+  // FIX: use repUserId (correct user) for base resolution
+  const calcDayKm=(dvs,dt)=>{if(!dvs?.length)return 0;let km=0;const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+    const b2=getRepBase(dt);const eb=getRepEnd(dt);
+    const fc=getVCoord(s[0],plocs);
+    if(b2&&fc)km+=hav(b2.lat,b2.lng,fc.lat,fc.lng)*1.3;
+    for(let i=1;i<s.length;i++){if(s[i].orgId===s[i-1].orgId)continue;const ca=getVEndCoord(s[i-1],plocs);const cb=getVCoord(s[i],plocs);if(ca&&cb)km+=hav(ca.lat,ca.lng,cb.lat,cb.lng)*1.3;}
+    const l=s[s.length-1];const endB=eb||b2;const lc=getVEndCoord(l,plocs);
+    if(endB&&lc)km+=hav(lc.lat,lc.lng,endB.lat,endB.lng)*1.3;
+    return km;};
+  // FIX: calculate km segments for detailed export
+  const calcSegKm=(dvs,dt)=>{if(!dvs?.length)return[];const s=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+    const b2=getRepBase(dt);const eb=getRepEnd(dt);
+    const segs=[];const fc=getVCoord(s[0],plocs);
+    segs.push(b2&&fc?hav(b2.lat,b2.lng,fc.lat,fc.lng)*1.3:0);// first: base→pdv
+    for(let i=1;i<s.length;i++){if(s[i].orgId===s[i-1].orgId){segs.push(0);continue;}
+      const ca=getVEndCoord(s[i-1],plocs);const cb=getVCoord(s[i],plocs);
+      segs.push(ca&&cb?hav(ca.lat,ca.lng,cb.lat,cb.lng)*1.3:0);}
+    return segs;};
+  const totKm=useMemo(()=>bd.reduce((acc,[dt,dvs])=>acc+calcDayKm(dvs,dt),0),[bd,dayBases,plocs,repUserId]);
+  const workH=bd.reduce((s,[,d])=>{if(!d||!d.length)return s;const sr=[...d].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));if(!sr[0]?.checkinTime||!sr[sr.length-1]?.checkoutTime)return s;const raw=mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime);return s+Math.max(0,raw-60);},0);
+  const mx=Math.max(1,...bd.map(([,v])=>v.length));
+    const firstCheckin=pv.length&&pv[0]?.checkinTime?fT(pv[0].checkinTime):"-";
+    const lastCheckout=pv.length&&pv[pv.length-1]?.checkoutTime?fT(pv[pv.length-1].checkoutTime):"-";
+    return(<div>
+    {user?.id===743088&&<div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+      <button onClick={()=>setSelUser(String(user.id))} style={{flex:"1 1 140px",textAlign:"center",padding:11,borderRadius:11,fontSize:13.5,fontWeight:isMe?600:500,background:S.card,border:isMe?`1.5px solid var(--chrome)`:`1px solid ${S.brd}`,color:isMe?S.pl:S.ts,cursor:"pointer"}}>Meus dados</button>
+      {USERS.filter(u=>String(u.id)!==String(user.id)).map(u=>{const on=String(selUser)===String(u.id);return <button key={u.id} onClick={()=>setSelUser(String(u.id))} style={{flex:"1 1 140px",textAlign:"center",padding:11,borderRadius:11,fontSize:13.5,fontWeight:on?600:500,background:S.card,border:on?`1.5px solid ${S.acc}`:`1px solid ${S.brd}`,color:on?S.acc:S.ts,cursor:"pointer"}}>{u.n}</button>;})}
+    </div>}
+    <div style={{display:"flex",gap:10,marginBottom:16,alignItems:"center"}}>
+      <DateField value={sd} onChange={setSd} today={todayLocal()} placeholder="Início" style={{flex:1}}/>
+      <span style={{color:S.ts,fontSize:13}}>até</span>
+      <DateField value={ed} onChange={setEd} today={todayLocal()} placeholder="Fim" style={{flex:1}}/>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
+      <Kpi k="Visitas" v={pv.length}/>
+      <Kpi k="Dias" v={bd.length}/>
+      <Kpi k="Jornada" v={hrsMin(workH)}/>
+      <Kpi k="Km" v={totKm.toFixed(0)} u="km"/>
+      <Kpi k="1º Check-in" v={firstCheckin}/>
+      <Kpi k="Último check-out" v={lastCheckout}/>
+    </div>
+    {/* Gráfico "Visitas por dia" — recharts, mesmo padrão do Overview do Dashboard */}
+    {bd.length>0&&(()=>{const chartData=[...bd].reverse().map(([dt,dvs])=>({d:fDS(dt+"T12:00"),v:dvs.length}));return(
+      <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px 8px",marginBottom:16}}>
+        <div style={{fontSize:14,fontWeight:600,color:S.txt,marginBottom:10}}>Visitas por dia</div>
+        <div style={{width:"100%",height:Math.max(180,Math.min(280,chartData.length*14+80))}}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} margin={{top:4,right:8,bottom:4,left:-22}}>
+              <CartesianGrid stroke={"rgba(var(--t3-rgb),.15)"} vertical={false}/>
+              <XAxis dataKey="d" tick={{fontSize:10,fill:"var(--t3)",fontFamily:"'IBM Plex Mono',monospace"}} axisLine={false} tickLine={false}/>
+              <YAxis allowDecimals={false} tick={{fontSize:10,fill:"var(--t3)",fontFamily:"'IBM Plex Mono',monospace"}} axisLine={false} tickLine={false}/>
+              <Tooltip cursor={{fill:"rgba(var(--t3-rgb),.08)"}} contentStyle={{background:"var(--card-solid)",border:`1px solid var(--bdr)`,borderRadius:10,fontSize:12,color:"var(--t1)"}} labelStyle={{color:"var(--t1)",fontWeight:600}} formatter={(v)=>[v,"Visitas"]}/>
+              <Bar dataKey="v" fill={PC[0]} radius={[4,4,0,0]} maxBarSize={34}/>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>);})()}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(340px,1fr))",gap:16,alignItems:"start"}}>
+    <div>
+{bd.length>0&&(isMe||user?.id===743088)&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"10px 14px",marginBottom:12}}>
+      <div style={{fontSize:14,fontWeight:600,color:S.txt,marginBottom:10}}>Origem / Destino {!isMe?`(${repUserName})`:""} por dia <span style={{fontSize:11,fontWeight:400,color:S.td}}>· toque para corrigir</span></div>
+      {bd.map(([dt])=>{const sb=getRepBase(dt);const eb=getRepEnd(dt);return(
+        <div key={dt} className="hr" onClick={()=>setEditDay(editDay===dt?null:dt)} style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8,padding:"9px 8px",borderRadius:8,cursor:"pointer"}}>
+          <span className="mono" style={{fontSize:12.5,fontWeight:600,color:S.t2}}>{fDS(dt+"T12:00")}</span>
+          <span style={{fontSize:12.5,color:S.pl,flex:1,textAlign:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{sb?.label||"Casa"} → {eb?.label||"Casa"}</span>
+          <span style={{width:28,height:28,borderRadius:7,border:`1px solid ${S.inpBdr}`,background:S.inp,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,flexShrink:0}}>✏️</span>
+        </div>);})}
+    </div>}
+    {editDay&&<BaseEditInline day={editDay} dayBases={dayBases} userId={repUserId} dayKey={!isMe?repUserId+"_"+editDay:editDay} plocs={plocs} lastVisitCoord={bd.find(([d])=>d===editDay)?getVEndCoord([...bd.find(([d])=>d===editDay)[1]].sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime))[0],plocs):null} onSave={(d,start,end)=>{onEditBase(d,start,end,!isMe?repUserId:null);setEditDay(null);}} onCancel={()=>setEditDay(null)}/>}
+    <div style={{display:"flex",gap:6,marginBottom:12}}>
+      {/* FIX: Export with correct user name and bases */}
+      <button onClick={()=>{const rows=[["Data","Vendedor","Origem","Destino","Visitas","Km","Jornada","Clientes"]];bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));if(!sr.length)return;const b2=getRepBase(dt);const eb=getRepEnd(dt);const dk=calcDayKm(dvs,dt);rows.push([fD(dt+"T12:00"),repUserName,b2?.label||"Casa",eb?.label||"Casa",dvs.length,dk.toFixed(1),hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)),dvs.map(v=>v.orgName).join(", ")]);});rows.push([],["TOTAL","","","",pv.length,totKm.toFixed(1),hrsMin(workH),""]);csv(rows,`km-${repUserName}-${sd}-${ed}.csv`);}} style={{flex:1,textAlign:"center",padding:9,borderRadius:8,fontSize:12.5,fontWeight:500,border:`1px solid ${S.inpBdr}`,color:S.t2,background:"transparent"}}>Exportar resumo</button>
+      {/* FIX: Detailed export with Km column */}
+      <button onClick={()=>{const rows=[["Data","In","Out","Min","Cliente","Cidade","Km Trecho","Tipo","Obs","Venda"]];
+        bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const segs=calcSegKm(sr,dt);const b2=getRepBase(dt);const eb=getRepEnd(dt);
+          sr.forEach((v,i)=>{const segKm=segs[i]||0;
+            rows.push([fD(v.checkinTime),fT(v.checkinTime),fT(v.checkoutTime),mins(v.checkinTime,v.checkoutTime),v.orgName,v.city||"",segKm>0?segKm.toFixed(1):"0",v.taskType||"VISITA",v.note||"",v.sale?`${v.sale.brand} R$${v.sale.value}`:""])});
+          const last=sr[sr.length-1];const lc=getVEndCoord(last,plocs);const endB=eb||b2;
+          if(endB&&lc){const retKm=hav(lc.lat,lc.lng,endB.lat,endB.lng)*1.3;rows.push([fD(dt+"T12:00"),"","","","→ "+(endB?.label||"Casa"),"",retKm.toFixed(1),"RETORNO","",""]);}
+        });
+        csv(rows,`visitas-${repUserName}-${sd}-${ed}.csv`);}} style={{flex:1,textAlign:"center",padding:9,borderRadius:8,fontSize:12.5,fontWeight:500,background:"var(--chrome)",color:"#fff",border:"none"}}>Exportar detalhado</button>
+    </div>
+    </div>
+{bd.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginBottom:12}}>
+      <div style={{fontSize:14,fontWeight:600,color:S.txt,marginBottom:12}}>Rotas por dia</div>
+      {bd.map(([dt,dvs])=>{
+        const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+        const sb=getRepBase(dt);const eb=getRepEnd(dt);
+        // Build waypoints from GPS
+        const waypoints=sr.map(v=>getVCoord(v,plocs)).filter(Boolean);
+        const uniqueWP=[];const seenOrg=new Set();
+        sr.forEach(v=>{const c=getVCoord(v,plocs);if(c&&!seenOrg.has(v.orgId)){uniqueWP.push(c);seenOrg.add(v.orgId);}});
+        const hasRoute=uniqueWP.length>0&&sb;
+        const mapsUrl=hasRoute?`https://www.google.com/maps/dir/${sb.lat},${sb.lng}/${uniqueWP.map(w=>`${w.lat},${w.lng}`).join("/")}${eb?`/${eb.lat},${eb.lng}`:""}`:"";
+        const dayKm=calcDayKm(dvs,dt);
+        return(<div key={dt} style={{marginBottom:10,paddingBottom:8,borderBottom:`1px solid ${S.brd}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+            <span className="mono" style={{fontSize:12,fontWeight:600,color:S.t2,width:46,textAlign:"right",flexShrink:0}}>{fDS(dt+"T12:00")}</span>
+            <div style={{flex:1,height:9,background:"var(--track)",borderRadius:6,overflow:"hidden"}}><div style={{height:"100%",width:`${(dvs.length/mx)*100}%`,background:"linear-gradient(90deg,#38C6F5,#0578A6)",borderRadius:6,minWidth:4}}/></div>
+            <span style={{fontSize:12.5,fontWeight:700,color:S.txt,width:18,textAlign:"right",flexShrink:0}}>{dvs.length}</span>
+          </div>
+          <div style={{display:"flex",gap:4,marginLeft:48}}>
+            <span className="mono" style={{fontSize:10.5,color:S.acc,fontWeight:500}}>{sr[0]?fT(sr[0].checkinTime):"-"}</span>
+            <span style={{fontSize:10,color:S.ts}}>{dayKm>0?`· ${dayKm.toFixed(0)}km`:""} · {sr.length>=1?hrsMin(mins(sr[0].checkinTime,sr[sr.length-1].checkoutTime)):"-"}</span>
+            {hasRoute&&<a href={mapsUrl} target="_blank" rel="noopener" style={{fontSize:10,color:S.acc,textDecoration:"none",fontWeight:600,marginLeft:"auto"}}>📍 Ver Rota</a>}
+          </div>
+          {/* Rota detalhada do dia */}
+          <div style={{marginLeft:48,marginTop:4}}>
+            {sb&&<span style={{fontSize:9,color:S.td,display:"block"}}>{sb.label||"Casa"} →</span>}
+            {sr.map((v,i)=>{const c=getVCoord(v,plocs);const samePrev=i>0&&v.orgId===sr[i-1].orgId;
+              return !samePrev&&<span key={i} style={{fontSize:9,color:c?S.pl:S.td,display:"inline"}}>{i>0?" → ":""}{v.orgName}{!c?" ⚠️":""}</span>;
+            })}
+            {eb&&<span style={{fontSize:9,color:S.td}}> → {eb.label||"Casa"}</span>}
+          </div>
+        </div>);
+      })}
+    </div>}
+  </div>
+  </div>);}
+
+export { RelatorioTab };
