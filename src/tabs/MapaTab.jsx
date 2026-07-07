@@ -2,7 +2,7 @@
 // Responsável pré-selecionado com o usuário logado, e ranking dos principais clientes (matriz RFV)
 // quando há filtros ativos. Card do cliente com distância, Traçar rota e Ficha (padrão Agendor).
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { Crosshair, X, Navigation, ContactRound, Trophy, Search } from "lucide-react";
+import { Crosshair, X, Navigation, ContactRound, Trophy, Search, Maximize2, Minimize2 } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
@@ -41,12 +41,14 @@ function clusterIcon(cluster) {
 }
 const RFV_CORES = { "Campeão": "#C8964E", "Leal": "#2A9D8F", "Em Crescimento": "#0AAEE8", "Em Risco": "#FFB020", "Inativo": "#FB4B3A" };
 
-function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv }) {
+function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
   const mapRef = useRef(null); const divRef = useRef(null); const layerRef = useRef(null); const meRef = useRef(null);
   const [sel, setSel] = useState(null);
   const [me, setMe] = useState(null); const [locLo, setLocLo] = useState(false);
   const [nPins, setNPins] = useState(0);
   const [soGps, setSoGps] = useState(false);
+  const [fs, setFs] = useState(false);            // v46: tela cheia
+  const [comExcluidos, setComExcluidos] = useState(false); // v46: mostrar excluídos
 
   // ── Filtros: os MESMOS de PDVs. Responsável já vem pré-selecionado com o usuário logado. ──
   const [search, setSearch] = useState("");
@@ -67,7 +69,8 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv }) {
   const limparTudo = () => { setCatSel([]); setUfSel([]); setCitySel([]); setSegSel([]); setOwnerSel([]); setGrupoSel([]); setFRfv([]); setFSr([]); setFInd([]); setSearch(""); setSoGps(false); };
 
   // Lista filtrada (mesma lógica de PDVs)
-  const filtrados = useMemo(() => { let list = orgs;
+  const baseOrgs = useMemo(() => comExcluidos ? [...orgs, ...(excl || []).map(o => ({ ...o, _exc: true }))] : orgs, [orgs, excl, comExcluidos]);
+  const filtrados = useMemo(() => { let list = baseOrgs;
     if (catSel.length) list = list.filter(o => catSel.includes(o.cat));
     if (ufSel.length) list = list.filter(o => ufSel.includes(o.addr?.state));
     if (citySel.length) list = list.filter(o => citySel.includes(o.addr?.city_name || o.addr?.city));
@@ -77,13 +80,13 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv }) {
     if (fRfv.length || fSr.length || fInd.length) { list = list.filter(o => { const r = rfvDe(o); if (!r) return false; if (fRfv.length && !fRfv.includes(r.rfv)) return false; if (fSr.length && !fSr.includes(r.status)) return false; if (fInd.length && !(r.inds || "").split(",").some(i => fInd.includes(i.trim()))) return false; return true; }); }
     if (search.trim()) { const q = search.toLowerCase().replace(/[.\-\/]/g, ""); const casa = o => [o.name, o.nickname, o.legalName, o.cnpj?.replace(/[.\-\/]/g, ""), o.addr?.city, o.addr?.city_name, o.addr?.district, o.addr?.state, o.cat, o.sector, o.products, o.people].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(q); list = list.filter(casa); }
     return list;
-  }, [orgs, search, catSel, ufSel, citySel, segSel, ownerSel, grupoSel, fRfv, fSr, fInd, rfvDe]);
+  }, [baseOrgs, search, catSel, ufSel, citySel, segSel, ownerSel, grupoSel, fRfv, fSr, fInd, rfvDe]);
 
   // Pontos no mapa: GPS real (exato) > estimativa por bairro/cidade (aprox)
   const pontos = useMemo(() => { const out = [];
     for (const o of filtrados) {
       const g = plocs?.[o.id];
-      if (g && g.lat != null) { out.push({ o, lat: g.lat, lng: g.lng, exato: true }); continue; }
+      if (g && g.lat != null) { out.push({ o, lat: g.lat, lng: g.lng, exato: true, geo: !!g.geo }); continue; }
       if (soGps) continue;
       const e = geoEstimate(o);
       if (e) { const [ja, jb] = jit(o.id); out.push({ o, lat: e[0] + ja, lng: e[1] + jb, exato: false }); }
@@ -103,7 +106,8 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv }) {
   // Init mapa
   useEffect(() => {
     if (!visible || mapRef.current || !divRef.current) return;
-    const m = L.map(divRef.current, { zoomControl: true, attributionControl: true }).setView([-15.60, -56.09], 11);
+    const m = L.map(divRef.current, { zoomControl: true, attributionControl: true, doubleClickZoom: false }).setView([-15.60, -56.09], 11);
+    m.on("dblclick", () => setFs(v => !v)); // v46: duplo clique alterna tela cheia
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
     layerRef.current = L.markerClusterGroup({
       showCoverageOnHover: false, maxClusterRadius: 52, spiderfyOnMaxZoom: true,
@@ -111,7 +115,8 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv }) {
     }).addTo(m);
     mapRef.current = m;
   }, [visible]);
-  useEffect(() => { if (visible && mapRef.current) setTimeout(() => mapRef.current.invalidateSize(), 60); }, [visible]);
+  useEffect(() => { if (visible && mapRef.current) setTimeout(() => mapRef.current.invalidateSize(), 60); }, [visible, fs]);
+  useEffect(() => { if (!fs) return; const h = (e) => { if (e.key === "Escape") setFs(false); }; window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [fs]);
 
   // (Re)desenhar pins
   useEffect(() => {
@@ -120,10 +125,10 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv }) {
     lg.clearLayers();
     const bounds = [];
     for (const p of pontos) {
-      const cor = CC[p.o.cat] || "#78716C";
+      const cor = p.o._exc ? "#57534E" : (CC[p.o.cat] || "#78716C");
       const mk = L.marker([p.lat, p.lng], { icon: pinIcon(cor, p.exato) });
       mk.on("click", () => setSel(p));
-      mk.bindTooltip((p.o.nickname || p.o.name || "") + (p.exato ? "" : " (aprox.)"), { direction: "top" });
+      mk.bindTooltip((p.o.nickname || p.o.name || "") + (p.o._exc ? " (excluído)" : "") + (p.exato ? "" : " (aprox.)"), { direction: "top" });
       lg.addLayer(mk);
       bounds.push([p.lat, p.lng]);
     }
@@ -169,20 +174,22 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv }) {
       </div>
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <button onClick={() => setSoGps(v => !v)} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: soGps ? 600 : 400, border: `1px solid ${soGps ? S.acc : S.inpBdr}`, background: soGps ? S.acc + "18" : S.inp, color: soGps ? S.acc : S.ts, cursor: "pointer" }}>📍 Só GPS exato</button>
+        <button onClick={() => setComExcluidos(v => !v)} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: comExcluidos ? 600 : 400, border: `1px solid ${comExcluidos ? S.dng : S.inpBdr}`, background: comExcluidos ? S.dng + "18" : S.inp, color: comExcluidos ? S.dng : S.ts, cursor: "pointer" }}>🗑 Mostrar excluídos{comExcluidos && excl ? ` (${(excl || []).length})` : ""}</button>
         <span style={{ fontSize: 11.5, color: S.ts, marginLeft: "auto" }}>Exibindo <b style={{ color: S.txt }}>{nPins}</b> de {orgs.length} no mapa · <b style={{ color: S.txt }}>{Object.keys(plocs || {}).length}</b> com GPS exato</span>
       </div>
     </div>
 
-    {/* ── Mapa ── */}
-    <div style={{ position: "relative", borderRadius: 14, overflow: "hidden", border: `1px solid ${S.brd}` }}>
-      <div ref={divRef} style={{ height: "min(56vh, 520px)", minHeight: 320, background: "#111a28" }} />
+    {/* ── Mapa (⛶ tela cheia: botão ou duplo clique) ── */}
+    <div style={fs ? { position: "fixed", inset: 0, zIndex: 80, background: "var(--bg)" } : { position: "relative", borderRadius: 14, overflow: "hidden", border: `1px solid ${S.brd}` }}>
+      <div ref={divRef} style={{ height: fs ? "100vh" : "min(56vh, 520px)", minHeight: fs ? undefined : 320, background: "#111a28" }} />
+      <button onClick={() => setFs(v => !v)} title={fs ? "Sair da tela cheia (Esc)" : "Tela cheia (ou duplo clique no mapa)"} style={{ position: "absolute", right: 12, bottom: fs ? 18 : 12, zIndex: 1001, width: 42, height: 42, borderRadius: 12, background: "var(--card-solid)", border: `1px solid ${S.brd}`, color: S.txt, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,.35)" }}>{fs ? <Minimize2 size={19} /> : <Maximize2 size={19} />}</button>
       {sel && <div style={{ position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 1000, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", boxShadow: "0 8px 28px rgba(0,0,0,.45)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span style={{ fontSize: 14.5, fontWeight: 700, color: S.txt }}>{sel.o.nickname || sel.o.name}</span>
               <span style={{ fontSize: 10, fontWeight: 700, color: "#fff", background: CC[sel.o.cat] || "#78716C", padding: "2px 8px", borderRadius: 6 }}>{sel.o.cat || "—"}</span>
-              {!sel.exato && <span style={{ fontSize: 10, color: S.gold, border: `1px solid ${S.gold}55`, padding: "1px 7px", borderRadius: 6 }}>local aproximado</span>}
+              {sel.o._exc && <span style={{ fontSize: 10, fontWeight: 700, color: "#fff", background: "#57534E", padding: "2px 8px", borderRadius: 6 }}>EXCLUÍDO</span>}{!sel.exato && <span style={{ fontSize: 10, color: S.gold, border: `1px solid ${S.gold}55`, padding: "1px 7px", borderRadius: 6 }}>local aproximado</span>}{sel.exato && sel.geo && <span style={{ fontSize: 10, color: S.pl, border: `1px solid ${S.pl}55`, padding: "1px 7px", borderRadius: 6 }} title="Localizado pelo endereço do cadastro — o primeiro check-in no local ajusta automaticamente">📍 por endereço</span>}
             </div>
             <div style={{ fontSize: 12, color: S.ts, marginTop: 4 }}>
               {[sel.o.addr?.street, sel.o.addr?.number].filter(Boolean).join(", ")}{sel.o.addr?.district ? ` · ${sel.o.addr.district}` : ""} · {sel.o.addr?.city_name || sel.o.addr?.city || ""}

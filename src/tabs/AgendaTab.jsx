@@ -15,6 +15,15 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
   const[customTo,setCustomTo]=useState(todayLocal);
   const[userFilter,setUserFilter]=useState(()=>user?.id?String(user.id):"all");// v43: já abre no usuário logado
   const[showAdd,setShowAdd]=useState(false);
+  const[showPart,setShowPart]=useState(false);const[pTxt,setPTxt]=useState("");const[pData,setPData]=useState(todayLocal());const[pHora,setPHora]=useState("09:00");const[pLo,setPLo]=useState(false);
+  const criarParticular=async()=>{if(!pTxt.trim()||!pData)return;setPLo(true);
+    try{
+      await fetch(`${DASH}/api/crm/atividades`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({tipo:"NOTA",texto:pTxt.trim(),origem:"particular",org_nome:"(Particular)",due_em:`${pData}T${pHora}:00-04:00`,user_id:user?.id,user_nome:user?.name})});
+      const u=gcalUrl({titulo:`🔒 ${pTxt.trim().slice(0,60)}`,detalhes:pTxt.trim(),inicio:`${pData}T${pHora}:00-04:00`});
+      if(u)window.open(u,"_blank","noopener");
+      setPTxt("");setShowPart(false);load();
+    }catch(e){alert("Erro: "+e.message);}
+    setPLo(false);};
   const load=async()=>{setLo(true);setErr("");try{
     // Fonte única = D1 (tarefas com prazo).
     let mapped=[];
@@ -58,7 +67,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
   const renderTask=(t)=><div key={t.id} style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:13,padding:"14px 16px",marginBottom:11,display:"flex",gap:16,alignItems:"center"}}>
     <div style={{flex:1,minWidth:0}}>
       <div style={{display:"flex",gap:9,alignItems:"center",flexWrap:"wrap",marginBottom:5}}>
-        <span style={{fontSize:10,letterSpacing:".05em",textTransform:"uppercase",fontWeight:700,color:"#fff",background:t.type==="Visita"?"var(--chrome)":t.type==="WhatsApp"?S.ok:t.type==="Ligação"||t.type==="LIGACAO"?S.cyan:S.purple,padding:"3px 8px",borderRadius:6}}>{t.type}</span>
+        <span style={{fontSize:10,letterSpacing:".05em",textTransform:"uppercase",fontWeight:700,color:"#fff",background:t.origem==="particular"?S.gold:t.type==="Visita"?"var(--chrome)":t.type==="WhatsApp"?S.ok:t.type==="Ligação"||t.type==="LIGACAO"?S.cyan:S.purple,padding:"3px 8px",borderRadius:6}}>{t.origem==="particular"?"🔒 Particular":t.type}</span>
         <span style={{fontSize:14,fontWeight:700,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.org}</span>
         {isAdmin&&<span style={{fontSize:10,color:S.acc,background:S.acc+"18",border:`1px solid ${S.acc}44`,padding:"2px 7px",borderRadius:6,fontWeight:600}}>{t.userName?.split(" ")[0]}</span>}
       </div>
@@ -85,6 +94,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
         <div style={{minWidth:210}}><SegTabs items={[["lista","📋 Lista"],["calendario","🗓️ Calendário"]]} value={view} onChange={setView} size={12.5}/></div>
         <button onClick={load} disabled={lo} style={{width:38,height:38,borderRadius:9,border:`1px solid ${S.inpBdr}`,background:S.inp,fontSize:14,padding:0}}>{lo?"…":"🔄"}</button>
         <button onClick={()=>setShowAdd(true)} style={{display:"flex",alignItems:"center",gap:7,background:"var(--chrome)",color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:500,cursor:"pointer"}}>+ Nova tarefa</button>
+        {isAdmin&&<button onClick={()=>setShowPart(true)} title="Compromisso particular — só você vê; vai para o Google Agenda" style={{display:"flex",alignItems:"center",gap:7,background:S.gold,color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:600,cursor:"pointer"}}>🔒 Particular</button>}
       </div>
     </div>
     {/* Barra de filtros (card padrão mockup) */}
@@ -122,6 +132,21 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
     </>}
     {/* Add Task Modal */}
     <TarefaModal open={showAdd} onClose={()=>setShowAdd(false)} token={token} user={user} allOrgs={allOrgs} onCreated={()=>{load();onCrmChange&&onCrmChange();}}/>
+    {showPart&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:70,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowPart(false)}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"var(--card-solid)",border:`1px solid ${S.brd}`,borderRadius:16,padding:"1.3rem",width:"100%",maxWidth:420}}>
+        <p style={{fontWeight:700,fontSize:15,margin:"0 0 4px"}}>🔒 Compromisso particular</p>
+        <p style={{fontSize:11.5,color:S.ts,margin:"0 0 12px"}}>Só você vê. Ao criar, abre automaticamente no Google Agenda para confirmar.</p>
+        <textarea rows={3} autoFocus placeholder="Ex.: Dentista, banco, reunião da escola..." value={pTxt} onChange={e=>setPTxt(e.target.value)} style={{width:"100%",boxSizing:"border-box",marginBottom:8}}/>
+        <div style={{display:"flex",gap:8,marginBottom:12}}>
+          <DateField value={pData} onChange={d=>setPData(d||todayLocal())} today={todayLocal()} style={{flex:1}}/>
+          <input type="time" value={pHora} onChange={e=>setPHora(e.target.value)} style={{width:110}}/>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>setShowPart(false)} style={{flex:1}}>Cancelar</button>
+          <button onClick={criarParticular} disabled={pLo||!pTxt.trim()} style={{flex:2,background:S.gold,border:"none",fontWeight:700,color:"#fff"}}>{pLo?"...":"Criar + Google Agenda"}</button>
+        </div>
+      </div>
+    </div>}
   </div>);}
 
 export { AgendaTab };
