@@ -13,7 +13,7 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
   const[period,setPeriod]=useState("all");// all | week | today | custom
   const[customFrom,setCustomFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return toLocalDate(d);});
   const[customTo,setCustomTo]=useState(todayLocal);
-  const[userFilter,setUserFilter]=useState("all");// "all" | id do usuário (dinâmico via catálogo)
+  const[userFilter,setUserFilter]=useState(()=>user?.id?String(user.id):"all");// v43: já abre no usuário logado
   const[showAdd,setShowAdd]=useState(false);
   const load=async()=>{setLo(true);setErr("");try{
     // Fonte única = D1 (tarefas com prazo).

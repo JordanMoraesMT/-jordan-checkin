@@ -20,6 +20,8 @@ export default function App(){
   useEffect(()=>{document.documentElement.dataset.theme=sL("jc:theme","dark");let m=document.querySelector("meta[name=theme-color]");if(!m){m=document.createElement("meta");m.name="theme-color";document.head.appendChild(m);}m.content="#0578A6";},[]);
   const[instEvt,setInstEvt]=useState(null);const[mapaLigado,setMapaLigado]=useState(false);
   useEffect(()=>{const h=(e)=>{e.preventDefault();setInstEvt(e);};window.addEventListener("beforeinstallprompt",h);return()=>window.removeEventListener("beforeinstallprompt",h);},[]);
+  // v43: auto-ajuste ao equipamento — telas estreitas ganham escala proporcional (some o "explodido")
+  useEffect(()=>{const fit=()=>{const w=window.innerWidth;const z=w<420?Math.max(0.8,Math.min(1,w/415)):1;document.body.style.zoom=z===1?"":String(z);};fit();window.addEventListener("resize",fit);return()=>{window.removeEventListener("resize",fit);document.body.style.zoom="";};},[]);
   const[token,setToken]=useState(()=>sL("jc:session",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);const[exclOrgs,setExclOrgs]=useState([]);
   const[visits,setVisits]=useState(()=>{const raw=sL("jc:visits",[]);const cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);const cut=cutoff.toISOString();const purged=raw.filter(v=>!v.checkinTime||v.checkinTime>=cut);if(purged.length<raw.length)console.log(`Purged ${raw.length-purged.length} visits >90d`);return purged;});const[active,setActive]=useState(()=>sL("jc:active",null));
   const[tab,setTab]=useState("pdvs");const[focusReq,setFocusReq]=useState(null);

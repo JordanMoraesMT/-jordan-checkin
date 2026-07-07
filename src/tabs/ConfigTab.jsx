@@ -1,6 +1,6 @@
 // TeamCheck — aba ConfigTab
 import { useState } from "react";
-import { HOMES, TZ, S, DASH, csv, getBase, getEnd, sL, sS } from "../lib";
+import { HOMES, TZ, S, DASH, API, csv, getBase, getEnd, sL, sS } from "../lib";
 import { HotelGeoInput, ProgressBar } from "../components";
 import { ConfigCatalogos } from "./ConfigCatalogos";
 
@@ -42,6 +42,21 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
   const[sub,setSub]=useState("acoes"); // acoes | cadastros
   const jaInstalado=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;
   const ehIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  // v43: reconstrói o GPS dos clientes a partir das coordenadas das visitas de campo (KV visits_*)
+  const[gpsRec,setGpsRec]=useState("");
+  const recuperaGps=async()=>{
+    const cand={};
+    (visits||[]).forEach(v=>{if(v.orgId&&v.lat&&v.lng&&!plocs[v.orgId]){if(!cand[v.orgId]||v.checkinTime>cand[v.orgId].t)cand[v.orgId]={lat:v.lat,lng:v.lng,t:v.checkinTime};}});
+    const ids=Object.keys(cand);
+    if(!ids.length){alert("Nenhuma localização nova encontrada nas visitas — tudo que as visitas têm já está salvo.");return;}
+    if(!confirm(`Encontrei ${ids.length} cliente(s) com GPS nas visitas antigas que NÃO está salvo hoje.\nRecuperar e salvar?`))return;
+    setGpsRec("Salvando 0/"+ids.length);
+    const np={...plocs};let n=0;
+    for(const oid of ids){const g=cand[oid];np[oid]={lat:g.lat,lng:g.lng};n++;setGpsRec(`Salvando ${n}/${ids.length}`);
+      try{await fetch(`${DASH}/api/crm/gps`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:Number(oid),lat:g.lat,lng:g.lng})});}catch(e){}}
+    try{await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:np})});}catch(e){}
+    setGpsRec("");onSyncPull&&onSyncPull();alert(`${ids.length} localização(ões) recuperadas! Abra o Mapa para conferir.`);
+  };
   const instalar=async()=>{
     if(instEvt){try{instEvt.prompt();const r=await instEvt.userChoice;if(r?.outcome==="accepted")alert("Aplicativo instalado! Procure o ícone TeamCheck na tela inicial.");}catch{}}
     else if(ehIOS)alert("No iPhone/iPad:\n1. Toque no botão Compartilhar (quadrado com seta) na barra do Safari\n2. Role e toque em \"Adicionar à Tela de Início\"\n3. Toque em \"Adicionar\"\n\nO TeamCheck vira um app com ícone próprio.");
@@ -70,7 +85,7 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
       <p style={{fontSize:12.5,color:S.t2,margin:0}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p className="mono" style={{fontSize:11.5,color:syncStatus.startsWith?.("Erro")?S.dng:S.pl,margin:"6px 0 0"}}>Sync {syncStatus||"aguardando..."}</p>
-      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v41</p>
+      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v43</p>
     </div>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
@@ -80,6 +95,7 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
       <ARow emo="🗺️" t="Definir jornada" d="Origem e destino do dia (casa, hotel...)" onClick={onShowDB}/>
       <ARow emo="🏨" t="Fechar roteiro do dia" d="Define o ponto final e conclui o dia" onClick={onShowEnd}/>
       <ARow emo={("Notification"in window&&Notification.permission==="granted")?"🔔":"🔕"} t={("Notification"in window&&Notification.permission==="granted")?"Notificações ativadas":"Ativar notificações"} d="Lembretes de tarefas agendadas" color={("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold} onClick={()=>{if(!("Notification"in window)){alert("Navegador nao suporta notificacoes");return;}Notification.requestPermission().then(p=>{if(p==="granted")alert("Notificacoes ativadas! Voce recebera lembretes de tarefas agendadas.");else alert("Notificacoes bloqueadas. Ative nas configuracoes do navegador.");});}}/>
+      {user?.role==="admin"&&<ARow emo="🛰️" t={gpsRec||"Recuperar GPS das visitas"} d="Reconstrói a localização de clientes (Sinop, Sorriso, Lucas, Nova Mutum...) a partir das coordenadas das visitas antigas" onClick={gpsRec?undefined:recuperaGps} disabled={!!gpsRec}/>}
       <ARow emo="📲" t={jaInstalado?"Aplicativo instalado ✓":"Instalar aplicativo no celular"} d={jaInstalado?"Você já está usando o TeamCheck instalado":"Ícone próprio na tela inicial — funciona como app (Android e iPhone)"} color={jaInstalado?S.ok:undefined} onClick={jaInstalado?undefined:instalar} disabled={jaInstalado}/>
 
       {/* Admin area (Jordan only) */}

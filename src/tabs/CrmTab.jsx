@@ -1,7 +1,7 @@
 // TeamCheck — Aba CRM (v14)
 // CRM próprio: histórico de atividades, contatos, fotos/arquivos da loja e GPS.
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check } from "lucide-react";
 import { S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, todayLocal } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
@@ -144,24 +144,49 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       setCttForm(null); carregaCtts();
     } catch (e) { alert("Erro: " + e.message); } };
   const delCtt = async (c) => { if (!confirm(`Excluir contato ${c.nome}?`)) return; try { await crm(token, `/api/crm/contatos?id=${c.id}`, { method: "DELETE" }); carregaCtts(); } catch (e) { alert("Erro: " + e.message); } };
+  // v42: vincular pessoa JÁ EXISTENTE (rede com comprador único — editar uma vez reflete em todas as lojas)
+  const [vincBusca, setVincBusca] = useState(null); // null | "" | texto
+  const [vincRes, setVincRes] = useState([]); const [vincLo, setVincLo] = useState(false);
+  useEffect(() => { if (vincBusca === null || vincBusca.trim().length < 2) { setVincRes([]); return; }
+    const t = setTimeout(async () => { setVincLo(true);
+      try { const d = await crm(token, "/api/crm/contatos-todos?limit=1500"); const q = vincBusca.trim().toLowerCase();
+        setVincRes((d.contatos || []).filter(c => c.id && !ctts.some(x => x.id === c.id) && [c.nome, c.cargo, c.org_nome, c.empresa, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ").toLowerCase().includes(q)).slice(0, 10));
+      } catch (e) { setVincRes([]); }
+      setVincLo(false); }, 300);
+    return () => clearTimeout(t); }, [vincBusca, ctts]);
+  const vincular = async (c) => { try { await crm(token, "/api/crm/contato-vincular", { method: "POST", body: JSON.stringify({ contato_id: c.id, org_id: org.id, cnpj: cnpjN || null }) }); setVincBusca(null); carregaCtts(); } catch (e) { alert("Erro: " + (e.body || e.message)); } };
+  const desvincular = async (c) => { if (!confirm(`Desvincular ${c.nome} desta empresa? (a pessoa continua nas demais)`)) return; try { await crm(token, `/api/crm/contato-vincular?contato_id=${c.id}&org_id=${org.id}`, { method: "DELETE" }); carregaCtts(); } catch (e) { alert("Erro: " + e.message); } };
 
   // ── arquivos/fotos ──
   const fotoRef = useRef(); const arqRef = useRef(); const [subindo, setSubindo] = useState("");
-  // v41: aceita VÁRIOS arquivos de uma vez (computador e celular) — envia em sequência com contador
+  // v41: vários arquivos de uma vez · v42: após o envio abre o campo de DESCRIÇÃO de cada um
+  const [descrevendo, setDescrevendo] = useState(null); // null | [{id, nome, descricao}]
   const upload = async (files) => { const lista = Array.from(files || []).filter(Boolean); if (!lista.length) return; setMsg("");
-    let falhas = 0;
+    let falhas = 0; const enviados = [];
     for (let i = 0; i < lista.length; i++) { const file = lista[i];
       setSubindo(lista.length > 1 ? `${i + 1}/${lista.length} — ${file.name}` : file.name);
       try { const f = await comprime(file);
         const fd = new FormData(); fd.append("file", f, f.name); fd.append("org_id", String(org.id)); if (cnpjN) fd.append("cnpj", cnpjN);
-        await crm(token, "/api/crm/arquivos", { method: "POST", body: fd });
+        const d = await crm(token, "/api/crm/arquivos", { method: "POST", body: fd });
+        if (d && d.id) enviados.push({ id: d.id, nome: f.name, descricao: "" });
       } catch (e) { falhas++; setMsg(`Upload de ${file.name}: ` + e.message); }
     }
     setSubindo(""); carregaArqs();
-    if (falhas && lista.length > 1) setMsg(`${lista.length - falhas} de ${lista.length} enviados — ${falhas} falharam.`); };
+    if (falhas && lista.length > 1) setMsg(`${lista.length - falhas} de ${lista.length} enviados — ${falhas} falharam.`);
+    if (enviados.length) setDescrevendo(enviados); };
+  const salvaDescricoes = async () => { const itens = descrevendo || [];
+    for (const it of itens) { if ((it.descricao || "").trim()) { try { await crm(token, "/api/crm/arquivos", { method: "PUT", body: JSON.stringify({ id: it.id, descricao: it.descricao.trim() }) }); } catch (e) { alert("Descrição de " + it.nome + ": " + e.message); } } }
+    setDescrevendo(null); carregaArqs(); };
+  const editaDescricao = async (a) => { const nova = prompt("Descrição do arquivo:", a.descricao || ""); if (nova === null) return;
+    try { await crm(token, "/api/crm/arquivos", { method: "PUT", body: JSON.stringify({ id: a.id, descricao: nova.trim() }) }); carregaArqs(); } catch (e) { alert("Erro: " + e.message); } };
   const delArq = async (a) => { if (!confirm(`Excluir ${a.nome}?`)) return; try { await crm(token, `/api/crm/arquivos?id=${a.id}`, { method: "DELETE" }); setArqs(p => p.filter(x => x.id !== a.id)); } catch (e) { alert("Erro: " + e.message); } };
   const baixaArq = async (a) => { try { const r = await fetch(`${DASH}/api/crm/arquivo?id=${a.id}`, { headers: { "X-Session": token } }); const b = await r.blob(); const u = URL.createObjectURL(b); const el = document.createElement("a"); el.href = u; el.download = a.nome || "arquivo"; el.click(); setTimeout(() => URL.revokeObjectURL(u), 5000); } catch (e) { alert("Erro: " + e.message); } };
   const [preview, setPreview] = useState(null);
+  // v42: navegação entre fotos pelas setas do teclado (e botões na tela)
+  const fotosOrd = useMemo(() => arqs.filter(a => a.tipo === "foto"), [arqs]);
+  const navFoto = useCallback((delta) => { setPreview(p => { if (!p) return p; const i = fotosOrd.findIndex(x => x.id === p.id); if (i < 0) return p; const j = (i + delta + fotosOrd.length) % fotosOrd.length; return fotosOrd[j]; }); }, [fotosOrd]);
+  useEffect(() => { if (!preview) return; const h = (e) => { if (e.key === "ArrowRight") { e.preventDefault(); navFoto(1); } else if (e.key === "ArrowLeft") { e.preventDefault(); navFoto(-1); } else if (e.key === "Escape") setPreview(null); };
+    window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [preview, navFoto]);
 
   // ── GPS ──
   const gpsD1 = info?.gps; const gpsKV = plocs?.[org.id];
@@ -213,6 +238,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
           <p style={{ margin: "4px 0 0", fontSize: 12, color: S.ts, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
             <MapPin size={12} />{org.addr?.city_name || org.addr?.city || "—"}{org.addr?.state ? "/" + org.addr.state : ""}
             {org.sector && <span>· {org.sector}</span>}{org.owner && <span>· Resp.: {org.owner}</span>}
+            {org.products && <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", verticalAlign: "middle" }}>{String(org.products).split(",").map(m => m.trim()).filter(Boolean).map(m => <span key={m} style={{ fontSize: 9.5, fontWeight: 700, color: S.gold, border: `1px solid ${S.gold}55`, padding: "1px 7px", borderRadius: 6 }}>{m}</span>)}</span>}
           </p>
           {org.cnpj && <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.td }}>CNPJ {fCnpj(org.cnpj)}</p>}
         </div>
@@ -285,7 +311,24 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
 
     {/* ── CONTATOS ── */}
     {sub === "ctt" && <div>
-      {!cttForm && <button onClick={() => setCttForm({ ...cttVazio })} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.acc, color: "#fff", border: "none", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, marginBottom: 10, cursor: "pointer" }}><Plus size={16} />Novo contato</button>}
+      {!cttForm && <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+        <button onClick={() => { setCttForm({ ...cttVazio }); setVincBusca(null); }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.acc, color: "#fff", border: "none", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Plus size={16} />Novo contato</button>
+        <button onClick={() => setVincBusca(vincBusca === null ? "" : null)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: vincBusca !== null ? S.pri : S.card, color: vincBusca !== null ? "#fff" : S.txt, border: vincBusca !== null ? "none" : `1px solid ${S.brd}`, borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>🔗 Vincular pessoa existente</button>
+      </div>}
+      {vincBusca !== null && !cttForm && <Crd>
+        <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 13.5 }}>Vincular pessoa de outra empresa</p>
+        <p style={{ margin: "0 0 8px", fontSize: 11.5, color: S.ts }}>Para redes com comprador único: a MESMA pessoa fica em várias lojas — editar os dados dela em qualquer loja atualiza todas.</p>
+        <input style={inp} autoFocus placeholder="Buscar por nome, cargo, empresa, telefone..." value={vincBusca} onChange={e => setVincBusca(e.target.value)} />
+        {vincLo && <p style={{ fontSize: 11.5, color: S.ts, margin: "8px 0 0" }}>Buscando...</p>}
+        {vincRes.map(c => <div key={c.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 4px", borderTop: `1px solid ${S.cl}` }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: S.txt }}>{c.nome}{c.cargo ? <span style={{ fontWeight: 400, color: S.ts }}> · {c.cargo}</span> : null}</p>
+            <p style={{ margin: 0, fontSize: 11, color: S.td }}>{[c.org_nome || c.empresa, c.whatsapp || c.telefone].filter(Boolean).join(" · ")}</p>
+          </div>
+          <button onClick={() => vincular(c)} style={{ background: S.pri, color: "#fff", border: "none", borderRadius: 8, padding: "7px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>Vincular</button>
+        </div>)}
+        {vincBusca.trim().length >= 2 && !vincLo && !vincRes.length && <p style={{ fontSize: 11.5, color: S.td, margin: "8px 0 0" }}>Ninguém encontrado. Cadastre como novo contato.</p>}
+      </Crd>}
       {cttForm && <Crd>
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}><p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{cttForm.id ? "Editar contato" : "Novo contato"}</p><button onClick={() => setCttForm(null)} style={{ background: "transparent", border: "none", cursor: "pointer" }}><X size={16} color={S.ts} /></button></div>
         <div style={{ display: "grid", gap: 8 }}>
@@ -305,7 +348,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       {ctts.map(c => <Crd key={c.id}>
         <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
           <div style={{ minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: S.txt }}>{c.nome}</p>
+            <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: S.txt }}>{c.nome}{c.vinculado ? <span style={{ marginLeft: 8, fontSize: 9.5, fontWeight: 700, color: S.pl, border: `1px solid ${S.pl}55`, padding: "2px 7px", borderRadius: 6, verticalAlign: "middle" }}>🔗 vinculada</span> : null}</p>
             {c.cargo && <p style={{ margin: "1px 0 0", fontSize: 12, color: S.ts }}>{c.cargo}</p>}
             {(c.telefone || c.whatsapp || c.email) && <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.td, wordBreak: "break-word" }}>{[c.telefone, c.whatsapp && "WA " + c.whatsapp, c.email].filter(Boolean).join(" · ")}</p>}
             {c.obs && <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.ts }}>{c.obs}</p>}
@@ -313,8 +356,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
           <div style={{ display: "flex", gap: 6, alignItems: "flex-start", flexShrink: 0 }}>
             {c.whatsapp && <a href={`https://wa.me/55${soDig(c.whatsapp)}`} target="_blank" rel="noopener noreferrer" style={{ width: 36, height: 36, borderRadius: 10, background: "#25D36622", display: "flex", alignItems: "center", justifyContent: "center" }}><MessageCircle size={17} color="#25D366" /></a>}
             {c.telefone && <a href={`tel:${soDig(c.telefone)}`} style={{ width: 36, height: 36, borderRadius: 10, background: S.pl + "22", display: "flex", alignItems: "center", justifyContent: "center" }}><Phone size={16} color={S.pl} /></a>}
-            <button onClick={() => setCttForm({ ...c })} style={{ width: 36, height: 36, borderRadius: 10, background: S.cl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Pencil size={14} color={S.ts} /></button>
-            <button onClick={() => delCtt(c)} style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>
+            <button onClick={() => setCttForm({ ...c })} title={c.vinculado ? "Editar (atualiza em TODAS as empresas vinculadas)" : "Editar"} style={{ width: 36, height: 36, borderRadius: 10, background: S.cl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Pencil size={14} color={S.ts} /></button>
+            <button onClick={() => c.vinculado ? desvincular(c) : delCtt(c)} title={c.vinculado ? "Desvincular desta empresa" : "Excluir contato"} style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>
           </div>
         </div>
       </Crd>)}
@@ -332,11 +375,14 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       {subindo && <p style={{ fontSize: 12, color: S.pri, margin: "0 0 8px" }}>Enviando {subindo}...</p>}
       {ldF && <p style={{ fontSize: 12, color: S.ts }}>Carregando arquivos...</p>}
       {!ldF && !arqs.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Nenhuma foto ou arquivo desta loja ainda.</p></Crd>}
-      {/* grade de fotos */}
-      {arqs.some(a => a.tipo === "foto") && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(105px, 1fr))", gap: 8, marginBottom: 12 }}>
-        {arqs.filter(a => a.tipo === "foto").map(a => <div key={a.id} style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${S.brd}`, background: S.cl, aspectRatio: "1" }}>
-          {thumbs[a.id] ? <img src={thumbs[a.id]} alt={a.nome} onClick={() => setPreview(a)} style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><Camera size={20} color={S.td} /></div>}
-          <button onClick={() => delArq(a)} style={{ position: "absolute", top: 4, right: 4, width: 26, height: 26, borderRadius: 8, background: "rgba(0,0,0,0.5)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={13} color="#fff" /></button>
+      {/* v42: fotos numa faixa horizontal rolável, com a descrição sob a miniatura */}
+      {fotosOrd.length > 0 && <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 10 }}>
+        {fotosOrd.map(a => <div key={a.id} style={{ flexShrink: 0, width: 130 }}>
+          <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${S.brd}`, background: S.cl, width: 130, height: 130 }}>
+            {thumbs[a.id] ? <img src={thumbs[a.id]} alt={a.nome} onClick={() => setPreview(a)} style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><Camera size={20} color={S.td} /></div>}
+            <button onClick={() => delArq(a)} style={{ position: "absolute", top: 4, right: 4, width: 26, height: 26, borderRadius: 8, background: "rgba(0,0,0,0.5)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={13} color="#fff" /></button>
+          </div>
+          <p onClick={() => editaDescricao(a)} title="Toque para editar a descrição" style={{ margin: "5px 1px 0", fontSize: 10.5, lineHeight: 1.35, color: a.descricao ? S.ts : S.td, cursor: "pointer", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontStyle: a.descricao ? "normal" : "italic" }}>{a.descricao || "＋ descrição"}</p>
         </div>)}
       </div>}
       {/* lista de arquivos não-imagem */}
@@ -344,14 +390,37 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
         <FileText size={18} color={S.pri} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: S.txt, wordBreak: "break-all" }}>{a.nome}</p>
+          {a.descricao && <p style={{ margin: "1px 0 0", fontSize: 11.5, color: S.ts }}>{a.descricao}</p>}
           <p style={{ margin: 0, fontSize: 11, color: S.td }}>{(a.tamanho / 1024).toFixed(0)} KB · {a.user_nome || "—"} · {fDH(a.criado_em)}</p>
         </div>
+        <button onClick={() => editaDescricao(a)} title="Descrição" style={{ width: 36, height: 36, borderRadius: 10, background: S.cl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Pencil size={14} color={S.ts} /></button>
         <button onClick={() => baixaArq(a)} style={{ width: 36, height: 36, borderRadius: 10, background: S.pl + "22", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Download size={15} color={S.pl} /></button>
         <button onClick={() => delArq(a)} style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>
       </Crd>)}
-      {preview && <div onClick={() => setPreview(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 60, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
-        <img src={thumbs[preview.id]} alt={preview.nome} style={{ maxWidth: "100%", maxHeight: "82vh", borderRadius: 10 }} />
-        <p style={{ color: "#fff", fontSize: 12, margin: "10px 0 0" }}>{preview.nome} · {preview.user_nome || "—"} · {fDH(preview.criado_em)} — toque para fechar</p>
+      {preview && <div onClick={() => setPreview(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 60, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <img src={thumbs[preview.id]} alt={preview.nome} onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "76vh", borderRadius: 10 }} />
+        {fotosOrd.length > 1 && <>
+          <button onClick={e => { e.stopPropagation(); navFoto(-1); }} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", width: 46, height: 46, borderRadius: "50%", background: "rgba(255,255,255,0.14)", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>‹</button>
+          <button onClick={e => { e.stopPropagation(); navFoto(1); }} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 46, height: 46, borderRadius: "50%", background: "rgba(255,255,255,0.14)", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>›</button>
+        </>}
+        {preview.descricao && <p style={{ color: "#fff", fontSize: 13.5, fontWeight: 600, margin: "12px 0 0", textAlign: "center", maxWidth: 640 }}>{preview.descricao}</p>}
+        <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 12, margin: "6px 0 0", textAlign: "center" }}>{fotosOrd.findIndex(x => x.id === preview.id) + 1} de {fotosOrd.length} · {preview.nome} · {preview.user_nome || "—"} · {fDH(preview.criado_em)}</p>
+        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, margin: "4px 0 0" }}>← → navegam · Esc ou toque fora fecha</p>
+      </div>}
+      {/* v42: modal de descrição pós-upload */}
+      {descrevendo && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <div style={{ background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 16, padding: "1.3rem", width: "100%", maxWidth: 460, maxHeight: "88vh", overflowY: "auto" }}>
+          <p style={{ fontWeight: 700, fontSize: 15, margin: "0 0 4px" }}>Descrever {descrevendo.length > 1 ? `os ${descrevendo.length} arquivos` : "o arquivo"}</p>
+          <p style={{ fontSize: 11.5, color: S.ts, margin: "0 0 12px" }}>A descrição aparece sob a miniatura e no visualizador. Pode deixar em branco.</p>
+          {descrevendo.map((it, i) => <div key={it.id} style={{ marginBottom: 10 }}>
+            <p style={{ margin: "0 0 4px", fontSize: 11, color: S.td, wordBreak: "break-all" }}>{it.nome}</p>
+            <input style={inp} autoFocus={i === 0} placeholder="Ex.: gôndola Tramontina reposta, fachada, nota fiscal..." value={it.descricao} onChange={e => setDescrevendo(p => p.map(x => x.id === it.id ? { ...x, descricao: e.target.value } : x))} onKeyDown={e => { if (e.key === "Enter" && i === descrevendo.length - 1) salvaDescricoes(); }} />
+          </div>)}
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button onClick={() => setDescrevendo(null)} style={{ flex: 1 }}>Pular</button>
+            <button onClick={salvaDescricoes} style={{ flex: 2, background: S.acc, border: "none", fontWeight: 600, color: "#fff" }}>Salvar descrições</button>
+          </div>
+        </div>
       </div>}
     </div>}
 
@@ -428,13 +497,13 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg }) {
   </div>);
 }
 
-function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
+function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user }) {
   const rfvDe = (o) => { if (!rfv) return null; const k = soDig(o.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; };
   const PREF = "jc:empresas-prefs";
   const p0 = sL(PREF, {});
   const arr = v => Array.isArray(v) ? v : [];
   const [q, setQ] = useState("");
-  const [fCat, setFCat] = useState(arr(p0.fCat)); const [fResp, setFResp] = useState(arr(p0.fResp));
+  const [fCat, setFCat] = useState(arr(p0.fCat)); const [fResp, setFResp] = useState(() => p0.fResp !== undefined ? arr(p0.fResp) : (user?.name ? [user.name] : []));/* v43: pré-seleção do usuário */
   const [fRfv, setFRfv] = useState(arr(p0.fRfv)); const [fGrp, setFGrp] = useState(arr(p0.fGrp)); const [fSr, setFSr] = useState(arr(p0.fSr)); const [fCid, setFCid] = useState(arr(p0.fCid)); // v41: Grupo no lugar da Curva ABC
   useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid]);
   const [ordem, setOrdem] = useState(1); // 1 = A→Z, -1 = Z→A
@@ -547,7 +616,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} />;
 
   return (<div>
-    {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
+    {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
     {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} />}
     {secao === "inicio" && <div>
     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>

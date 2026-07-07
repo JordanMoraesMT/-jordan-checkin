@@ -7,7 +7,7 @@ import { OrgCard, MultiSelect, DateField } from "../components";
 function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,onOpenFicha,focusReq,rfv,excl}){
   const[search,setSearch]=useState("");
   // Todos os filtros de seleção são multi-seleção (combináveis). Vazio = todos.
-  const[catSel,setCatSel]=useState([]);const[citySel,setCitySel]=useState([]);const[ufSel,setUfSel]=useState([]);const[segSel,setSegSel]=useState([]);const[ownerSel,setOwnerSel]=useState([]);const[grupoSel,setGrupoSel]=useState([]);
+  const[catSel,setCatSel]=useState([]);const[citySel,setCitySel]=useState([]);const[ufSel,setUfSel]=useState([]);const[segSel,setSegSel]=useState([]);const[ownerSel,setOwnerSel]=useState(()=>user?.name?[user.name]:[]);/* v43: Responsável já abre no usuário logado */const[grupoSel,setGrupoSel]=useState([]);
   const[fRfv,setFRfv]=useState([]);const[fSr,setFSr]=useState([]);const[fInd,setFInd]=useState([]);
   const[visitMode,setVisitMode]=useState("all");const[visitFrom,setVisitFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return toLocalDate(d);});const[visitTo,setVisitTo]=useState(todayLocal);
   const[nearMe,setNearMe]=useState(null);const[nearLoading,setNearLoading]=useState(false);const[nearRoad,setNearRoad]=useState({});const[sortMode,setSortMode]=useState("alpha");

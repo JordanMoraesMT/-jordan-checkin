@@ -5,6 +5,8 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Crosshair, X, Navigation, ContactRound, Trophy, Search } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
 import { S, CC, CATS, USERS, SECTORS, hav, gps, geoEstimate, fixMojibake } from "../lib";
 import { MultiSelect } from "../components";
 
@@ -18,6 +20,25 @@ function jit(id, amp = 0.004) {
 }
 const fmtKm = (km) => km == null ? "" : km < 1 ? `${Math.round(km * 1000)} m` : `${km.toFixed(1).replace(".", ",")} km`;
 const ORD = { "Campeão": 5, "Leal": 4, "Em Crescimento": 3, "Em Risco": 2, "Inativo": 1 };
+// Pin no formato clássico de ponto de localização (gota), maior, na cor do status
+function pinIcon(cor, exato) {
+  const op = exato ? 1 : 0.62;
+  const svg = `<svg width="34" height="44" viewBox="0 0 34 44" xmlns="http://www.w3.org/2000/svg">
+    <path d="M17 1C8.2 1 1 8.1 1 16.8 1 28.4 17 43 17 43S33 28.4 33 16.8C33 8.1 25.8 1 17 1Z"
+      fill="${cor}" fill-opacity="${op}" stroke="#fff" stroke-width="2.4"${exato ? "" : ` stroke-dasharray="4 3"`}/>
+    <circle cx="17" cy="16.5" r="6.2" fill="#fff" fill-opacity="${exato ? 1 : 0.85}"/>
+  </svg>`;
+  return L.divIcon({ html: svg, className: "tc-pin", iconSize: [34, 44], iconAnchor: [17, 43], tooltipAnchor: [0, -40] });
+}
+// Bolha do agrupamento com a CONTAGEM TOTAL do filtro (padrão Agendor)
+function clusterIcon(cluster) {
+  const n = cluster.getChildCount();
+  const d = n >= 100 ? 52 : n >= 10 ? 46 : 40;
+  return L.divIcon({
+    html: `<div style="width:${d}px;height:${d}px;border-radius:50%;background:#0578A6;border:3px solid #fff;box-shadow:0 2px 10px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:${n >= 100 ? 14 : 13.5}px;font-family:Roboto,sans-serif">${n}</div>`,
+    className: "tc-cluster", iconSize: [d, d], iconAnchor: [d / 2, d / 2],
+  });
+}
 const RFV_CORES = { "Campeão": "#C8964E", "Leal": "#2A9D8F", "Em Crescimento": "#0AAEE8", "Em Risco": "#FFB020", "Inativo": "#FB4B3A" };
 
 function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv }) {
@@ -84,7 +105,10 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv }) {
     if (!visible || mapRef.current || !divRef.current) return;
     const m = L.map(divRef.current, { zoomControl: true, attributionControl: true }).setView([-15.60, -56.09], 11);
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
-    layerRef.current = L.layerGroup().addTo(m);
+    layerRef.current = L.markerClusterGroup({
+      showCoverageOnHover: false, maxClusterRadius: 52, spiderfyOnMaxZoom: true,
+      iconCreateFunction: clusterIcon,
+    }).addTo(m);
     mapRef.current = m;
   }, [visible]);
   useEffect(() => { if (visible && mapRef.current) setTimeout(() => mapRef.current.invalidateSize(), 60); }, [visible]);
@@ -97,10 +121,10 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv }) {
     const bounds = [];
     for (const p of pontos) {
       const cor = CC[p.o.cat] || "#78716C";
-      const mk = L.circleMarker([p.lat, p.lng], { radius: p.exato ? 8 : 6, color: "#fff", weight: p.exato ? 2 : 1.2, fillColor: cor, fillOpacity: p.exato ? 0.95 : 0.55, dashArray: p.exato ? null : "2 3" });
+      const mk = L.marker([p.lat, p.lng], { icon: pinIcon(cor, p.exato) });
       mk.on("click", () => setSel(p));
-      mk.bindTooltip((p.o.nickname || p.o.name || "") + (p.exato ? "" : " (aprox.)"), { direction: "top", offset: [0, -6] });
-      mk.addTo(lg);
+      mk.bindTooltip((p.o.nickname || p.o.name || "") + (p.exato ? "" : " (aprox.)"), { direction: "top" });
+      lg.addLayer(mk);
       bounds.push([p.lat, p.lng]);
     }
     setNPins(pontos.length);
