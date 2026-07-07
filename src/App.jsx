@@ -22,6 +22,9 @@ export default function App(){
   useEffect(()=>{const h=(e)=>{e.preventDefault();setInstEvt(e);};window.addEventListener("beforeinstallprompt",h);return()=>window.removeEventListener("beforeinstallprompt",h);},[]);
   // v43: auto-ajuste ao equipamento — telas estreitas ganham escala proporcional (some o "explodido")
   useEffect(()=>{const fit=()=>{const w=window.innerWidth;const z=w<420?Math.max(0.8,Math.min(1,w/415)):1;document.body.style.zoom=z===1?"":String(z);};fit();window.addEventListener("resize",fit);return()=>{window.removeEventListener("resize",fit);document.body.style.zoom="";};},[]);
+  const setSSOCookie=(t)=>{try{const base="ses="+encodeURIComponent(t)+"; path=/; max-age=2592000; samesite=lax";document.cookie=base+"; domain=.jordanmt.com; secure";document.cookie=base;}catch{}};
+  const clearSSOCookie=()=>{try{document.cookie="ses=; path=/; max-age=0; domain=.jordanmt.com";document.cookie="ses=; path=/; max-age=0";}catch{}};
+  const readCookie=(n)=>{try{const m=document.cookie.match(new RegExp("(?:^|; )"+n+"=([^;]+)"));return m?decodeURIComponent(m[1]):"";}catch{return "";}};
   const[token,setToken]=useState(()=>sL("jc:session",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);const[exclOrgs,setExclOrgs]=useState([]);
   const[visits,setVisits]=useState(()=>{const raw=sL("jc:visits",[]);const cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);const cut=cutoff.toISOString();let purged=raw.filter(v=>!v.checkinTime||v.checkinTime>=cut);if(purged.length<raw.length)console.log(`Purged ${raw.length-purged.length} visits >90d`);
     // visitas reconstruídas em versões antigas ficaram com UTC cru ("YYYY-MM-DD HH:MM:SS") — corrigir formato
@@ -43,6 +46,8 @@ export default function App(){
   const[showDB,setShowDB]=useState(false);const[showEndDay,setShowEndDay]=useState(false);const[equipeSel,setEquipeSel]=useState(todayLocal());const[rotasSel,setRotasSel]=useState(todayLocal());
 
   useEffect(()=>{sS("jc:visits",visits);},[visits]);useEffect(()=>{sS("jc:active",active);},[active]);useEffect(()=>{sS("jc:pdvLocs",plocs);},[plocs]);useEffect(()=>{sS("jc:dayBases",dayBases);syncDayBasesSave(dayBases);},[dayBases]);
+  // SSO: sem sessão local mas com cookie "ses" (ex.: logou no Dashboard) → entra sozinho
+  useEffect(()=>{if(token&&user)return;const c=readCookie("ses");if(!c)return;(async()=>{try{const r=await fetch(`${API}/me`,{headers:{"X-Session":c}});const d=await r.json().catch(()=>({}));if(r.ok&&d&&d.ok){setToken(c);const u={id:d.userId,name:d.name,role:d.role,email:d.email};setUser(u);sS("jc:session",c);sS("jc:user",u);}}catch{}})();},[]);
   // Auto-clear cache once after v13.5 upgrade to remove old corrupted cached responses
   useEffect(()=>{if(!localStorage.getItem("jc:cleaned_v135")){(async()=>{try{if("caches" in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister();}}catch{}localStorage.setItem("jc:cleaned_v135","1");if(token&&user)setTimeout(()=>doSync(),500);})();}},[]);
   // Auto-atualização v19: PWAs antigos seguram o service worker velho e mostram o app desatualizado.
@@ -172,34 +177,29 @@ export default function App(){
   const crmGps=(orgId,cnpj,g)=>{try{fetch(`${DASH_CRM}/api/crm/gps`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:orgId,cnpj:cnpj||null,lat:g.lat,lng:g.lng,precisao:g.acc})}).catch(()=>{});}catch{}};
   const quickAction=async(org,type)=>{const note=prompt(`Registrar ${type==="WHATSAPP"?"WhatsApp":"Ligacao"} com ${org.name}:`);if(!note?.trim())return;try{crmLog({org_id:org.id,cnpj:(org.cnpj||"").replace(/\D/g,"")||null,org_nome:org.nickname||org.name,tipo:type,texto:note});alert("Registrado!");}catch(e){alert("Erro: "+e.message);}};
 
-  const checkin=async(org)=>{ensureBase();if(org.cat==="Online - B2B"&&!confirm(`${org.name} e Online/B2B.\nRegistrar visita?`))return;if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\nContinuar?`))return;if(org.cat==="Excluido"&&!confirm(`${org.name} esta Excluido.\nContinuar?`))return;setLdId(org.id);setGeoErr("");try{const g=await gps();if(plocs[org.id]&&!plocs[org.id].geo){const d=hav(plocs[org.id].lat,plocs[org.id].lng,g.lat,g.lng)*1000;if(d>500){setDivTarget({org,dist:Math.round(d),geo:g});setLdId(null);return;}}else{/* sem GPS OU só geocodificado por endereço: o check-in real assume a localização */const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);crmGps(org.id,(org.cnpj||"").replace(/\D/g,""),g);}const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}catch{setGeoErr("GPS indisponivel.");}setLdId(null);};
+  const checkin=async(org)=>{ensureBase();if(org.cat==="Online - B2B"&&!confirm(`${org.name} e Online/B2B.\nRegistrar visita?`))return;if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\nContinuar?`))return;if(org.cat==="Excluido"&&!confirm(`${org.name} esta Excluido.\nContinuar?`))return;setLdId(org.id);setGeoErr("");try{const g=await gps();if(plocs[org.id]&&!plocs[org.id].geo){const d=hav(plocs[org.id].lat,plocs[org.id].lng,g.lat,g.lng)*1000;if(d>800&&(g.acc==null||g.acc<=120)){setDivTarget({org,dist:Math.round(d),geo:g});setLdId(null);return;}else if(d>800){/* GPS impreciso: não bloqueia, mas corrige a posição salva */const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);crmGps(org.id,(org.cnpj||"").replace(/\D/g,""),g);}}else{/* sem GPS OU só geocodificado por endereço: o check-in real assume a localização */const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);crmGps(org.id,(org.cnpj||"").replace(/\D/g,""),g);}const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}catch{setGeoErr("GPS indisponivel.");}setLdId(null);};
   const handleDivAction=(action,type)=>{if(!divTarget)return;const{org,geo}=divTarget;if(action==="checkin"){const v={orgId:org.id,orgName:org.name,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:geo.lat,lng:geo.lng,accuracy:geo.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}else if(action==="remote"&&type)setCoTarget({...org,remoteType:type});setDivTarget(null);};
   const checkout=async(note,type="VISITA",next=null,sale=null)=>{if(!active||ldId)return;setLdId(active.orgId);let g=null;try{g=await gps();}catch{}
-    // Detect divergent checkout: GPS far from registered client location
+    // Checkout: só sinaliza divergência se a referência for GPS REAL (não geocodificada por endereço)
+    // e ainda assim GRAVA a visita (a flag é só informativa) — a régua de endereço não é confiável p/ bloquear.
     let divergent=false,divDist=0;
     if(g){
-      const ref=plocs[active.orgId]||{lat:active.lat,lng:active.lng};
-      if(ref&&ref.lat&&ref.lng){divDist=Math.round(hav(ref.lat,ref.lng,g.lat,g.lng)*1000);if(divDist>500)divergent=true;}
+      const ref=plocs[active.orgId];
+      if(ref&&!ref.geo&&ref.lat&&ref.lng){divDist=Math.round(hav(ref.lat,ref.lng,g.lat,g.lng)*1000);if(divDist>800&&(g.acc==null||g.acc<=120))divergent=true;}
     }
     const done={...active,checkoutTime:new Date().toISOString(),checkoutLat:g?.lat,checkoutLng:g?.lng,note,taskType:type,sale,divergent,divDist};
-    // Só grava (D1 + KV) se NÃO for divergente
-    if(!divergent){
-      done.synced=true;
-      // v24: checkout gravado só no D1 (fonte de verdade). Sem Agendor.
-      const oRef=(allOrgs||[]).find(o=>o.id===active.orgId);const cnpjRef=oRef?(oRef.cnpj||"").replace(/\D/g,""):null;
-      crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:""),lat:g?.lat,lng:g?.lng,origem:"checkout"});
-      // Próximo passo → tarefa com prazo no D1 (aparece na Agenda). Tipo validado p/ CRM_TIPOS do Worker.
-      if(next?.nextDate&&next?.nextDesc){const nt=(next.nextType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(nt)?nt:"VISITA";crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:tipoOk,texto:next.nextDesc,origem:"tarefa",due_em:`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`});}
-      syncVisitSave(done);
-    }else{done.synced=false;}
-    // Save locally (even divergent, for visual flag)
+    // SEMPRE grava (D1 + KV). A visita conta no relatório; "divergent" é só um selo de conferência.
+    done.synced=true;
+    const oRef=(allOrgs||[]).find(o=>o.id===active.orgId);const cnpjRef=oRef?(oRef.cnpj||"").replace(/\D/g,""):null;
+    crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:""),lat:g?.lat,lng:g?.lng,origem:"checkout"});
+    if(next?.nextDate&&next?.nextDesc){const nt=(next.nextType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(nt)?nt:"VISITA";crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:tipoOk,texto:next.nextDesc,origem:"tarefa",due_em:`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`});}
+    syncVisitSave(done);
     setVisits(p=>[done,...p]);setActive(null);syncClear();setCoTarget(null);setLdId(null);
-    // Alert AFTER UI is cleared (non-blocking flow)
-    if(divergent)setTimeout(()=>alert(`⚠️ CHECKOUT DESLOCADO\nVocê está a ${divDist}m do local cadastrado.\n\nEsta visita NÃO foi registrada e NÃO contará no relatório (visita e km).\n\nFica marcada com ⚠️ apenas para conferência.`),100);
+    if(divergent)setTimeout(()=>alert(`ℹ️ Visita registrada.\nO GPS ficou a ${divDist}m do ponto salvo do cliente — a visita foi gravada normalmente e conta no relatório; fica só um selo ⚠️ para você conferir o cadastro depois.`),100);
     else if(next?.nextDate&&next?.nextDesc)setTimeout(()=>alert("Proximo passo agendado!"),100);
   };
 
-  if(!token||!user)return <Login onLogin={(t,u)=>{setToken(t);setUser(u);sS("jc:session",t);sS("jc:user",u);}}/>;
+  if(!token||!user)return <Login onLogin={(t,u)=>{setToken(t);setUser(u);sS("jc:session",t);sS("jc:user",u);setSSOCookie(t);}}/>;
 
   // ─── Navegação: grupos iguais ao Dashboard (sidebar) + lista plana (bottom nav mobile) ───
   const isAdmin=user?.id===743088;
@@ -215,7 +215,7 @@ export default function App(){
   const tabs=isAdmin?[...baseTabs.slice(0,4),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(4)]:baseTabs;
   const navAtivo=(id)=>id.startsWith("crm")?tab.startsWith("crm"):tab===id;
   const irPara=(id)=>{if(id==="mapa")setMapaLigado(true);setTab(id);if(mob)setNavOpen(false);};
-  const sair=()=>{setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);};
+  const sair=()=>{setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);clearSSOCookie();};
   const dataHoje=fD(new Date());
 
   return(<div style={{display:"flex",height:"100vh",overflow:"hidden",background:S.chrome,color:S.txt,fontFamily:"'Roboto',sans-serif"}}>

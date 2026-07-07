@@ -153,7 +153,7 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
 
   const dist = sel && me ? hav(me.lat, me.lng, sel.lat, sel.lng) : null;
 
-  return (<div style={{ display: visible ? "block" : "none" }}>
+  return (<div style={{ display: visible ? "block" : "none", maxWidth: "100%", overflowX: "hidden", boxSizing: "border-box" }}>
     {/* ── Card de filtros (mesmo padrão de PDVs) ── */}
     <div style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 14, padding: "14px 14px 12px", marginBottom: 14 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, background: S.inp, border: `1px solid ${S.inpBdr}`, borderRadius: 10, padding: "2px 12px", marginBottom: 11 }}>
@@ -161,7 +161,7 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Nome, razão social, CNPJ, cidade, segmento…" style={{ flex: 1, border: "none", background: "transparent", padding: "9px 0" }} />
       </div>
       <div style={{ display: "flex", gap: 8, marginBottom: 11, alignItems: "center", flexWrap: "wrap" }}>
-        <MultiSelect values={catSel} onChange={setCatSel} placeholder="Status" allLabel="Todos" style={{ flex: 1, minWidth: 200 }} colorFor={c => CC[c] || S.pri} options={CATS} />
+        <MultiSelect values={catSel} onChange={setCatSel} placeholder="Status" allLabel="Todos" style={{ flex: 1, minWidth: mob ? 130 : 200 }} colorFor={c => CC[c] || S.pri} options={CATS} />
         <button onClick={ondeEstou} disabled={locLo} style={{ display: "flex", alignItems: "center", gap: 6, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "9px 13px", fontSize: 12.5, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}><Crosshair size={15} />{locLo ? "Localizando..." : "Onde estou"}</button>
         <button onClick={limparTudo} style={{ padding: "8px 13px", fontSize: 12, border: `1px solid ${S.dng}44`, color: S.dng, borderRadius: 10, background: "transparent", whiteSpace: "nowrap", cursor: "pointer" }}>✕ Limpar</button>
       </div>
@@ -178,7 +178,7 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
       <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <button onClick={() => setSoGps(v => !v)} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: soGps ? 600 : 400, border: `1px solid ${soGps ? S.acc : S.inpBdr}`, background: soGps ? S.acc + "18" : S.inp, color: soGps ? S.acc : S.ts, cursor: "pointer" }}>📍 Só GPS exato</button>
         <button onClick={() => setComExcluidos(v => !v)} style={{ padding: "6px 12px", borderRadius: 8, fontSize: 11.5, fontWeight: comExcluidos ? 600 : 400, border: `1px solid ${comExcluidos ? S.dng : S.inpBdr}`, background: comExcluidos ? S.dng + "18" : S.inp, color: comExcluidos ? S.dng : S.ts, cursor: "pointer" }}>🗑 Mostrar excluídos{comExcluidos && excl ? ` (${(excl || []).length})` : ""}</button>
-        <span style={{ fontSize: 11.5, color: S.ts, marginLeft: "auto" }}>Exibindo <b style={{ color: S.txt }}>{nPins}</b> de {orgs.length} no mapa · <b style={{ color: S.txt }}>{Object.keys(plocs || {}).length}</b> com GPS exato</span>
+        <span style={{ fontSize: 11.5, color: S.ts, marginLeft: mob ? 0 : "auto", flexBasis: mob ? "100%" : "auto" }}>Exibindo <b style={{ color: S.txt }}>{nPins}</b> de {orgs.length} no mapa · <b style={{ color: S.txt }}>{Object.keys(plocs || {}).length}</b> com GPS exato</span>
       </div>
     </div>
 
@@ -186,7 +186,11 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
     <div style={fs ? { position: "fixed", inset: 0, zIndex: 80, background: "var(--bg)" } : { position: "relative", borderRadius: 14, overflow: "hidden", border: `1px solid ${S.brd}` }}>
       <div ref={divRef} style={{ height: fs ? "100vh" : "min(56vh, 520px)", minHeight: fs ? undefined : 320, background: "#111a28" }} />
       <button onClick={() => setFs(v => !v)} title={fs ? "Sair da tela cheia (Esc)" : "Tela cheia (ou duplo clique no mapa)"} style={{ position: "absolute", right: 12, bottom: fs ? 18 : 12, zIndex: 1001, width: 42, height: 42, borderRadius: 12, background: "var(--card-solid)", border: `1px solid ${S.brd}`, color: S.txt, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,.35)" }}>{fs ? <Minimize2 size={19} /> : <Maximize2 size={19} />}</button>
-      {sel && <div style={mob && !fs ? { position: "fixed", left: 10, right: 10, bottom: 86, zIndex: 1000, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", boxShadow: "0 8px 28px rgba(0,0,0,.45)" } : { position: "absolute", left: 10, right: 10, bottom: fs && mob ? 16 : 10, zIndex: 1000, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", boxShadow: "0 8px 28px rgba(0,0,0,.45)" }}>
+      {sel && <div style={
+        mob
+          ? { position: "fixed", left: 10, right: 10, bottom: fs ? "calc(env(safe-area-inset-bottom, 0px) + 16px)" : "calc(env(safe-area-inset-bottom, 0px) + 74px)", zIndex: 2000, maxHeight: "42vh", overflowY: "auto", background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", boxShadow: "0 8px 28px rgba(0,0,0,.55)" }
+          : { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 1000, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", boxShadow: "0 8px 28px rgba(0,0,0,.45)" }
+      }>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>

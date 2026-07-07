@@ -9,24 +9,26 @@ export function JordanLogo({color="currentColor",height=46,style={}}){const w=Ma
 
 const LB=({t,children})=><div style={{marginBottom:6}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px",textTransform:"uppercase",letterSpacing:.5}}>{t}</p>{children}</div>;
 function Login({onLogin}){
-  const[mode,setMode]=useState("login");
-  const[email,setEmail]=useState("");const[pw,setPw]=useState("");
+  const SS=(k,d)=>{try{const v=sessionStorage.getItem(k);return v==null?d:v;}catch{return d;}};
+  const[mode,setMode0]=useState(()=>SS("tc:lmode","login"));
+  const setMode=m=>{try{sessionStorage.setItem("tc:lmode",m);}catch{}setMode0(m);};
+  const[email,setEmail0]=useState(()=>SS("tc:lemail",""));const setEmail=v=>{try{sessionStorage.setItem("tc:lemail",v);}catch{}setEmail0(v);};const[pw,setPw]=useState("");
   const[code,setCode]=useState("");const[np,setNp]=useState("");const[np2,setNp2]=useState("");
   const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[ok,setOk]=useState("");
   const post=async(ep,b)=>{const r=await fetch(`${API}/${ep}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});const d=await r.json().catch(()=>({}));return{r,d};};
-  const doLogin=async()=>{if(!email.trim()||!pw)return;setLo(true);setEr("");try{const{r,d}=await post("login",{email:email.trim().toLowerCase(),password:pw});if(r.ok&&d.ok&&d.session)onLogin(d.session,{id:d.userId,name:d.name,role:d.role,email:d.email});else setEr(d.error||"E-mail ou senha incorretos.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};
+  const doLogin=async()=>{if(!email.trim()||!pw)return;setLo(true);setEr("");try{const{r,d}=await post("login",{email:email.trim().toLowerCase(),password:pw});if(r.ok&&d.ok&&d.session){try{sessionStorage.removeItem("tc:lmode");sessionStorage.removeItem("tc:lemail");}catch{}onLogin(d.session,{id:d.userId,name:d.name,role:d.role,email:d.email});}else setEr(d.error||"E-mail ou senha incorretos.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};
   const doForgot=async()=>{if(!email.trim())return;setLo(true);setEr("");setOk("");try{const{r,d}=await post("forgot",{email:email.trim().toLowerCase()});if(r.ok&&d.ok){setMode("reset");setOk("Se o e-mail estiver cadastrado, enviamos um código de 6 dígitos.");}else setEr(d.error||"Não consegui enviar o código agora.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};
   const doReset=async()=>{if(!code.trim()||!np)return;if(np!==np2){setEr("As senhas não conferem.");return;}if(np.length<8){setEr("A nova senha precisa ter ao menos 8 caracteres.");return;}setLo(true);setEr("");setOk("");try{const{r,d}=await post("reset",{email:email.trim().toLowerCase(),code:code.trim(),password:np});if(r.ok&&d.ok){setMode("login");setPw("");setCode("");setNp("");setNp2("");setOk("Senha redefinida! Entre com a nova senha.");}else setEr(d.error||"Não foi possível redefinir.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};
   const nav=m=>{setEr("");setOk("");setMode(m);};
   const linkStyle={background:"none",border:"none",color:S.pri,fontSize:13,cursor:"pointer",padding:0,textDecoration:"underline"};
   return(<div style={{position:"fixed",inset:0,zIndex:100,background:"radial-gradient(120% 120% at 20% 0%,#0A8FC2 0%,#0578A6 45%,#024E6E 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Roboto',sans-serif",padding:16,overflowY:"auto"}}>
-    <div style={{width:380,maxWidth:"100%",background:"var(--card-solid)",borderRadius:20,boxShadow:"0 40px 80px -30px rgba(2,30,45,.7),0 0 0 1px rgba(255,255,255,.06)",padding:"38px 34px 32px",textAlign:"left"}}>
-    <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:26}}>
-      <JordanLogo color={S.pl} height={64} style={{marginBottom:12}}/>
-      <div style={{fontSize:24,fontWeight:700,letterSpacing:".02em",color:S.txt}}>TeamCheck</div>
+    <div style={{width:380,maxWidth:"100%",background:"#fff",borderRadius:20,boxShadow:"0 40px 80px -30px rgba(2,30,45,.7)",overflow:"hidden",textAlign:"left"}}>
+    <div style={{background:"#0F1B2D",display:"flex",flexDirection:"column",alignItems:"center",padding:"26px 34px 20px"}}>
+      <JordanLogo color="#4FC3E8" height={54}/>
+      <div style={{fontSize:22,fontWeight:700,letterSpacing:".02em",color:"#fff",marginTop:8}}>TeamCheck</div>
       <div style={{fontSize:12,color:S.ts,marginTop:4}}>Representação Inteligente · Jordan Representações</div>
     </div>
-    <div>
+    <div style={{padding:"24px 30px 26px","--t":"#1B2B3C","--t2":"#4A5A6B","--inp":"#EEF3F8","--inp-bdr":"#D5DEE8"}}>
       {mode==="login"&&<>
         <LB t="E-MAIL"><input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doLogin()}/></LB>
         <LB t="SENHA"><input type="password" autoComplete="current-password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Sua senha" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doLogin()}/></LB>
@@ -50,7 +52,6 @@ function Login({onLogin}){
       {er&&<p style={{fontSize:13,color:S.dng,marginTop:12,textAlign:"center"}}>{er}</p>}
       {ok&&<p style={{fontSize:13,color:S.ok||S.acc,marginTop:12,textAlign:"center"}}>{ok}</p>}
     </div>
-    <div style={{textAlign:"center",fontSize:11,color:S.td,marginTop:20}}>197 tentativas até dar certo 🏆</div>
     </div>
   </div>);
 }
