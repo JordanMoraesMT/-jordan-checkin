@@ -7,6 +7,61 @@ import { crmFire, API, DASH, HOMES, todayLocal, gcalUrl, TYPES, USERS, BRANDS, S
 const JLOGO=`<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" viewBox="0 0 424 192"><defs><path id="c" d="M.316.251A.28.28 0 0 0 .255.057.2.2 0 0 0 .09-.012.2.2 0 0 0 .012 0v.109a.13.13 0 0 1 .072-.02Q.2.09.2.27V.7h.116z"/><path id="d" d="M.295-.012a.25.25 0 0 0-.184.07.25.25 0 0 0-.07.186q0 .126.073.197.071.07.194.07A.24.24 0 0 0 .49.444.27.27 0 0 0 .556.252.26.26 0 0 0 .486.06a.25.25 0 0 0-.19-.072M.3.421A.13.13 0 0 1 .196.375.2.2 0 0 1 .157.247q0-.078.04-.124A.13.13 0 0 1 .3.078q.067 0 .103.045.035.044.035.126a.2.2 0 0 1-.035.127A.12.12 0 0 1 .3.421"/><path id="e" d="M.364.392a.1.1 0 0 1-.06.016.1.1 0 0 1-.083-.045.2.2 0 0 1-.034-.124V0H.074v.5h.113V.397h.002A.2.2 0 0 0 .24.479q.035.03.077.03.03 0 .047-.01z"/><path id="f" d="M.528 0H.415v.085H.413a.18.18 0 0 0-.168-.097.18.18 0 0 0-.148.067.28.28 0 0 0-.055.183q0 .125.06.199a.2.2 0 0 0 .164.075q.1 0 .147-.081h.002v.31h.113zM.417.229v.065a.13.13 0 0 1-.035.09.12.12 0 0 1-.089.037.12.12 0 0 1-.1-.047.2.2 0 0 1-.036-.131q0-.076.035-.12A.11.11 0 0 1 .286.077Q.344.077.38.12a.16.16 0 0 1 .037.108"/><path id="g" d="M.458 0h-.11v.078H.346a.17.17 0 0 0-.152-.09.16.16 0 0 0-.116.04.14.14 0 0 0-.041.106Q.037.277.2.3l.148.02q0 .107-.101.107A.24.24 0 0 1 .085.366v.099a.35.35 0 0 0 .183.047q.19 0 .19-.187zm-.11.246L.243.23A.2.2 0 0 1 .17.207Q.145.19.145.147q0-.032.023-.053a.1.1 0 0 1 .06-.02q.053 0 .086.037a.13.13 0 0 1 .034.091z"/><path id="h" d="M.519 0H.406v.282q0 .14-.1.14A.1.1 0 0 1 .222.383.14.14 0 0 1 .188.285V0H.074v.5h.114V.417h.001a.18.18 0 0 0 .163.095q.08 0 .124-.053A.24.24 0 0 0 .52.306z"/><path id="i" d="M.627 0H.492L.38.188.35.231a.2.2 0 0 1-.029.03.1.1 0 0 1-.032.017.1.1 0 0 1-.04.005H.202V0H.086v.7h.23A.3.3 0 0 0 .409.688.2.2 0 0 0 .48.653.2.2 0 0 0 .528.594.2.2 0 0 0 .545.511a.2.2 0 0 0-.01-.068.18.18 0 0 0-.08-.096A.2.2 0 0 0 .39.32V.318A.2.2 0 0 0 .423.295a.5.5 0 0 0 .08-.098zM.202.606V.378H.3q.027 0 .05.009a.1.1 0 0 1 .065.062.1.1 0 0 1 .009.05.1.1 0 0 1-.032.079Q.36.606.3.606z"/><path id="j" d="M.497.22h-.34A.14.14 0 0 1 .198.111.16.16 0 0 1 .311.075q.08 0 .147.048V.03a.34.34 0 0 0-.18-.043.22.22 0 0 0-.174.068.27.27 0 0 0-.062.192q0 .117.069.19a.23.23 0 0 0 .171.074.2.2 0 0 0 .159-.066.27.27 0 0 0 .056-.183zM.387.3q0 .062-.028.095A.1.1 0 0 1 .28.428.11.11 0 0 1 .198.393.16.16 0 0 1 .156.299z"/><path id="l" d="M.189.074H.187V-.23H.074V.5h.113V.412h.002q.058.1.17.1A.18.18 0 0 0 .507.445a.28.28 0 0 0 .054-.18Q.56.14.5.065A.2.2 0 0 0 .335-.01.16.16 0 0 0 .19.074M.186.27V.209q0-.054.035-.093A.12.12 0 0 1 .31.078q.063 0 .098.05a.23.23 0 0 1 .036.136.18.18 0 0 1-.033.116.11.11 0 0 1-.09.041.12.12 0 0 1-.098-.043.16.16 0 0 1-.037-.107"/><path id="m" d="M.042.016V.12a.23.23 0 0 1 .14-.049q.103 0 .103.06a.05.05 0 0 1-.009.03.1.1 0 0 1-.023.021L.218.2.172.216.117.242a.2.2 0 0 0-.041.031.1.1 0 0 0-.025.04.1.1 0 0 0-.008.05Q.043.4.06.428a.2.2 0 0 0 .046.047.2.2 0 0 0 .065.028.34.34 0 0 0 .2-.011v-.1a.2.2 0 0 1-.16.032.1.1 0 0 1-.03-.012L.163.393.156.369q0-.016.007-.027a.1.1 0 0 1 .02-.02L.215.305.258.29.316.263A.2.2 0 0 0 .36.233.12.12 0 0 0 .397.137.12.12 0 0 0 .38.072.2.2 0 0 0 .333.025a.2.2 0 0 0-.068-.028.4.4 0 0 0-.08-.009.34.34 0 0 0-.143.028"/><path id="n" d="M.337.005A.2.2 0 0 0 .25-.01q-.146 0-.146.14v.28H.021V.5h.083v.116l.114.032V.5h.12V.411h-.12v-.25q0-.044.016-.063t.054-.02q.028 0 .05.017z"/><path id="o" d="M.432.023A.3.3 0 0 0 .29-.012a.24.24 0 0 0-.18.07.25.25 0 0 0-.068.18q0 .124.073.199t.197.075a.3.3 0 0 0 .12-.024V.382a.2.2 0 0 1-.111.04.16.16 0 0 1-.118-.05.18.18 0 0 1-.046-.126A.17.17 0 0 1 .2.123.15.15 0 0 1 .316.078q.062 0 .116.044zM.392-.12q0-.095-.142-.095-.022 0-.04.002v.054l.036-.003q.065 0 .065.04 0 .036-.06.036L.232-.088V0H.3v-.046q.042 0 .067-.02A.07.07 0 0 0 .391-.12"/><path id="p" d="M.458 0h-.11v.078H.346a.17.17 0 0 0-.152-.09.16.16 0 0 0-.116.04.14.14 0 0 0-.041.106Q.037.277.2.3l.148.02q0 .107-.101.107A.24.24 0 0 1 .085.366v.099a.35.35 0 0 0 .183.047q.19 0 .19-.187zm-.11.246L.243.23A.2.2 0 0 1 .17.207Q.145.19.145.147q0-.032.023-.053a.1.1 0 0 1 .06-.02q.053 0 .086.037a.13.13 0 0 1 .034.091zM.426.72A.16.16 0 0 0 .4.628.08.08 0 0 0 .333.592a.2.2 0 0 0-.081.023.13.13 0 0 1-.06.022q-.04 0-.04-.054H.096q0 .059.025.093a.08.08 0 0 0 .07.035.16.16 0 0 0 .076-.025.1.1 0 0 1 .061-.021q.04 0 .04.055z"/><path id="q" d="M.206 0h-.12v.7h.12z"/><path id="r" d="M.188 0H.074v.74h.114z"/><path id="s" d="M.13.605a.07.07 0 0 0-.047.018.06.06 0 0 0-.02.046q0 .027.02.046.02.02.048.019A.07.07 0 0 0 .18.715.06.06 0 0 0 .2.67.06.06 0 0 0 .18.624.07.07 0 0 0 .13.605M.188 0H.074v.5h.113z"/><path id="t" d="M.529.04q0-.275-.277-.275a.4.4 0 0 0-.17.032v.104a.3.3 0 0 1 .155-.047q.18 0 .179.175v.055H.414a.18.18 0 0 0-.17-.096q-.09 0-.147.067a.27.27 0 0 0-.055.179q0 .127.06.203a.2.2 0 0 0 .165.075A.16.16 0 0 0 .414.43h.002V.5h.113zM.417.229v.065a.13.13 0 0 1-.035.09.11.11 0 0 1-.088.037.12.12 0 0 1-.1-.047A.2.2 0 0 1 .157.24q0-.075.035-.118A.11.11 0 0 1 .285.079Q.343.079.38.12a.16.16 0 0 1 .037.108"/><path id="u" d="M.372.278q0-.141-.065-.216Q.242-.011.118-.011a.3.3 0 0 0-.102.019v.148a.15.15 0 0 1 .09-.031q.11 0 .109.16V.7h.157z"/><path id="v" d="M.376-.012q-.15 0-.245.098A.35.35 0 0 0 .036.34q0 .166.096.268.097.103.255.103.15 0 .243-.098A.36.36 0 0 0 .722.355.37.37 0 0 0 .626.089a.33.33 0 0 0-.25-.101m.007.588Q.299.576.25.514A.26.26 0 0 1 .202.349q0-.104.049-.164A.16.16 0 0 1 .379.124q.08 0 .13.059.047.06.047.163 0 .11-.046.17a.15.15 0 0 1-.127.06"/><path id="w" d="M.667 0h-.18l-.11.18-.046.064a.1.1 0 0 1-.024.018L.28.268H.238V0H.08v.7h.25Q.585.7.585.51A.2.2 0 0 0 .542.386a.2.2 0 0 0-.05-.043.3.3 0 0 0-.064-.028V.313a.1.1 0 0 0 .03-.016L.486.271a.4.4 0 0 0 .05-.064zm-.43.582V.387h.07q.05 0 .08.03Q.42.447.42.49q0 .092-.11.092z"/><path id="x" d="M.08 0v.7h.248Q.701.7.701.36A.35.35 0 0 0 .6.098.38.38 0 0 0 .33 0zm.158.572V.128h.078q.102 0 .16.061a.23.23 0 0 1 .06.168q0 .101-.059.157a.22.22 0 0 1-.162.058z"/><path id="y" d="M.696 0H.524l-.05.156H.225L.175 0h-.17L.26.7h.187zM.438.277.363.512A.3.3 0 0 0 .35.575H.347a.3.3 0 0 0-.012-.06L.259.276z"/><path id="z" d="M.71 0H.55L.263.44.227.498H.225Q.23.461.23.385V0H.08v.7h.17L.528.274.563.217h.002A1 1 0 0 0 .56.313V.7h.15z"/><clipPath id="a"><path d="M0 192h424V0H0Z" clip-rule="evenodd"/></clipPath><clipPath id="b"><path d="M-508-28H932v291H-508Z" clip-rule="evenodd"/></clipPath></defs><g clip-path="url(#a)"><g clip-path="url(#b)"><use xlink:href="#c" fill="currentColor" data-text="J" transform="matrix(22.5 0 0 -22.5 35.645 227)"/><use xlink:href="#d" fill="currentColor" data-text="o" transform="matrix(22.5 0 0 -22.5 44.94 227)"/><use xlink:href="#e" fill="currentColor" data-text="r" transform="matrix(22.5 0 0 -22.5 58.752 227)"/><use xlink:href="#f" fill="currentColor" data-text="d" transform="matrix(22.5 0 0 -22.5 67.257 227)"/><use xlink:href="#g" fill="currentColor" data-text="a" transform="matrix(22.5 0 0 -22.5 81.189 227)"/><use xlink:href="#h" fill="currentColor" data-text="n" transform="matrix(22.5 0 0 -22.5 93.308 227)"/><use xlink:href="#i" fill="currentColor" data-text="R" transform="matrix(22.5 0 0 -22.5 113.372 227)"/><use xlink:href="#j" fill="currentColor" data-text="e" transform="matrix(22.5 0 0 -22.5 127.161 227)"/><use xlink:href="#l" fill="currentColor" data-text="p" transform="matrix(22.5 0 0 -22.5 139.49 227)"/><use xlink:href="#e" fill="currentColor" data-text="r" transform="matrix(22.5 0 0 -22.5 153.422 227)"/><use xlink:href="#j" fill="currentColor" data-text="e" transform="matrix(22.5 0 0 -22.5 161.927 227)"/><use xlink:href="#m" fill="currentColor" data-text="s" transform="matrix(22.5 0 0 -22.5 174.255 227)"/><use xlink:href="#j" fill="currentColor" data-text="e" transform="matrix(22.5 0 0 -22.5 184.33 227)"/><use xlink:href="#h" fill="currentColor" data-text="n" transform="matrix(22.5 0 0 -22.5 196.659 227)"/><use xlink:href="#n" fill="currentColor" data-text="t" transform="matrix(22.5 0 0 -22.5 210.162 227)"/><use xlink:href="#g" fill="currentColor" data-text="a" transform="matrix(22.5 0 0 -22.5 218.667 227)"/><use xlink:href="#o" fill="currentColor" data-text="ç" transform="matrix(22.5 0 0 -22.5 230.787 227)"/><use xlink:href="#p" fill="currentColor" data-text="ã" transform="matrix(22.5 0 0 -22.5 241.741 227)"/><use xlink:href="#d" fill="currentColor" data-text="o" transform="matrix(22.5 0 0 -22.5 253.86 227)"/><use xlink:href="#q" fill="currentColor" data-text="I" transform="matrix(22.5 0 0 -22.5 274.232 227)"/><use xlink:href="#h" fill="currentColor" data-text="n" transform="matrix(22.5 0 0 -22.5 281.166 227)"/><use xlink:href="#n" fill="currentColor" data-text="t" transform="matrix(22.5 0 0 -22.5 294.67 227)"/><use xlink:href="#j" fill="currentColor" data-text="e" transform="matrix(22.5 0 0 -22.5 303.043 227)"/><use xlink:href="#r" fill="currentColor" data-text="l" transform="matrix(22.5 0 0 -22.5 315.371 227)"/><use xlink:href="#s" fill="currentColor" data-text="i" transform="matrix(22.5 0 0 -22.5 321.624 227)"/><use xlink:href="#t" fill="currentColor" data-text="g" transform="matrix(22.5 0 0 -22.5 327.876 227)"/><use xlink:href="#j" fill="currentColor" data-text="e" transform="matrix(22.5 0 0 -22.5 341.809 227)"/><use xlink:href="#h" fill="currentColor" data-text="n" transform="matrix(22.5 0 0 -22.5 354.137 227)"/><use xlink:href="#n" fill="currentColor" data-text="t" transform="matrix(22.5 0 0 -22.5 367.64 227)"/><use xlink:href="#j" fill="currentColor" data-text="e" transform="matrix(22.5 0 0 -22.5 376.013 227)"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="16.5" d="M80.75 170.75a75 75 0 0 1-50.367-19.429 75 75 0 0 1-24.272-48.22A75 75 0 0 1 20.51 51.073a75 75 0 0 1 31.54-24.614 75 75 0 0 1 28.7-5.709H281m62.25 0a75 75 0 0 1 47.58 17.024 75 75 0 0 1 25.172 39.752 75 75 0 0 1 1.887 25.575 75 75 0 0 1-6.84 24.716 75 75 0 0 1-20.22 25.909 75 75 0 0 1-47.579 17.024H143"/><path fill="currentColor" d="M276.5 5 311 20.75 276.5 36.5zm-129 150L113 170.75l34.5 15.75z"/><use xlink:href="#u" fill="currentColor" data-text="J" transform="matrix(72 0 0 -72 60.91 125.75)"/><use xlink:href="#v" fill="currentColor" data-text="O" transform="matrix(72 0 0 -72 94.473 125.75)"/><use xlink:href="#w" fill="currentColor" data-text="R" transform="matrix(72 0 0 -72 150.57 125.75)"/><use xlink:href="#x" fill="currentColor" data-text="D" transform="matrix(72 0 0 -72 199.074 125.75)"/><use xlink:href="#y" fill="currentColor" data-text="A" transform="matrix(72 0 0 -72 252.57 125.75)"/><use xlink:href="#z" fill="currentColor" data-text="N" transform="matrix(72 0 0 -72 304.695 125.75)"/></g></g></svg>`;
 export function JordanLogo({color="currentColor",height=46,style={}}){const w=Math.round(height*424/192);return(<span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",color,width:w,height,...style}} dangerouslySetInnerHTML={{__html:JLOGO}}/>);}
 
+
+// ── Login (visual do modelo Jordan: fundo gradiente + card branco) ──
+const TCLG_CSS = `
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+.tclg{position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:calc(24px + env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));overflow:hidden;
+  font-family:'IBM Plex Sans',Roboto,system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+  background:#0578A6;background-image:radial-gradient(1100px 620px at 82% -12%,rgba(40,224,196,.14),transparent 56%),radial-gradient(1000px 760px at -6% 112%,rgba(3,58,84,.7),transparent 58%),linear-gradient(158deg,#0A7099 0%,#036690 52%,#023E58 100%);}
+.tclg-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(234,245,251,.05) 1px,transparent 1px),linear-gradient(90deg,rgba(234,245,251,.05) 1px,transparent 1px);background-size:46px 46px;-webkit-mask-image:radial-gradient(760px 560px at 50% 44%,#000,transparent 78%);mask-image:radial-gradient(760px 560px at 50% 44%,#000,transparent 78%);}
+.tclg-orb1{position:absolute;top:-120px;right:-80px;width:380px;height:380px;border-radius:50%;background:radial-gradient(circle,rgba(40,224,196,.16),transparent 70%);filter:blur(8px);animation:tclg-drift 7s ease-in-out infinite alternate;}
+.tclg-orb2{position:absolute;bottom:-140px;left:-60px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(11,110,151,.5),transparent 68%);filter:blur(10px);animation:tclg-drift 9s ease-in-out infinite alternate-reverse;}
+@keyframes tclg-rise{from{opacity:0;transform:translateY(18px) scale(.98);}to{opacity:1;transform:none;}}
+@keyframes tclg-drift{from{transform:translateY(0);}to{transform:translateY(-26px);}}
+.tclg-card{position:relative;z-index:2;width:392px;max-width:100%;border-radius:22px;overflow:hidden;background:#fff;text-align:left;
+  box-shadow:0 44px 90px -34px rgba(2,40,58,.75),0 0 0 1px rgba(255,255,255,.08),0 2px 4px rgba(2,40,58,.2);animation:tclg-rise .6s cubic-bezier(.22,.9,.3,1) both;}
+.tclg-head{padding:32px 34px 18px;text-align:center;}
+.tclg-title{font-size:19px;font-weight:700;color:#12303F;letter-spacing:.01em;margin-top:12px;}
+.tclg-sub{font-size:11.5px;color:#7C8893;margin-top:5px;}
+.tclg-body{padding:4px 34px 28px;}
+.tclg-label{display:block;font-size:10.5px;letter-spacing:.12em;color:#7C8893;font-weight:600;margin-bottom:7px;}
+.tclg-field{display:flex;align-items:center;gap:11px;background:#F2F5F7;border:1px solid #E2E8EC;border-radius:11px;padding:13px 15px;margin-bottom:16px;transition:border-color .2s,box-shadow .2s,background .2s;}
+.tclg-field:focus-within{border-color:#0578A6;background:#fff;box-shadow:0 0 0 3px rgba(5,120,166,.14);}
+.tclg-field svg{flex-shrink:0;}
+.tclg-input{width:100%;border:none;outline:none;background:transparent;font-family:inherit;font-size:14px;color:#12303F;}
+.tclg-input::placeholder{color:#9AA6B0;}
+.tclg-eye{cursor:pointer;flex-shrink:0;color:#9AA6B0;}
+.tclg-btn{width:100%;background:#0578A6;color:#fff;border:none;border-radius:11px;padding:14px;font-size:14.5px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 12px 28px -14px rgba(5,120,166,.8);transition:background .2s,box-shadow .2s,transform .12s;}
+.tclg-btn:hover{background:#036690;box-shadow:0 16px 34px -14px rgba(3,73,100,.7);}
+.tclg-btn:active{transform:translateY(1px);}
+.tclg-btn:disabled{opacity:.55;cursor:default;box-shadow:none;}
+.tclg-linkrow{text-align:center;margin-top:18px;}
+.tclg-link{background:none;border:none;font-family:inherit;font-size:12.5px;font-weight:500;color:#0578A6;text-decoration:none;cursor:pointer;padding:0;transition:color .2s;}
+.tclg-link:hover{color:#036690;}
+.tclg-or{display:flex;align-items:center;gap:12px;margin-top:18px;}
+.tclg-or .ln{flex:1;height:1px;background:#E7EDF0;}
+.tclg-or .tx{font-size:10px;letter-spacing:.14em;color:#9AA6B0;font-weight:600;}
+.tclg-2nd{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:16px;padding:12px;border:1px solid #CDE8EF;border-radius:11px;font-size:13px;font-weight:600;color:#0578A6;background:#F4FAFC;cursor:pointer;font-family:inherit;width:100%;transition:background .2s;}
+.tclg-2nd:hover{background:#EAF6FA;}
+.tclg-hint{font-size:12px;color:#7C8893;line-height:1.5;margin:0 0 14px;}
+.tclg-hint b{color:#12303F;}
+.tclg-code{letter-spacing:8px;text-align:center;font-size:18px;font-weight:600;}
+.tclg-backrow{display:flex;justify-content:space-between;margin-top:16px;}
+.tclg-er{font-size:12.5px;color:#E4483A;margin-top:14px;text-align:center;line-height:1.45;}
+.tclg-ok{font-size:12.5px;color:#188F7F;margin-top:14px;text-align:center;line-height:1.45;}
+.tclg-foot{position:absolute;bottom:calc(18px + env(safe-area-inset-bottom));left:0;right:0;text-align:center;font-size:11px;color:rgba(234,245,251,.55);font-family:'IBM Plex Mono',monospace;z-index:2;}
+@media (prefers-reduced-motion:reduce){.tclg-card,.tclg-orb1,.tclg-orb2{animation:none;}}
+@media (max-width:440px){.tclg-head{padding:26px 24px 14px;}.tclg-body{padding:4px 24px 24px;}.tclg-foot{font-size:10px;}}
+`;
+const IcMail=()=>(<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8B97A2" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 7 12 13l8.5-6"/></svg>);
+const IcLock=()=>(<svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#8B97A2" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>);
+const IcKey=()=>(<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><rect x="4" y="10" width="16" height="10" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><path d="M12 14.5v2"/></svg>);
+const IcEye=({off})=>(off
+  ? (<svg className="tclg-eye" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-7 10-7c1.7 0 3.2.5 4.5 1.2"/><path d="M9.9 9.9a2.6 2.6 0 0 0 3.7 3.7"/><path d="M21.4 14.6C22 13.7 22 12 22 12s-1.2-2.4-3.4-4"/><path d="m3 3 18 18"/></svg>)
+  : (<svg className="tclg-eye" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="2.6"/></svg>));
+
+
 const LB=({t,children})=><div style={{marginBottom:6}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px",textTransform:"uppercase",letterSpacing:.5}}>{t}</p>{children}</div>;
 function Login({onLogin}){
   const SS=(k,d)=>{try{const v=sessionStorage.getItem(k);return v==null?d:v;}catch{return d;}};
@@ -14,45 +69,58 @@ function Login({onLogin}){
   const setMode=m=>{try{sessionStorage.setItem("tc:lmode",m);}catch{}setMode0(m);};
   const[email,setEmail0]=useState(()=>SS("tc:lemail",""));const setEmail=v=>{try{sessionStorage.setItem("tc:lemail",v);}catch{}setEmail0(v);};const[pw,setPw]=useState("");
   const[code,setCode]=useState("");const[np,setNp]=useState("");const[np2,setNp2]=useState("");
-  const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[ok,setOk]=useState("");
+  const[lo,setLo]=useState(false);const[er,setEr]=useState("");const[ok,setOk]=useState("");const[showPw,setShowPw]=useState(false);
   const post=async(ep,b)=>{const r=await fetch(`${API}/${ep}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});const d=await r.json().catch(()=>({}));return{r,d};};
   const doLogin=async()=>{if(!email.trim()||!pw)return;setLo(true);setEr("");try{const{r,d}=await post("login",{email:email.trim().toLowerCase(),password:pw});if(r.ok&&d.ok&&d.session){try{sessionStorage.removeItem("tc:lmode");sessionStorage.removeItem("tc:lemail");}catch{}onLogin(d.session,{id:d.userId,name:d.name,role:d.role,email:d.email});}else setEr(d.error||"E-mail ou senha incorretos.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};
   const doForgot=async()=>{if(!email.trim())return;setLo(true);setEr("");setOk("");try{const{r,d}=await post("forgot",{email:email.trim().toLowerCase()});if(r.ok&&d.ok){setMode("reset");setOk("Se o e-mail estiver cadastrado, enviamos um código de 6 dígitos.");}else setEr(d.error||"Não consegui enviar o código agora.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};
   const doReset=async()=>{if(!code.trim()||!np)return;if(np!==np2){setEr("As senhas não conferem.");return;}if(np.length<8){setEr("A nova senha precisa ter ao menos 8 caracteres.");return;}setLo(true);setEr("");setOk("");try{const{r,d}=await post("reset",{email:email.trim().toLowerCase(),code:code.trim(),password:np});if(r.ok&&d.ok){setMode("login");setPw("");setCode("");setNp("");setNp2("");setOk("Senha redefinida! Entre com a nova senha.");}else setEr(d.error||"Não foi possível redefinir.");}catch(e){setEr("Erro de conexão. Verifique a internet.");}setLo(false);};
   const nav=m=>{setEr("");setOk("");setMode(m);};
   const linkStyle={background:"none",border:"none",color:S.pri,fontSize:13,cursor:"pointer",padding:0,textDecoration:"underline"};
-  return(<div style={{position:"fixed",inset:0,zIndex:100,background:"radial-gradient(120% 120% at 20% 0%,#0A8FC2 0%,#0578A6 45%,#024E6E 100%)",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Roboto',sans-serif",padding:16,overflowY:"auto"}}>
-    <div style={{width:380,maxWidth:"100%",background:"#fff",borderRadius:20,boxShadow:"0 40px 80px -30px rgba(2,30,45,.7)",overflow:"hidden",textAlign:"left"}}>
-    <div style={{background:"#0F1B2D",display:"flex",flexDirection:"column",alignItems:"center",padding:"26px 34px 20px"}}>
-      <JordanLogo color="#4FC3E8" height={54}/>
-      <div style={{fontSize:22,fontWeight:700,letterSpacing:".02em",color:"#fff",marginTop:8}}>TeamCheck</div>
-      <div style={{fontSize:12,color:S.ts,marginTop:4}}>Representação Inteligente · Jordan Representações</div>
+  return(<div className="tclg">
+    <style dangerouslySetInnerHTML={{__html:TCLG_CSS}}/>
+    <div className="tclg-grid"/>
+    <div className="tclg-orb1"/>
+    <div className="tclg-orb2"/>
+    <div className="tclg-card">
+      <div className="tclg-head">
+        <JordanLogo color="#12303F" height={46}/>
+        <div className="tclg-title">TeamCheck</div>
+        <div className="tclg-sub">Representação Inteligente · Jordan Representações</div>
+      </div>
+      <div className="tclg-body">
+        {mode==="login"&&<>
+          <label className="tclg-label">E-mail</label>
+          <div className="tclg-field"><IcMail/><input className="tclg-input" type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com" onKeyDown={e=>e.key==="Enter"&&doLogin()}/></div>
+          <label className="tclg-label">Senha</label>
+          <div className="tclg-field"><IcLock/><input className="tclg-input" type={showPw?"text":"password"} autoComplete="current-password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Sua senha" onKeyDown={e=>e.key==="Enter"&&doLogin()}/><span onClick={()=>setShowPw(v=>!v)} style={{display:"inline-flex",color:showPw?"#0578A6":"#9AA6B0"}}><IcEye off={showPw}/></span></div>
+          <button className="tclg-btn" onClick={doLogin} disabled={lo||!email.trim()||!pw}>{lo?"Entrando...":"Entrar"}</button>
+          <div className="tclg-linkrow"><button className="tclg-link" onClick={()=>nav("forgot")}>Esqueci a senha</button></div>
+          <div className="tclg-or"><span className="ln"/><span className="tx">OU</span><span className="ln"/></div>
+          <button className="tclg-2nd" onClick={()=>{if(!email.trim()){setEr("Digite seu e-mail acima primeiro.");return;}nav("reset");}}><IcKey/> Primeiro acesso — tenho um código</button>
+        </>}
+        {mode==="forgot"&&<>
+          <p className="tclg-hint">Digite seu e-mail que enviaremos um código de 6 dígitos para redefinir a senha.</p>
+          <label className="tclg-label">E-mail</label>
+          <div className="tclg-field"><IcMail/><input className="tclg-input" type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com" onKeyDown={e=>e.key==="Enter"&&doForgot()}/></div>
+          <button className="tclg-btn" onClick={doForgot} disabled={lo||!email.trim()}>{lo?"Enviando...":"Enviar código"}</button>
+          <div className="tclg-linkrow"><button className="tclg-link" onClick={()=>nav("login")}>Voltar ao login</button></div>
+        </>}
+        {mode==="reset"&&<>
+          <p className="tclg-hint">Enviamos um código para <b>{email}</b>. Digite o código e crie a nova senha.</p>
+          <label className="tclg-label">Código (6 dígitos)</label>
+          <div className="tclg-field"><IcKey/><input className="tclg-input tclg-code" type="text" inputMode="numeric" maxLength={6} value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))} placeholder="000000"/></div>
+          <label className="tclg-label">Nova senha</label>
+          <div className="tclg-field"><IcLock/><input className="tclg-input" type="password" autoComplete="new-password" value={np} onChange={e=>setNp(e.target.value)} placeholder="Mínimo 8 caracteres"/></div>
+          <label className="tclg-label">Confirmar nova senha</label>
+          <div className="tclg-field"><IcLock/><input className="tclg-input" type="password" autoComplete="new-password" value={np2} onChange={e=>setNp2(e.target.value)} placeholder="Repita a senha" onKeyDown={e=>e.key==="Enter"&&doReset()}/></div>
+          <button className="tclg-btn" onClick={doReset} disabled={lo||!code.trim()||!np||!np2}>{lo?"Redefinindo...":"Redefinir senha"}</button>
+          <div className="tclg-backrow"><button className="tclg-link" onClick={()=>nav("forgot")}>Reenviar código</button><button className="tclg-link" onClick={()=>nav("login")}>Voltar ao login</button></div>
+        </>}
+        {er&&<p className="tclg-er">{er}</p>}
+        {ok&&<p className="tclg-ok">{ok}</p>}
+      </div>
     </div>
-    <div style={{padding:"24px 30px 26px","--t":"#1B2B3C","--t2":"#4A5A6B","--inp":"#EEF3F8","--inp-bdr":"#D5DEE8"}}>
-      {mode==="login"&&<>
-        <LB t="E-MAIL"><input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doLogin()}/></LB>
-        <LB t="SENHA"><input type="password" autoComplete="current-password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="Sua senha" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doLogin()}/></LB>
-        <button onClick={doLogin} disabled={lo||!email.trim()||!pw} style={{width:"100%",background:S.pri,border:"none",fontWeight:600,fontSize:15,padding:12,marginTop:8}}>{lo?"Entrando...":"Entrar"}</button>
-        <div style={{textAlign:"center",marginTop:14,display:"flex",justifyContent:"space-between"}}><button onClick={()=>nav("forgot")} style={linkStyle}>Esqueci a senha</button><button onClick={()=>{if(!email.trim()){setEr("Digite seu e-mail acima primeiro.");return;}nav("reset");}} style={linkStyle}>Primeiro acesso — tenho um código</button></div>
-      </>}
-      {mode==="forgot"&&<>
-        <p style={{fontSize:13,color:S.ts,margin:"0 0 14px"}}>Digite seu e-mail que enviaremos um código de 6 dígitos para redefinir a senha.</p>
-        <LB t="E-MAIL"><input type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doForgot()}/></LB>
-        <button onClick={doForgot} disabled={lo||!email.trim()} style={{width:"100%",background:S.pri,border:"none",fontWeight:600,fontSize:15,padding:12,marginTop:8}}>{lo?"Enviando...":"Enviar código"}</button>
-        <div style={{textAlign:"center",marginTop:14}}><button onClick={()=>nav("login")} style={linkStyle}>Voltar ao login</button></div>
-      </>}
-      {mode==="reset"&&<>
-        <p style={{fontSize:13,color:S.ts,margin:"0 0 14px"}}>Enviamos um código para <b style={{color:S.txt}}>{email}</b>. Digite o código e crie a nova senha.</p>
-        <LB t="CÓDIGO (6 DÍGITOS)"><input type="text" inputMode="numeric" maxLength={6} value={code} onChange={e=>setCode(e.target.value.replace(/\D/g,""))} placeholder="000000" style={{width:"100%",letterSpacing:4,textAlign:"center",fontSize:18}}/></LB>
-        <LB t="NOVA SENHA"><input type="password" autoComplete="new-password" value={np} onChange={e=>setNp(e.target.value)} placeholder="Mínimo 8 caracteres" style={{width:"100%"}}/></LB>
-        <LB t="CONFIRMAR NOVA SENHA"><input type="password" autoComplete="new-password" value={np2} onChange={e=>setNp2(e.target.value)} placeholder="Repita a senha" style={{width:"100%"}} onKeyDown={e=>e.key==="Enter"&&doReset()}/></LB>
-        <button onClick={doReset} disabled={lo||!code.trim()||!np||!np2} style={{width:"100%",background:S.pri,border:"none",fontWeight:600,fontSize:15,padding:12,marginTop:8}}>{lo?"Redefinindo...":"Redefinir senha"}</button>
-        <div style={{textAlign:"center",marginTop:14,display:"flex",justifyContent:"space-between"}}><button onClick={()=>nav("forgot")} style={linkStyle}>Reenviar código</button><button onClick={()=>nav("login")} style={linkStyle}>Voltar ao login</button></div>
-      </>}
-      {er&&<p style={{fontSize:13,color:S.dng,marginTop:12,textAlign:"center"}}>{er}</p>}
-      {ok&&<p style={{fontSize:13,color:S.ok||S.acc,marginTop:12,textAlign:"center"}}>{ok}</p>}
-    </div>
-    </div>
+    <div className="tclg-foot">teamcheck.jordanmt.com</div>
   </div>);
 }
 
