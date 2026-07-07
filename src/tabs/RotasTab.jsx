@@ -1,7 +1,7 @@
 // TeamCheck — aba RotasTab
 import { useState, useEffect, useMemo } from "react";
 import { LUNCH_START, LUNCH_END, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hourDec, roadKm, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord } from "../lib";
-import { Kpi } from "../components";
+import { Kpi, DateField } from "../components";
 
 function RotasTab({sel,setSel,visits,dayBases,user,plocs}){
   const[routes,setRoutes]=useState([]);const[lo,setLo]=useState(false);
@@ -31,10 +31,10 @@ function RotasTab({sel,setSel,visits,dayBases,user,plocs}){
   const totKm=routes.reduce((s,r)=>s+r.km,0);
   // FIX: Jornada = primeiro check-in ao último check-out
   const workH=dv.length?mins(dv[0].checkinTime,dv[dv.length-1].checkoutTime):0;
-  const days=[...new Set(visits.filter(v=>isRealVisit(v)&&(!v.userName||v.userName===user?.name)).map(v=>toLocalDate(v.checkinTime)))].sort().reverse().slice(0,30);
+  const dayMarks=useMemo(()=>{const m={};visits.forEach(v=>{if(isRealVisit(v)&&(!v.userName||v.userName===user?.name))m[toLocalDate(v.checkinTime)]=S.acc;});return m;},[visits,user?.name]);// v41: pontinhos nos dias com visita
   return(<div>
     <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16,flexWrap:"wrap"}}>
-      <select value={sel} onChange={e=>setSel(e.target.value)} style={{fontSize:13.5,fontWeight:600,padding:"10px 14px",borderRadius:9,minWidth:220}}><option value={todayLocal()}>Hoje — {fD(new Date())}</option>{days.filter(d=>d!==todayLocal()).map(d=><option key={d} value={d}>{fD(d+"T12:00")}</option>)}</select>
+      <DateField value={sel} onChange={d=>setSel(d||todayLocal())} today={todayLocal()} marks={dayMarks} placeholder="Escolher dia" style={{minWidth:220}}/>
       {startBase&&<span style={{fontSize:12.5,color:S.ts}}>Origem: <b style={{color:S.t2}}>{startBase.label||"Casa"}</b>{endBase&&endBase!==startBase?<> · Destino: <b style={{color:S.t2}}>{endBase.label||"Casa"}</b></>:""}</span>}
     </div>
     {dv.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>

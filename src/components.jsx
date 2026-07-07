@@ -224,14 +224,15 @@ function TarefaModal({ open, onClose, token, user, allOrgs, preOrg = null, onCre
     const s = q.toLowerCase().replace(/[.\-\/]/g, "");
     return (allOrgs || []).filter(o => [o.name, o.nickname, o.cnpj, o.addr?.city_name, o.addr?.city].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(s)).slice(0, 8);
   }, [q, allOrgs]);
-  const criar = async (gcal = false) => {
+  const criar = async () => {
     if (!org || !text.trim() || !users.length) return; setLo(true);
     const dueEm = date ? `${date}T${time}:00-04:00` : null;
     const tp = (type || "VISITA").toUpperCase(); const tipoOk = ["VISITA", "LIGACAO", "EMAIL", "REUNIAO", "WHATSAPP", "PROPOSTA", "NOTA"].includes(tp) ? tp : "NOTA";
     for (const uid of users) { const U = USERS.find(u => String(u.id) === String(uid));
       await fetch(`${DASH}/api/crm/atividades`, { method: "POST", headers: { "X-Session": token, "Content-Type": "application/json" }, body: JSON.stringify({ org_id: org.id, cnpj: (org.cnpj || "").replace(/\D/g, "") || null, org_nome: org.nickname || org.name, tipo: tipoOk, texto: text, origem: "tarefa", due_em: dueEm, agendor_id: null, user_id: Number(uid) || null, user_nome: U ? U.n : null }) }).catch(() => {}); }
     setLo(false);
-    if (gcal && date) { const u = gcalUrl({ titulo: `${tipoOk} — ${org.nickname || org.name}`, detalhes: text, inicio: `${date}T${time}:00-04:00`, local: org.nickname || org.name }); if (u) window.open(u, "_blank", "noopener"); }
+    // v41: com prazo definido, abre AUTOMATICAMENTE o Google Agenda com o evento pré-preenchido
+    if (date) { const u = gcalUrl({ titulo: `${tipoOk} — ${org.nickname || org.name}`, detalhes: text, inicio: `${date}T${time}:00-04:00`, local: org.nickname || org.name }); if (u) window.open(u, "_blank", "noopener"); }
     onCreated && onCreated(); onClose && onClose();
   };
   if (!open) return null;
@@ -248,8 +249,8 @@ function TarefaModal({ open, onClose, token, user, allOrgs, preOrg = null, onCre
         <LB t="DESCRIÇÃO *"><textarea value={text} onChange={e => setText(e.target.value)} rows={2} placeholder="O que precisa ser feito?" style={{ width: "100%" }} /></LB>
         <LB t="PRAZO"><div style={{ display: "flex", gap: 6 }}><DateField value={date} onChange={setDate} today={todayLocal()} placeholder="Escolher data" style={{ flex: 1 }} /><input type="time" value={time} onChange={e => setTime(e.target.value)} style={{ width: 80 }} /></div></LB>
         <LB t="RESPONSÁVEL(EIS)"><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>{USERS.map(u => { const on = users.includes(String(u.id)); return <button key={u.id} type="button" onClick={() => setUsers(p => on ? p.filter(x => x !== String(u.id)) : [...p, String(u.id)])} style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: on ? 700 : 500, border: on ? "none" : `1px solid ${S.brd}`, background: on ? S.acc : S.bg, color: on ? "#fff" : S.ts, cursor: "pointer" }}>{u.n.split(" ")[0]}</button>; })}</div><p style={{ fontSize: 10.5, color: S.td, margin: "4px 0 0" }}>Marque um ou mais — cria a tarefa para cada responsável.</p></LB>
-        <div style={{ display: "flex", gap: 8, marginTop: 8 }}><button onClick={onClose} style={{ flex: 1 }}>Cancelar</button><button onClick={() => criar(false)} disabled={lo || !text.trim() || !users.length} style={{ flex: 1, background: S.acc, border: "none", fontWeight: 600, color: "#fff" }}>{lo ? "..." : "Criar Tarefa"}</button></div>
-        {date && <button onClick={() => criar(true)} disabled={lo || !text.trim() || !users.length} style={{ width: "100%", marginTop: 6, background: "transparent", border: `1px solid ${S.brd}`, borderRadius: 8, padding: "9px 8px", fontSize: 12.5, fontWeight: 600, color: S.pl, cursor: "pointer" }}>📅 Criar + adicionar ao Google Agenda</button>}
+        <div style={{ display: "flex", gap: 8, marginTop: 8 }}><button onClick={onClose} style={{ flex: 1 }}>Cancelar</button><button onClick={criar} disabled={lo || !text.trim() || !users.length} style={{ flex: 1, background: S.acc, border: "none", fontWeight: 600, color: "#fff" }}>{lo ? "..." : "Criar Tarefa"}</button></div>
+        {date && <p style={{ fontSize: 10.5, color: S.td, margin: "6px 0 0", textAlign: "center" }}>📅 Ao criar, o evento abre automaticamente no Google Agenda — é só confirmar "Salvar".</p>}
       </>}
     </div>
   </div>, document.body);

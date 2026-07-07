@@ -5,7 +5,7 @@ import { HOMES, toLocalDate, todayLocal, USERS, S, PC, fT, fD, fDS, mins, hrsMin
 import { BaseEditInline, Kpi, SegTabs, DateField } from "../components";
 
 function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
-  const[sd,setSd]=useState(()=>{const d=new Date();d.setDate(d.getDate()-7);return toLocalDate(d);});
+  const[sd,setSd]=useState(todayLocal);// v41: inicial e final abrem no dia presente
   const[ed,setEd]=useState(todayLocal());
   const[selUser,setSelUser]=useState(()=>String(user.id));// id do usuário (default: eu)
   const[editDay,setEditDay]=useState(null);

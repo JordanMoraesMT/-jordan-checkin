@@ -147,12 +147,18 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
 
   // ── arquivos/fotos ──
   const fotoRef = useRef(); const arqRef = useRef(); const [subindo, setSubindo] = useState("");
-  const upload = async (file) => { if (!file) return; setSubindo(file.name); setMsg("");
-    try { const f = await comprime(file);
-      const fd = new FormData(); fd.append("file", f, f.name); fd.append("org_id", String(org.id)); if (cnpjN) fd.append("cnpj", cnpjN);
-      await crm(token, "/api/crm/arquivos", { method: "POST", body: fd }); carregaArqs();
-    } catch (e) { setMsg("Upload: " + e.message); }
-    setSubindo(""); };
+  // v41: aceita VÁRIOS arquivos de uma vez (computador e celular) — envia em sequência com contador
+  const upload = async (files) => { const lista = Array.from(files || []).filter(Boolean); if (!lista.length) return; setMsg("");
+    let falhas = 0;
+    for (let i = 0; i < lista.length; i++) { const file = lista[i];
+      setSubindo(lista.length > 1 ? `${i + 1}/${lista.length} — ${file.name}` : file.name);
+      try { const f = await comprime(file);
+        const fd = new FormData(); fd.append("file", f, f.name); fd.append("org_id", String(org.id)); if (cnpjN) fd.append("cnpj", cnpjN);
+        await crm(token, "/api/crm/arquivos", { method: "POST", body: fd });
+      } catch (e) { falhas++; setMsg(`Upload de ${file.name}: ` + e.message); }
+    }
+    setSubindo(""); carregaArqs();
+    if (falhas && lista.length > 1) setMsg(`${lista.length - falhas} de ${lista.length} enviados — ${falhas} falharam.`); };
   const delArq = async (a) => { if (!confirm(`Excluir ${a.nome}?`)) return; try { await crm(token, `/api/crm/arquivos?id=${a.id}`, { method: "DELETE" }); setArqs(p => p.filter(x => x.id !== a.id)); } catch (e) { alert("Erro: " + e.message); } };
   const baixaArq = async (a) => { try { const r = await fetch(`${DASH}/api/crm/arquivo?id=${a.id}`, { headers: { "X-Session": token } }); const b = await r.blob(); const u = URL.createObjectURL(b); const el = document.createElement("a"); el.href = u; el.download = a.nome || "arquivo"; el.click(); setTimeout(() => URL.revokeObjectURL(u), 5000); } catch (e) { alert("Erro: " + e.message); } };
   const [preview, setPreview] = useState(null);
@@ -320,8 +326,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <button onClick={() => fotoRef.current?.click()} disabled={!!subindo} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Camera size={16} />Foto da loja</button>
         <button onClick={() => arqRef.current?.click()} disabled={!!subindo} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.card, color: S.txt, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Paperclip size={16} />Arquivo</button>
-        <input ref={fotoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={e => { upload(e.target.files?.[0]); e.target.value = ""; }} />
-        <input ref={arqRef} type="file" style={{ display: "none" }} onChange={e => { upload(e.target.files?.[0]); e.target.value = ""; }} />
+        <input ref={fotoRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
+        <input ref={arqRef} type="file" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
       </div>
       {subindo && <p style={{ fontSize: 12, color: S.pri, margin: "0 0 8px" }}>Enviando {subindo}...</p>}
       {ldF && <p style={{ fontSize: 12, color: S.ts }}>Carregando arquivos...</p>}
@@ -429,12 +435,13 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
   const arr = v => Array.isArray(v) ? v : [];
   const [q, setQ] = useState("");
   const [fCat, setFCat] = useState(arr(p0.fCat)); const [fResp, setFResp] = useState(arr(p0.fResp));
-  const [fRfv, setFRfv] = useState(arr(p0.fRfv)); const [fAbc, setFAbc] = useState(arr(p0.fAbc)); const [fSr, setFSr] = useState(arr(p0.fSr)); const [fCid, setFCid] = useState(arr(p0.fCid));
-  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fAbc, fSr, fCid }); }, [fCat, fResp, fRfv, fAbc, fSr, fCid]);
+  const [fRfv, setFRfv] = useState(arr(p0.fRfv)); const [fGrp, setFGrp] = useState(arr(p0.fGrp)); const [fSr, setFSr] = useState(arr(p0.fSr)); const [fCid, setFCid] = useState(arr(p0.fCid)); // v41: Grupo no lugar da Curva ABC
+  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid]);
   const [ordem, setOrdem] = useState(1); // 1 = A→Z, -1 = Z→A
   const [vc, setVc] = useState(60);
   const resps = useMemo(() => { const s = new Set(USERS.map(u => u.n)); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
   const cidades = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const c = o.addr?.city_name || o.addr?.city; if (c) s.add(c); }); return [...s].sort(); }, [allOrgs]);
+  const gruposE = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const g = ((o.grupo || "").replace("Grupo: ", "")).trim(); if (g) s.add(g); }); return [...s].sort(); }, [allOrgs]);
   const lista = useMemo(() => {
     let l = (q.trim() || fCat.includes("Excluido")) ? [ ...(allOrgs || []), ...(excl || []) ] : (allOrgs || []);
     if (q.trim()) { const n = q.toLowerCase().replace(/[.\-\/]/g, "");
@@ -443,10 +450,11 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
     if (fCat.length) l = l.filter(o => fCat.includes(o.cat));
     if (fResp.length) l = l.filter(o => fResp.includes(o.owner));
     if (fCid.length) l = l.filter(o => fCid.includes(o.addr?.city_name || o.addr?.city));
-    if (fRfv.length || fAbc.length || fSr.length) l = l.filter(o => { const r = rfvDe(o); if (!r) return false;
-      if (fRfv.length && !fRfv.includes(r.rfv)) return false; if (fAbc.length && !fAbc.includes(r.abc)) return false; if (fSr.length && !fSr.includes(r.status)) return false; return true; });
+    if (fGrp.length) l = l.filter(o => fGrp.includes(((o.grupo || "").replace("Grupo: ", "")).trim()));
+    if (fRfv.length || fSr.length) l = l.filter(o => { const r = rfvDe(o); if (!r) return false;
+      if (fRfv.length && !fRfv.includes(r.rfv)) return false; if (fSr.length && !fSr.includes(r.status)) return false; return true; });
     return [...l].sort((a, b) => ordem * (a.nickname || a.name || "").localeCompare(b.nickname || b.name || ""));
-  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fAbc, fSr, ordem, rfv]);
+  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, ordem, rfv]);
   const th = { textAlign: "left", padding: "8px 10px", fontSize: 10.5, fontWeight: 800, color: S.ts, textTransform: "uppercase", letterSpacing: .4, whiteSpace: "nowrap", borderBottom: `2px solid ${S.brd}` };
   const td = { padding: "9px 10px", fontSize: 12, color: S.txt, borderBottom: `1px solid ${S.cl}`, whiteSpace: "nowrap", verticalAlign: "middle" };
   return (<div>
@@ -464,12 +472,12 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
       <MultiSelect values={fRfv} onChange={v => { setFRfv(v); setVc(60); }} placeholder="Classe RFV" allLabel="todas" style={{ flex: 1 }} options={["Campeão", "Leal", "Em Crescimento", "Em Risco", "Inativo"]} />
-      <MultiSelect values={fAbc} onChange={v => { setFAbc(v); setVc(60); }} placeholder="Curva ABC" allLabel="todas" style={{ flex: 1 }} options={["A", "B", "C"]} />
+      <MultiSelect values={fGrp} onChange={v => { setFGrp(v); setVc(60); }} placeholder="Grupo" allLabel="todos" style={{ flex: 1 }} options={gruposE} />
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
       <MultiSelect values={fSr} onChange={v => { setFSr(v); setVc(60); }} placeholder="Status Recompra" allLabel="todos" style={{ flex: 1 }} options={["Em Dia", "Momento de Recompra", "Atrasado"]} />
       <MultiSelect values={fCid} onChange={v => { setFCid(v); setVc(60); }} placeholder="Cidade" allLabel="todas" style={{ flex: 1 }} options={cidades} />
-      <button onClick={() => { setFCat([]); setFResp([]); setFRfv([]); setFAbc([]); setFSr([]); setFCid([]); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
+      <button onClick={() => { setFCat([]); setFResp([]); setFRfv([]); setFGrp([]); setFSr([]); setFCid([]); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
     </div>
     <div style={{ overflowX: "auto", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: S.shadow }}>
       <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 820 }}>
@@ -513,19 +521,20 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   useEffect(() => { if (focus && focus.org) setSel(focus.org); }, [focus?.t]);
   const [q, setQ] = useState("");
   const [feed, setFeed] = useState([]); const [ld, setLd] = useState(false); const [erro, setErro] = useState("");
-  const [fTipo, setFTipo] = useState(""); const [fUser, setFUser] = useState(""); const [fDias, setFDias] = useState(90);
+  const [fTipo, setFTipo] = useState([]); const [fUser, setFUser] = useState([]); const [fDias, setFDias] = useState(90); // v41: multi (combináveis)
   const [showTarefa, setShowTarefa] = useState(false);// modal "Nova tarefa" no Início (mesmo da Agenda)
 
   const carregaFeed = async () => { setLd(true); setErro("");
     try {
       const desde = new Date(Date.now() - fDias * 86400000).toISOString().slice(0, 10);
       const ps = new URLSearchParams({ limit: "1000", desde });
-      if (fTipo) ps.set("tipo", fTipo); if (fUser) ps.set("user_id", fUser);
       const d = await crm(token, "/api/crm/atividades?" + ps.toString());
       setFeed(d.atividades || []);
     } catch (e) { setErro(e.message); }
     setLd(false); };
-  useEffect(() => { if (visible && token) carregaFeed(); }, [visible, fTipo, fUser, fDias, bump]);
+  useEffect(() => { if (visible && token) carregaFeed(); }, [visible, fDias, bump]);
+  // v41: tipo e equipe filtram no aparelho (combináveis entre si)
+  const feedF = useMemo(() => feed.filter(a => (!fTipo.length || fTipo.includes(a.tipo)) && (!fUser.length || fUser.includes(String(a.user_id)) || fUser.some(uid => { const U = USERS.find(u => String(u.id) === uid); return U && (a.user_nome || "") && (a.user_nome === U.n || a.user_nome.includes(U.n.split(" ")[0])); }))), [feed, fTipo, fUser]);
 
   const achados = useMemo(() => { const t = q.trim().toLowerCase(); if (t.length < 2) return [];
     const casa = o => (o.nickname || o.name || "").toLowerCase().includes(t) || soDig(o.cnpj).includes(soDig(t)) || (o.addr?.city_name || "").toLowerCase().includes(t);
@@ -559,19 +568,19 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
 
     {/* Filtros do feed */}
     <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8 }}>
-      <Chip on={!fTipo} onClick={() => setFTipo("")}>Todos</Chip>
-      {TIPOS.map(t => <Chip key={t.id} on={fTipo === t.id} color={t.c} onClick={() => setFTipo(fTipo === t.id ? "" : t.id)}>{t.l}</Chip>)}
+      <Chip on={!fTipo.length} onClick={() => setFTipo([])}>Todos</Chip>
+      {TIPOS.map(t => <Chip key={t.id} on={fTipo.includes(t.id)} color={t.c} onClick={() => setFTipo(p => p.includes(t.id) ? p.filter(x => x !== t.id) : [...p, t.id])}>{t.l}</Chip>)}
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
-      <SearchSelect value={fUser} onChange={setFUser} placeholder="Equipe" style={{ flex: 1 }} options={[["", "Toda a equipe"], ["743088", "Jordan"], ["743347", "Alisson"]]} />
+      <MultiSelect values={fUser} onChange={setFUser} placeholder="Equipe" allLabel="toda" style={{ flex: 1 }} options={USERS.map(u => [String(u.id), u.n.split(" ")[0]])} />
       <SearchSelect value={String(fDias)} onChange={v => setFDias(+v)} placeholder="Período" style={{ flex: 1 }} options={[["7", "7 dias"], ["30", "30 dias"], ["90", "3 meses"], ["180", "6 meses"], ["365", "12 meses"]]} />
       <button onClick={carregaFeed} style={{ width: 38, height: 38, borderRadius: 10, background: S.pl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}><RefreshCw size={16} color="#fff" className={ld ? "spin" : ""} /></button>
     </div>
 
-    <p style={{ fontSize: 12, color: S.ts, margin: "0 0 8px" }}>{ld ? "Carregando atividades..." : `${feed.length} atividade(s) no período`}</p>
+    <p style={{ fontSize: 12, color: S.ts, margin: "0 0 8px" }}>{ld ? "Carregando atividades..." : `${feedF.length} atividade(s) no período`}</p>
     {erro && <Crd style={{ borderColor: S.dng + "66" }}><p style={{ margin: 0, fontSize: 12.5, color: S.dng }}>Erro ao carregar o feed: {erro}</p><p style={{ margin: "4px 0 0", fontSize: 11.5, color: S.ts }}>Verifique se o Dashboard está no ar (rotas CRM) e se você está logado.</p></Crd>}
-    {!ld && !erro && !feed.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Sem atividades no período. Elas aparecem aqui a cada check-out, ligação, WhatsApp ou registro manual na tela do cliente.</p></Crd>}
-    {feed.map(a => <AtvCard key={a.id} a={a} onOrg={abrePorFeed} onFinish={async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setFeed(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } }} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={async (x) => { if (!confirm("Excluir esta atividade do CRM?")) return; try { await crm(token, `/api/crm/atividades?id=${x.id}`, { method: "DELETE" }); setFeed(p => p.filter(y => y.id !== x.id)); } catch (e) { alert("Erro: " + e.message); } }} />)}
+    {!ld && !erro && !feedF.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Sem atividades no período. Elas aparecem aqui a cada check-out, ligação, WhatsApp ou registro manual na tela do cliente.</p></Crd>}
+    {feedF.map(a => <AtvCard key={a.id} a={a} onOrg={abrePorFeed} onFinish={async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setFeed(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } }} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={async (x) => { if (!confirm("Excluir esta atividade do CRM?")) return; try { await crm(token, `/api/crm/atividades?id=${x.id}`, { method: "DELETE" }); setFeed(p => p.filter(y => y.id !== x.id)); } catch (e) { alert("Erro: " + e.message); } }} />)}
   </div>}
   </div>);
 }

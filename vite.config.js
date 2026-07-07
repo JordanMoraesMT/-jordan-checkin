@@ -1,24 +1,45 @@
-{
-  "name": "jordan-checkin",
-  "version": "41.0.0",
-  "description": "TeamCheck — CRM + Campo (D1 nativo, Agendor desligado)",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "lucide-react": "^0.383.0",
-    "leaflet": "^1.9.4",
-    "recharts": "^2.12.7"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.0.0",
-    "vite-plugin-pwa": "^0.21.1"
-  }
-}
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
+
+export default defineConfig({
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'],
+      manifest: {
+        name: 'TeamCheck — Jordan Representações',
+        short_name: 'TeamCheck',
+        description: 'CRM + Força de Vendas — Jordan Representações Comerciais',
+        lang: 'pt-BR',
+        theme_color: '#0F1B2D',
+        background_color: '#0F1B2D',
+        display: 'standalone',
+        orientation: 'portrait',
+        start_url: '/',
+        icons: [
+          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
+          { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
+        ]
+      },
+      workbox: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
+        maximumFileSizeToCacheInBytes: 4194304,
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/router\.project-osrm\.org/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'osrm-routes', expiration: { maxEntries: 200, maxAgeSeconds: 86400 } }
+          },
+          {
+            urlPattern: /^https:\/\/[abc]\.tile\.openstreetmap\.org/,
+            handler: 'CacheFirst',
+            options: { cacheName: 'osm-tiles', expiration: { maxEntries: 500, maxAgeSeconds: 604800 } }
+          }
+        ]
+      }
+    })
+  ]
+})
