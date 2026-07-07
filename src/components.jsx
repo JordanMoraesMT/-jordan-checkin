@@ -22,8 +22,8 @@ const TCLG_CSS = `
 .tclg-card{position:relative;z-index:2;width:392px;max-width:100%;border-radius:22px;overflow:hidden;background:#fff;text-align:left;
   box-shadow:0 44px 90px -34px rgba(2,40,58,.75),0 0 0 1px rgba(255,255,255,.08),0 2px 4px rgba(2,40,58,.2);animation:tclg-rise .6s cubic-bezier(.22,.9,.3,1) both;}
 .tclg-head{padding:32px 34px 18px;text-align:center;}
-.tclg-title{font-size:19px;font-weight:700;color:#12303F;letter-spacing:.01em;margin-top:12px;}
-.tclg-sub{font-size:11.5px;color:#7C8893;margin-top:5px;}
+.tclg-title{font-size:23px;font-weight:700;color:#12303F;letter-spacing:.005em;margin-top:12px;}
+.tclg-sub{font-size:12px;color:#7C8893;margin-top:6px;}
 .tclg-body{padding:4px 34px 28px;}
 .tclg-label{display:block;font-size:10.5px;letter-spacing:.12em;color:#7C8893;font-weight:600;margin-bottom:7px;}
 .tclg-field{display:flex;align-items:center;gap:11px;background:#F2F5F7;border:1px solid #E2E8EC;border-radius:11px;padding:13px 15px;margin-bottom:16px;transition:border-color .2s,box-shadow .2s,background .2s;}
@@ -83,7 +83,7 @@ function Login({onLogin}){
     <div className="tclg-orb2"/>
     <div className="tclg-card">
       <div className="tclg-head">
-        <JordanLogo color="#12303F" height={46}/>
+        <JordanLogo color="#0578A6" height={58}/>
         <div className="tclg-title">TeamCheck</div>
         <div className="tclg-sub">Representação Inteligente · Jordan Representações</div>
       </div>

@@ -1,6 +1,6 @@
 {
   "name": "jordan-checkin",
-  "version": "50.0.0",
+  "version": "51.0.0",
   "description": "TeamCheck — CRM + Campo (D1 nativo, Agendor desligado)",
   "private": true,
   "type": "module",
