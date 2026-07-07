@@ -24,7 +24,7 @@ function Login({onLogin}){
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:26}}>
       <JordanLogo color={S.pl} height={64} style={{marginBottom:12}}/>
       <div style={{fontSize:24,fontWeight:700,letterSpacing:".02em",color:S.txt}}>TeamCheck</div>
-      <div style={{fontSize:12,color:S.ts,marginTop:4}}>Força de Vendas · Jordan Representações</div>
+      <div style={{fontSize:12,color:S.ts,marginTop:4}}>Representação Inteligente · Jordan Representações</div>
     </div>
     <div>
       {mode==="login"&&<>
@@ -292,7 +292,7 @@ const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,o
         <div style={{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}}>
           {!isA&&<button onClick={()=>onQuick&&onQuick(org,"WHATSAPP")} title="WhatsApp" style={IQ}><MessageCircle size={16} strokeWidth={1.9} color={S.ok}/></button>}
           {!isA&&<button onClick={()=>onQuick&&onQuick(org,"LIGACAO")} title="Ligação" style={IQ}><Phone size={15} strokeWidth={1.9} color="var(--t3)"/></button>}
-          {plocs&&plocs[org.id]&&<button onClick={()=>{const loc=plocs[org.id];const url=`https://www.google.com/maps/dir/?api=1&destination=${loc.lat},${loc.lng}&travelmode=driving`;window.open(url,"_blank","noopener");}} title="Navegar" style={IQ}><Navigation size={15} strokeWidth={1.9} color={S.acc}/></button>}
+          <button onClick={()=>{const loc=plocs&&plocs[org.id];const dest=loc?`${loc.lat},${loc.lng}`:encodeURIComponent(`${org.nickname||org.name}, ${org.addr?.city_name||org.addr?.city||""}, ${org.addr?.state||"MT"}`);const url=`https://www.google.com/maps/dir/?api=1&destination=${dest}&travelmode=driving`;window.open(url,"_blank","noopener");}} title={plocs&&plocs[org.id]?"Navegar (GPS salvo)":"Navegar (busca pelo nome/cidade)"} style={IQ}><Navigation size={15} strokeWidth={1.9} color={plocs&&plocs[org.id]?S.acc:S.ts}/></button>
           {org.cnpj&&<button onClick={()=>window.open(`https://dashboard.jordanmt.com/?cliente=${org.cnpj.replace(/[.\-\/]/g,"")}`,"_blank","noopener")} title="Ver no Dashboard" style={IQ}><BarChart3 size={15} strokeWidth={1.9} color={S.pri}/></button>}
           <button onClick={()=>onEdit&&onEdit(org)} title="Editar" style={IQ}><Pencil size={15} strokeWidth={1.9} color={S.gold}/></button>
           <button onClick={()=>onPerson&&onPerson(org)} title="Pessoas" style={IQ}><UserPlus size={15} strokeWidth={1.9} color="var(--t3)"/></button>
@@ -429,8 +429,9 @@ function PeopleModal({org,token,onClose}){
 const PRODS=[{id:761952,n:"TRAMONTINA"},{id:761953,n:"PADO"},{id:761954,n:"HIPER TEXTIL"},{id:1139796,n:"PLASTILIT"},{id:1392476,n:"FESTCOLOR"},{id:1627655,n:"ZAGONEL"},{id:2046010,n:"RUVOLO"},{id:2260997,n:"SANTANA"}];
 function EditModal({org,token,users,allOrgs,onSave,onClose}){const[name,setName]=useState(org.name||"");const[legal,setLegal]=useState("");const[catId,setCatId]=useState("");const[sectorId,setSectorId]=useState("");const[grupo,setGrupo]=useState(org.grupo?.replace("Grupo: ","")||"");const[newGrupo,setNewGrupo]=useState("");const[grupoSearch,setGrupoSearch]=useState(org.grupo?.replace("Grupo: ","")||"");const[grupoOpen,setGrupoOpen]=useState(false);const[ownerId,setOwnerId]=useState("");
   const existGrp=useMemo(()=>[...new Set((allOrgs||[]).map(o=>fixMojibake(o.grupo?.replace("Grupo: ","")||"")).filter(Boolean))].sort(),[allOrgs]);
-  const curProds=org.products?org.products.split(", ").filter(p=>!p.startsWith("P_")):[];
-  const[selProds,setSelProds]=useState(()=>PRODS.filter(p=>curProds.includes(p.n)).map(p=>p.id));
+  const normP=x=>String(x||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").trim();
+  const curProds=org.products?org.products.split(",").map(x=>x.trim()).filter(p=>p&&!p.startsWith("P_")).map(normP):[];
+  const[selProds,setSelProds]=useState(()=>PRODS.filter(p=>curProds.includes(normP(p.n))).map(p=>p.id));
   const[lo,setLo]=useState(false);const[fetching,setFetching]=useState(false);const[msg,setMsg]=useState("");
   const toggleProd=id=>setSelProds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
   const refresh=async()=>{if(!org.cnpj)return;setFetching(true);setMsg("");try{const d=await fetchCNPJ(org.cnpj);setName(d.nome_fantasia||name);setLegal(d.razao_social||"");setMsg("Dados atualizados!");}catch(e){setMsg("Erro: "+e.message);}setFetching(false);};
@@ -462,7 +463,7 @@ function EditModal({org,token,users,allOrgs,onSave,onClose}){const[name,setName]
     {grupo==="__new__"&&grupoSearch.trim()&&<p style={{fontSize:10,color:S.acc,margin:"2px 0 0"}}>➕ Criar novo grupo: "{grupoSearch}"</p>}
     {grupo&&grupo!=="__new__"&&<p style={{fontSize:10,color:S.ok,margin:"2px 0 0"}}>✓ Selecionado: {grupo}</p>}
   </div></LB>
-  <LB t="PRODUTOS / MARCAS"><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{PRODS.map(p=><button key={p.id} onClick={()=>toggleProd(p.id)} style={{padding:"4px 8px",fontSize:10,border:selProds.includes(p.id)?`2px solid ${S.ok}`:`1px solid ${S.brd}`,background:selProds.includes(p.id)?S.ok+"22":"transparent",color:selProds.includes(p.id)?S.ok:S.ts,borderRadius:6,fontWeight:selProds.includes(p.id)?600:400}}>{p.n}</button>)}</div></LB>
+  <LB t="PRODUTOS / MARCAS"><p style={{fontSize:9.5,color:S.td,margin:"0 0 4px"}}>✓ marcadas = marcas que o cliente compra (atualizado pelo motor a partir das vendas)</p><div style={{display:"flex",gap:4,flexWrap:"wrap"}}>{PRODS.map(p=><button key={p.id} onClick={()=>toggleProd(p.id)} style={{padding:"4px 8px",fontSize:10,border:selProds.includes(p.id)?`2px solid ${S.ok}`:`1px solid ${S.brd}`,background:selProds.includes(p.id)?S.ok+"22":"transparent",color:selProds.includes(p.id)?S.ok:S.ts,borderRadius:6,fontWeight:selProds.includes(p.id)?600:400}}>{p.n}</button>)}</div></LB>
   {msg&&<p style={{fontSize:12,color:msg.startsWith("Erro")?S.dng:S.ok,margin:"0 0 6px"}}>{msg}</p>}
   <div style={{display:"flex",gap:8,marginTop:4}}><button onClick={onClose} style={{flex:1}}>Cancelar</button><button onClick={save} disabled={lo} style={{flex:1,background:S.pri,border:"none",fontWeight:600}}>{lo?"...":"Salvar"}</button></div></div></div>);}
 function HotelGeoInput({name,onNameChange,lat,lng,onCoordsChange,label}){

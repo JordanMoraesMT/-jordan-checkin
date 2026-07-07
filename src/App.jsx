@@ -23,7 +23,10 @@ export default function App(){
   // v43: auto-ajuste ao equipamento — telas estreitas ganham escala proporcional (some o "explodido")
   useEffect(()=>{const fit=()=>{const w=window.innerWidth;const z=w<420?Math.max(0.8,Math.min(1,w/415)):1;document.body.style.zoom=z===1?"":String(z);};fit();window.addEventListener("resize",fit);return()=>{window.removeEventListener("resize",fit);document.body.style.zoom="";};},[]);
   const[token,setToken]=useState(()=>sL("jc:session",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);const[exclOrgs,setExclOrgs]=useState([]);
-  const[visits,setVisits]=useState(()=>{const raw=sL("jc:visits",[]);const cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);const cut=cutoff.toISOString();const purged=raw.filter(v=>!v.checkinTime||v.checkinTime>=cut);if(purged.length<raw.length)console.log(`Purged ${raw.length-purged.length} visits >90d`);return purged;});const[active,setActive]=useState(()=>sL("jc:active",null));
+  const[visits,setVisits]=useState(()=>{const raw=sL("jc:visits",[]);const cutoff=new Date();cutoff.setDate(cutoff.getDate()-90);const cut=cutoff.toISOString();let purged=raw.filter(v=>!v.checkinTime||v.checkinTime>=cut);if(purged.length<raw.length)console.log(`Purged ${raw.length-purged.length} visits >90d`);
+    // visitas reconstruídas em versões antigas ficaram com UTC cru ("YYYY-MM-DD HH:MM:SS") — corrigir formato
+    purged=purged.map(v=>(v.checkinTime&&v.checkinTime.includes(" ")&&!v.checkinTime.includes("T"))?{...v,d1:true,checkinTime:v.checkinTime.replace(" ","T")+"Z",checkoutTime:v.checkoutTime&&v.checkoutTime.includes(" ")?v.checkoutTime.replace(" ","T")+"Z":v.checkoutTime}:v);
+    return purged;});const[active,setActive]=useState(()=>sL("jc:active",null));
   const[tab,setTab]=useState("pdvs");const[focusReq,setFocusReq]=useState(null);
   const[crmBump,setCrmBump]=useState(0);// sinaliza mudanças no CRM (Agenda→feed Início)
   const[crmFocus,setCrmFocus]=useState(null);// abre a ficha de um cliente na aba Empresas
@@ -50,7 +53,13 @@ export default function App(){
   const syncPush=async(data)=>{try{await fetch(`${API}?sync=${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:data})});}catch(e){console.warn("syncPush:",e);}};
   const syncClear=async()=>{try{await fetch(`${API}?sync=${user.id}`,{method:"DELETE"});}catch(e){console.warn("syncClear:",e);}};
   const syncVisitSave=async(visit)=>{try{const r=await fetch(`${API}?sync=visits_${user.id}`);const d=await r.json();const all=[visit,...(d.active||[])].slice(0,200);await fetch(`${API}?sync=visits_${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:all})});}catch(e){console.warn("syncVisitSave:",e);}};
-  const syncVisitLoad=async()=>{try{const ids=[743088,743347];let remote=[];for(const uid of ids){const r=await fetch(`${API}?sync=visits_${uid}`,{cache:"no-store"});const buf=await r.arrayBuffer();const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);const d=JSON.parse(txt);if(d.active)remote.push(...d.active.map(v=>({...v,orgName:fixMojibake(v.orgName||""),city:fixMojibake(v.city||""),note:fixMojibake(v.note||"")})));}if(remote.length){setVisits(prev=>{const existing=new Set(prev.map(v=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime)));const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+(r.userName||"")+"|"+toLocalDate(r.checkinTime)));if(newOnes.length)return[...prev,...newOnes];return prev;});}}catch(e){console.warn("syncVisitLoad:",e);}};
+  const syncVisitLoad=async()=>{try{const ids=[743088,743347];let remote=[];for(const uid of ids){const r=await fetch(`${API}?sync=visits_${uid}`,{cache:"no-store"});const buf=await r.arrayBuffer();const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);const d=JSON.parse(txt);if(d.active)remote.push(...d.active.map(v=>({...v,orgName:fixMojibake(v.orgName||""),city:fixMojibake(v.city||""),note:fixMojibake(v.note||"")})));}if(remote.length){setVisits(prev=>{const chave=v=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime);
+      const remoteKeys=new Set(remote.map(chave));
+      // visita REAL (KV, com horários de verdade) expulsa a reconstruída do D1 de mesma chave
+      const base=prev.filter(v=>!(v.d1&&remoteKeys.has(chave(v))));
+      const existing=new Set(base.map(chave));
+      const newOnes=remote.filter(r=>!existing.has(chave(r)));
+      if(newOnes.length||base.length!==prev.length)return[...base,...newOnes];return prev;});}}catch(e){console.warn("syncVisitLoad:",e);}};
   const syncPlocs=async(locs)=>{try{await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:locs})});}catch(e){console.warn("syncPlocs:",e);}};
   const syncDayBasesSave=async(bases)=>{if(!bases||!Object.keys(bases).length)return;try{await fetch(`${API}?sync=dayBases`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:bases})});}catch(e){console.warn("syncBases:",e);}};
   const syncDayBasesLoad=async()=>{try{const r=await fetch(`${API}?sync=dayBases`);const d=await r.json();if(d.active&&Object.keys(d.active).length){setDayBases(prev=>{const merged={...prev};for(const k in d.active){merged[k]={...(d.active[k]||{}),...(prev[k]||{})};}sS("jc:dayBases",merged);return merged;});}}catch(e){console.warn("syncBasesLoad:",e);}};
@@ -143,8 +152,10 @@ export default function App(){
     // visita REGISTRADA = tipo Visita sem prazo (com prazo = visita agendada)
     const apiVisits=raw.filter(t=>!t.due_em);
     const seen=new Set();const deduped=[];
-    for(const t of apiVisits){const key=(t.org_id||"")+"|"+(t.user_id||"")+"|"+(t.criado_em||"").slice(0,10);if(seen.has(key))continue;seen.add(key);deduped.push(t);}
-    const remote=deduped.map(t=>({orgId:t.org_id,orgName:t.org_nome||"?",city:"",checkinTime:t.criado_em,checkoutTime:t.criado_em,note:t.texto||"",taskType:"VISITA",synced:true,userName:t.user_nome||""}));
+    for(const t of apiVisits){const key=(t.org_id||"")+"|"+(t.user_id||"")+"|"+toLocalDate((t.criado_em||"").replace(" ","T")+"Z");if(seen.has(key))continue;seen.add(key);deduped.push(t);}
+    // criado_em do D1 é UTC "YYYY-MM-DD HH:MM:SS" SEM fuso — anexar Z para o fT/toLocalDate converterem certo (fix 13:11→09:11)
+    const isoZ=(x)=>{const v=String(x||"");return v.includes("T")?v:(v.replace(" ","T")+"Z");};
+    const remote=deduped.map(t=>({orgId:t.org_id,orgName:t.org_nome||"?",city:"",checkinTime:isoZ(t.criado_em),checkoutTime:isoZ(t.criado_em),note:t.texto||"",taskType:"VISITA",synced:true,d1:true,userName:t.user_nome||""}));
     // Merge: KV/local visits take priority (have real timestamps)
     const existing=new Set(visits.map(v=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime)));
     const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+(r.userName||"")+"|"+toLocalDate(r.checkinTime)));
@@ -211,11 +222,11 @@ export default function App(){
     {/* SIDEBAR — mesma estrutura do Dashboard (grupos + itens); no mobile vira gaveta */}
     {mob&&navOpen&&<div onClick={()=>setNavOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:49}}/>}
     <div style={{width:navOpen?230:0,minWidth:navOpen?230:0,transition:"all .25s",overflow:"hidden",background:S.chrome,borderRight:`1px solid ${S.chromeBdr}`,position:mob?"fixed":"relative",top:0,left:0,height:"100vh",zIndex:mob?50:1,display:"flex",flexDirection:"column",boxShadow:mob&&navOpen?"0 0 40px rgba(0,0,0,.5)":"none"}}>
-      <div style={{height:60,display:"flex",alignItems:"center",gap:11,padding:"0 18px",flexShrink:0}}>
-        <div style={{width:34,height:34,borderRadius:"50%",border:`1.5px solid ${S.chromeBdr}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,letterSpacing:".04em",color:S.chromeFg,flexShrink:0}}>JM</div>
+      <div style={{height:74,display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:3,padding:"8px 18px 4px",flexShrink:0}}>
+        <img src="/logo-white.png" alt="Jordan" style={{height:26,objectFit:"contain"}}/>
         <div style={{lineHeight:1.15,whiteSpace:"nowrap"}}>
-          <div style={{fontSize:13,fontWeight:700,letterSpacing:".06em",color:S.chromeFg}}>TEAMCHECK</div>
-          <div style={{fontSize:9.5,color:S.navGrp,letterSpacing:".02em"}}>Força de Vendas</div>
+          <span style={{fontSize:12.5,fontWeight:700,letterSpacing:".06em",color:S.chromeFg}}>TeamCheck</span>
+          <span style={{fontSize:9.5,color:S.navGrp,letterSpacing:".02em",marginLeft:6}}>Representação Inteligente</span>
         </div>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"0 8px 18px"}}>

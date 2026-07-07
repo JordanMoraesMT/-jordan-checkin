@@ -42,6 +42,7 @@ function clusterIcon(cluster) {
 const RFV_CORES = { "Campeão": "#C8964E", "Leal": "#2A9D8F", "Em Crescimento": "#0AAEE8", "Em Risco": "#FFB020", "Inativo": "#FB4B3A" };
 
 function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
+  const mob = typeof window !== "undefined" && window.innerWidth <= 768;
   const mapRef = useRef(null); const divRef = useRef(null); const layerRef = useRef(null); const meRef = useRef(null);
   const [sel, setSel] = useState(null);
   const [me, setMe] = useState(null); const [locLo, setLocLo] = useState(false);
@@ -109,6 +110,8 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
     const m = L.map(divRef.current, { zoomControl: true, attributionControl: true, doubleClickZoom: false }).setView([-15.60, -56.09], 11);
     m.on("dblclick", () => setFs(v => !v)); // v46: duplo clique alterna tela cheia
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(m);
+    // v48: localização atual do aparelho aparece automaticamente (sem precisar tocar em "Onde estou")
+    gps().then(g => { setMe(g); if (meRef.current) meRef.current.remove(); meRef.current = L.circleMarker([g.lat, g.lng], { radius: 9, color: "#fff", weight: 3, fillColor: "#0AAEE8", fillOpacity: 1 }).bindTooltip("Você está aqui", { direction: "top", offset: [0, -8] }).addTo(m); }).catch(() => {});
     layerRef.current = L.markerClusterGroup({
       showCoverageOnHover: false, maxClusterRadius: 52, spiderfyOnMaxZoom: true,
       iconCreateFunction: clusterIcon,
@@ -183,7 +186,7 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
     <div style={fs ? { position: "fixed", inset: 0, zIndex: 80, background: "var(--bg)" } : { position: "relative", borderRadius: 14, overflow: "hidden", border: `1px solid ${S.brd}` }}>
       <div ref={divRef} style={{ height: fs ? "100vh" : "min(56vh, 520px)", minHeight: fs ? undefined : 320, background: "#111a28" }} />
       <button onClick={() => setFs(v => !v)} title={fs ? "Sair da tela cheia (Esc)" : "Tela cheia (ou duplo clique no mapa)"} style={{ position: "absolute", right: 12, bottom: fs ? 18 : 12, zIndex: 1001, width: 42, height: 42, borderRadius: 12, background: "var(--card-solid)", border: `1px solid ${S.brd}`, color: S.txt, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,.35)" }}>{fs ? <Minimize2 size={19} /> : <Maximize2 size={19} />}</button>
-      {sel && <div style={{ position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 1000, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", boxShadow: "0 8px 28px rgba(0,0,0,.45)" }}>
+      {sel && <div style={mob && !fs ? { position: "fixed", left: 10, right: 10, bottom: 86, zIndex: 1000, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", boxShadow: "0 8px 28px rgba(0,0,0,.45)" } : { position: "absolute", left: 10, right: 10, bottom: fs && mob ? 16 : 10, zIndex: 1000, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", boxShadow: "0 8px 28px rgba(0,0,0,.45)" }}>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
