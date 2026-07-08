@@ -2,8 +2,8 @@
 // CRM próprio: histórico de atividades, contatos, fotos/arquivos da loja e GPS.
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check } from "lucide-react";
-import { S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, todayLocal } from "../lib";
+import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check } from "lucide-react";
+import {CARGOS,  S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, todayLocal } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
 const DASH = "https://dashboard.jordanmt.com";
@@ -89,7 +89,7 @@ function AtvCard({ a, onOrg, onDel, canDel, onFinish }) {
 // ─────────────────────────────────────────────────────────────
 //  Tela do cliente — cabeçalho + Histórico | Contatos | Fotos | Dados
 // ─────────────────────────────────────────────────────────────
-function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange }) {
+function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange, backLabel }) {
   const [sub, setSub] = useState("hist");
   const [info, setInfo] = useState(null);           // /api/crm/cliente
   const [atvs, setAtvs] = useState([]); const [ldA, setLdA] = useState(false);
@@ -144,6 +144,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       setCttForm(null); carregaCtts();
     } catch (e) { alert("Erro: " + e.message); } };
   const delCtt = async (c) => { if (!confirm(`Excluir contato ${c.nome}?`)) return; try { await crm(token, `/api/crm/contatos?id=${c.id}`, { method: "DELETE" }); carregaCtts(); } catch (e) { alert("Erro: " + e.message); } };
+  const desvProprio = async (c) => { if (!confirm(`Tirar ${c.nome} desta empresa?\n\nO contato NÃO é excluído do CRM — só perde o vínculo com a empresa (fica em Pessoas, sem empresa).`)) return; try { await crm(token, "/api/crm/contato-desvincular", { method: "PUT", body: JSON.stringify({ id: c.id }) }); carregaCtts(); } catch (e) { alert("Erro: " + e.message); } };
   // v42: vincular pessoa JÁ EXISTENTE (rede com comprador único — editar uma vez reflete em todas as lojas)
   const [vincBusca, setVincBusca] = useState(null); // null | "" | texto
   const [vincRes, setVincRes] = useState([]); const [vincLo, setVincLo] = useState(false);
@@ -217,7 +218,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const infoContato = (
     <Crd>
       <p style={{ margin: "0 0 8px", fontSize: 12.5, fontWeight: 800, color: S.txt }}>Informações para contato</p>
-      {(org.addr?.street||org.addr?.city_name) && <p style={{ margin: "0 0 4px", fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"flex-start" }}><MapPin size={13} style={{marginTop:2, flexShrink:0}}/>{[ [org.addr?.street, org.addr?.number].filter(Boolean).join(", "), org.addr?.district, [org.addr?.city_name||org.addr?.city, org.addr?.state].filter(Boolean).join("/") ].filter(Boolean).join(" · ")}</p>}
+      {(org.addr?.street||org.addr?.city_name) && <p style={{ margin: "0 0 4px", fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"flex-start" }}><MapPin size={13} style={{marginTop:2, flexShrink:0}}/>{[ [org.addr?.street, org.addr?.number].filter(Boolean).join(", "), org.addr?.district, [org.addr?.city_name||org.addr?.city, org.addr?.state].filter(Boolean).join("/"), org.addr?.zip && ("CEP " + org.addr.zip) ].filter(Boolean).join(" · ")}</p>}
       {org.phone && <p style={{ margin: "0 0 4px", fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"center" }}><Phone size={13}/>{org.phone}
         <a href={`https://wa.me/55${String(org.phone).replace(/\D/g,"")}`} target="_blank" rel="noreferrer" style={{color:S.ok, fontWeight:700, textDecoration:"none"}}>WhatsApp</a>
         <a href={`tel:${String(org.phone).replace(/\D/g,"")}`} style={{color:S.pl, fontWeight:700, textDecoration:"none"}}>Ligar</a></p>}
@@ -226,7 +227,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
     </Crd>);
 
   return (<div>
-    <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: S.pri, fontSize: 13, fontWeight: 700, padding: "2px 0 10px", cursor: "pointer" }}><ArrowLeft size={16} />Voltar ao CRM</button>
+    <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: S.pri, fontSize: 13, fontWeight: 700, padding: "2px 0 10px", cursor: "pointer" }}><ArrowLeft size={16} />{backLabel || "Voltar ao CRM"}</button>
 
     {/* Cabeçalho do cliente */}
     <Crd>
@@ -333,7 +334,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}><p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{cttForm.id ? "Editar contato" : "Novo contato"}</p><button onClick={() => setCttForm(null)} style={{ background: "transparent", border: "none", cursor: "pointer" }}><X size={16} color={S.ts} /></button></div>
         <div style={{ display: "grid", gap: 8 }}>
           <input style={inp} placeholder="Nome *" value={cttForm.nome} onChange={e => setCttForm(f => ({ ...f, nome: e.target.value }))} />
-          <input style={inp} placeholder="Cargo (comprador, gerente...)" value={cttForm.cargo || ""} onChange={e => setCttForm(f => ({ ...f, cargo: e.target.value }))} />
+          <input style={inp} list="tc-cargos" placeholder="Cargo (toque para escolher da lista)" value={cttForm.cargo || ""} onChange={e => setCttForm(f => ({ ...f, cargo: e.target.value }))} />
+          <datalist id="tc-cargos">{CARGOS.map(c => <option key={c} value={c} />)}</datalist>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <input style={inp} placeholder="Telefone" inputMode="tel" value={cttForm.telefone || ""} onChange={e => setCttForm(f => ({ ...f, telefone: e.target.value }))} />
             <input style={inp} placeholder="WhatsApp" inputMode="tel" value={cttForm.whatsapp || ""} onChange={e => setCttForm(f => ({ ...f, whatsapp: e.target.value }))} />
@@ -357,6 +359,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
             {c.whatsapp && <a href={`https://wa.me/55${soDig(c.whatsapp)}`} target="_blank" rel="noopener noreferrer" style={{ width: 36, height: 36, borderRadius: 10, background: "#25D36622", display: "flex", alignItems: "center", justifyContent: "center" }}><MessageCircle size={17} color="#25D366" /></a>}
             {c.telefone && <a href={`tel:${soDig(c.telefone)}`} style={{ width: 36, height: 36, borderRadius: 10, background: S.pl + "22", display: "flex", alignItems: "center", justifyContent: "center" }}><Phone size={16} color={S.pl} /></a>}
             <button onClick={() => setCttForm({ ...c })} title={c.vinculado ? "Editar (atualiza em TODAS as empresas vinculadas)" : "Editar"} style={{ width: 36, height: 36, borderRadius: 10, background: S.cl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Pencil size={14} color={S.ts} /></button>
+            {!c.vinculado && <button onClick={() => desvProprio(c)} title="Tirar desta empresa (o contato continua no CRM)" style={{ width: 36, height: 36, borderRadius: 10, background: S.gold + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Unlink size={14} color={S.gold} /></button>}
             <button onClick={() => c.vinculado ? desvincular(c) : delCtt(c)} title={c.vinculado ? "Desvincular desta empresa" : "Excluir contato"} style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>
           </div>
         </div>
@@ -430,7 +433,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       <Crd>
         <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 800, color: S.txt }}>Cadastro</p>
         {[["Razão social", org.legalName], ["CNPJ", org.cnpj && fCnpj(org.cnpj)], ["Categoria", org.cat], ["Setor", org.sector], ["Responsável", org.owner], ["Grupo", org.grupo], ["Marcas", org.products],
-          ["Endereço", [org.addr?.street, org.addr?.number].filter(Boolean).join(", ")], ["Bairro", org.addr?.district], ["Cidade", (org.addr?.city_name || org.addr?.city || "") + (org.addr?.state ? "/" + org.addr.state : "")]]
+          ["Endereço", [org.addr?.street, org.addr?.number].filter(Boolean).join(", ")], ["Bairro", org.addr?.district], ["CEP", org.addr?.zip], ["Cidade", (org.addr?.city_name || org.addr?.city || "") + (org.addr?.state ? "/" + org.addr.state : "")]]
           .filter(([, v]) => v).map(([k, v]) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: `1px solid ${S.cl}` }}>
             <span style={{ fontSize: 12, color: S.ts, flexShrink: 0 }}>{k}</span><span style={{ fontSize: 12.5, color: S.txt, textAlign: "right", wordBreak: "break-word" }}>{v}</span></div>)}
       </Crd>
@@ -488,6 +491,7 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           {onPerson && o && <button onClick={() => onPerson(o)} title="Editar pessoas desta empresa" style={{ background: S.gold + "18", border: `1px solid ${S.gold}55`, borderRadius: 8, padding: "6px 8px", display: "flex", cursor: "pointer" }}><Pencil size={14} color={S.gold}/></button>}
+          {!o && <button onClick={async () => { if (!confirm(`Excluir o contato ${c.nome}?\n\nEle não está vinculado a nenhuma empresa da base.`)) return; try { await crm(token, `/api/crm/contatos?id=${c.id}`, { method: "DELETE" }); carrega(); } catch (e) { alert("Erro: " + e.message); } }} title="Excluir contato (sem empresa vinculada)" style={{ background: S.dng + "18", border: `1px solid ${S.dng}55`, borderRadius: 8, padding: "6px 8px", display: "flex", cursor: "pointer" }}><Trash2 size={14} color={S.dng}/></button>}
           {(c.whatsapp || c.telefone) && <a href={`https://wa.me/55${soDig(c.whatsapp || c.telefone)}`} target="_blank" rel="noreferrer" style={{ background: S.ok + "18", border: `1px solid ${S.ok}55`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><MessageCircle size={14} color={S.ok}/></a>}
           {c.telefone && <a href={`tel:${soDig(c.telefone)}`} style={{ background: S.pri + "18", border: `1px solid ${S.pri}55`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><Phone size={14} color={S.pri}/></a>}
           {c.email && <a href={`mailto:${c.email}`} style={{ background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><Mail size={14} color={S.ts}/></a>}
@@ -574,8 +578,21 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user 
         </tbody>
       </table>
     </div>
-    <button onClick={() => { const rows = [["Nome","CNPJ","Cidade","UF","Categoria","Classe RFV","Curva ABC","Status Recompra","Responsável","E-mail","Telefone"]];
-      lista.forEach(o => { const r = rfvDe(o); rows.push([o.nickname || o.name, o.cnpj || "", o.addr?.city_name || o.addr?.city || "", o.addr?.state || "", o.cat || "", r ? r.rfv : "", r ? r.abc : "", r ? r.status : "", o.owner || "", o.email || "", o.phone || ""]); });
+    <button onClick={async () => {
+      // Planilha completa: cadastro + endereço + contatos priorizados (Comprador > Proprietário/Sócio > demais)
+      let ctts = [];
+      try { const d = await crm(token, "/api/crm/contatos-todos?limit=3000"); ctts = d.contatos || []; } catch (e) {}
+      const prio = (c) => { const g = (c.cargo || "").toLowerCase(); if (/comprad/.test(g)) return 0; if (/propriet|dono|s[oó]ci/.test(g)) return 1; return 2; };
+      const deOrg = (o) => { const k = soDig(o.cnpj); return ctts.filter(c => (c.org_id && c.org_id === o.id) || (k && soDig(c.cnpj) === k)).sort((a, b) => prio(a) - prio(b)); };
+      const fmtP = (c) => c ? (c.nome + (c.cargo ? " (" + c.cargo + ")" : "")) : "";
+      const rows = [["Nome Fantasia","Razão Social","CNPJ","Grupo","UF","Cidade","Bairro","Endereço","CEP","Categoria","Responsável","Contato Principal","Cargo","Telefone","E-mail","Pessoa 2","Telefone 2","Pessoa 3","Telefone 3","Pessoa 4","Telefone 4"]];
+      lista.forEach(o => { const ps = deOrg(o); const p1 = ps[0];
+        rows.push([o.nickname || o.name, o.legalName || "", o.cnpj || "", (o.grupo || "").replace("Grupo: ", ""), o.addr?.state || "", o.addr?.city_name || o.addr?.city || "", o.addr?.district || "", [o.addr?.street, o.addr?.number].filter(Boolean).join(", "), o.addr?.zip || "",
+          o.cat || "", o.owner || "",
+          p1 ? p1.nome : "", p1 ? (p1.cargo || "") : "", p1 ? (p1.telefone || p1.whatsapp || o.phone || "") : (o.phone || ""), p1 ? (p1.email || o.email || "") : (o.email || ""),
+          fmtP(ps[1]), ps[1] ? (ps[1].telefone || ps[1].whatsapp || "") : "",
+          fmtP(ps[2]), ps[2] ? (ps[2].telefone || ps[2].whatsapp || "") : "",
+          fmtP(ps[3]), ps[3] ? (ps[3].telefone || ps[3].whatsapp || "") : ""]); });
       csv(rows, `empresas-${new Date().toISOString().slice(0,10)}.csv`); }} style={{ width: "100%", marginTop: 10, padding: 12, fontSize: 13, background: S.pri + "22", border: `1px solid ${S.pri}55`, color: S.pl, fontWeight: 600, borderRadius: 10 }}>📊 Exportar {lista.length} empresas (Excel)</button>
     {vc < lista.length && <button onClick={() => setVc(v => v + 60)} style={{ width: "100%", marginTop: 10, padding: 12, fontSize: 13, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.txt, cursor: "pointer" }}>Ver mais ({lista.length - vc})</button>}
   </div>);
@@ -634,7 +651,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   };
 
   if (!visible) return null;
-  if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} />;
+  if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
 
   return (<div>
     {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}

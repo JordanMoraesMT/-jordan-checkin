@@ -7,6 +7,7 @@ const TIPOS = [
   { id: "segmento",  l: "Segmentos",  emo: "🏷️", temEmail: false, temCor: false },
   { id: "status",    l: "Status de clientes", emo: "🔖", temEmail: false, temCor: true },
   { id: "industria", l: "Indústrias", emo: "🏭", temEmail: false, temCor: true },
+  { id: "cargo",     l: "Cargos",     emo: "💼", temEmail: false, temCor: false },
 ];
 const PALETA = ["#0AAEE8","#12C265","#8B5CF6","#06B6D4","#FFB020","#FF4D8D","#FB4B3A","#06C281"];
 

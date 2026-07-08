@@ -35,6 +35,16 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
     setTasks(mapped);setErr(`${mapped.length} tarefas · atualizado ${fT(new Date())}`);
   }catch(e){console.warn("agenda:",e);setErr("Erro: "+e.message);}setLo(false);};
   useEffect(()=>{if(!visible)return;load();const iv=setInterval(()=>{load();},300000);return()=>clearInterval(iv);},[visible,bump]);// recarrega ao abrir e a cada mudança do CRM; auto-refresh 5min enquanto visível
+  const[adiando,setAdiando]=useState(null); // {key, date, time} — adiar tarefa
+  const adiarTarefa=async(t,date,time)=>{
+    const corpo=t.d1_id?{id:t.d1_id}:{agendor_id:t.id};
+    try{
+      const r=await fetch(`${DASH}/api/crm/tarefa-adiar`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({...corpo,due_em:`${date}T${time}:00-04:00`})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||!d.ok)throw new Error(d.erro||r.status);
+      setAdiando(null);setErr("Tarefa adiada!");await load();onCrmChange&&onCrmChange();
+    }catch(e){alert("Erro ao adiar: "+e.message);}
+  };
   const markDone=async(t)=>{if(!confirm(`Finalizar "${t.text.slice(0,50)}..."?`))return;try{
     // v24: conclui só no D1 (fonte de verdade). Usa d1_id se houver, senao o id (agendor_id legado).
     const corpo=t.d1_id?{id:t.d1_id}:{agendor_id:t.id};
@@ -76,6 +86,15 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
         <span className="mono" style={{fontSize:11.5,fontWeight:600,color:t.done?S.td:t.due&&t.due.slice(0,10)<today?S.dng:S.td,textDecoration:t.done?"line-through":"none"}}>{t.due?`Prazo ${fD(t.due)} ${fT(t.due)}`:`Criada ${fD(t.created)}`}</span>
         {t.done&&t.finished&&<><span style={{width:3,height:3,borderRadius:"50%",background:S.td}}/><span className="mono" style={{fontSize:11.5,color:S.ok}}>Finalizada {fD(t.finished)}</span></>}
         {!t.done&&t.due&&<a href={gcalUrl({titulo:`${t.type||"Tarefa"} — ${t.org||""}`,detalhes:t.text||"",inicio:t.due,local:t.org||""})||"#"} target="_blank" rel="noopener" title="Adicionar ao Google Agenda" style={{fontSize:11,fontWeight:600,color:S.pl,textDecoration:"none",border:`1px solid ${S.brd}`,borderRadius:6,padding:"2px 8px"}}>📅 Google Agenda</a>}
+        {!t.done&&<button onClick={()=>{const base=t.due?new Date(new Date(t.due).getTime()+86400000):new Date(Date.now()+86400000);const d=base.toISOString().slice(0,10);const hr=t.due?(t.due.slice(11,16)||"09:00"):"09:00";setAdiando(adiando&&adiando.key===t.id?null:{key:t.id,date:d,time:hr});}} title="Adiar esta tarefa" style={{fontSize:11,fontWeight:600,color:S.gold,background:"transparent",border:`1px solid ${S.gold}66`,borderRadius:6,padding:"2px 8px",cursor:"pointer"}}>⏩ Adiar</button>}
+      </div>
+      {adiando&&adiando.key===t.id&&<div style={{display:"flex",gap:8,alignItems:"center",marginTop:8,flexWrap:"wrap"}}>
+        <input type="date" value={adiando.date} onChange={e=>setAdiando(a=>({...a,date:e.target.value}))} style={{background:S.inp,border:`1px solid ${S.inpBdr}`,borderRadius:8,padding:"7px 9px",fontSize:12.5,color:S.txt,fontFamily:"inherit"}}/>
+        <input type="time" value={adiando.time} onChange={e=>setAdiando(a=>({...a,time:e.target.value}))} style={{background:S.inp,border:`1px solid ${S.inpBdr}`,borderRadius:8,padding:"7px 9px",fontSize:12.5,color:S.txt,fontFamily:"inherit"}}/>
+        <button onClick={()=>adiarTarefa(t,adiando.date,adiando.time)} style={{background:S.gold,border:"none",borderRadius:8,padding:"8px 14px",fontSize:12.5,fontWeight:700,color:"#fff",cursor:"pointer"}}>Adiar para esta data</button>
+        <button onClick={()=>setAdiando(null)} style={{background:"transparent",border:`1px solid ${S.brd}`,borderRadius:8,padding:"8px 10px",fontSize:12.5,color:S.ts,cursor:"pointer"}}>Cancelar</button>
+      </div>}
+      <div style={{display:"none"}}>
       </div>
     </div>
     {/* Caixa de seleção: marca a tarefa como finalizada (padrão Dashboard) */}
