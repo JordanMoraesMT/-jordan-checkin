@@ -30,7 +30,8 @@ export default function App(){
     // visitas reconstruídas em versões antigas ficaram com UTC cru ("YYYY-MM-DD HH:MM:SS") — corrigir formato
     purged=purged.map(v=>(v.checkinTime&&v.checkinTime.includes(" ")&&!v.checkinTime.includes("T"))?{...v,d1:true,checkinTime:v.checkinTime.replace(" ","T")+"Z",checkoutTime:v.checkoutTime&&v.checkoutTime.includes(" ")?v.checkoutTime.replace(" ","T")+"Z":v.checkoutTime}:v);
     return purged;});const[active,setActive]=useState(()=>sL("jc:active",null));
-  const[tab,setTab]=useState("pdvs");const[focusReq,setFocusReq]=useState(null);
+  const[tab,setTab]=useState(()=>{try{const sp=new URL(window.location.href).searchParams;if(sp.get("cliente"))return"crm_empresas";if(sp.get("pessoa"))return"crm_pessoas";}catch{}return"pdvs";});const[focusReq,setFocusReq]=useState(null);
+  const[pessoaQ0]=useState(()=>{try{return new URL(window.location.href).searchParams.get("pessoa")||"";}catch{return"";}});
   const[crmBump,setCrmBump]=useState(0);// sinaliza mudanças no CRM (Agenda→feed Início)
   const[crmFocus,setCrmFocus]=useState(null);// abre a ficha de um cliente na aba Empresas
   // ─── Moldura padrão Dashboard: sidebar recolhível + tema no header ───
@@ -204,10 +205,11 @@ export default function App(){
   useEffect(()=>{
     if(dlRef.current||!token||!user||!(allOrgs||[]).length)return;
     dlRef.current=true;
-    let q="";try{q=(new URL(window.location.href).searchParams.get("cliente")||"").replace(/\D/g,"");}catch{}
-    if(!q)return;
+    let q="",pq="";try{const sp=new URL(window.location.href).searchParams;q=(sp.get("cliente")||"").replace(/\D/g,"");pq=sp.get("pessoa")||"";}catch{}
+    if(!q&&!pq)return;
+    try{const u=new URL(window.location.href);u.searchParams.delete("cliente");u.searchParams.delete("pessoa");window.history.replaceState({},"",u.pathname+(u.search||""));}catch{}
+    if(!q)return; // ?pessoa: a aba Pessoas já abre com a busca preenchida (pessoaQ0)
     const org=(allOrgs||[]).find(x=>String(x.cnpj||"").replace(/\D/g,"")===q);
-    try{const u=new URL(window.location.href);u.searchParams.delete("cliente");window.history.replaceState({},"",u.pathname+(u.search||""));}catch{}
     if(!org)return;
     setCrmFocus({org,t:Date.now()});setTab("crm_empresas");
   },[allOrgs,token,user]);
@@ -292,7 +294,7 @@ export default function App(){
       {canCloseRoute&&tab!=="config"&&<div style={{background:S.acc+"18",border:`1px solid ${S.acc}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.acc,margin:"0 0 8px"}}>✅ {todayVisits.length} visita(s) hoje — Fechar roteiro?</p><button onClick={()=>setShowEndDay(true)} style={{width:"100%",padding:10,fontSize:13,background:S.acc,border:"none",fontWeight:600,borderRadius:8,color:"#fff"}}>🏨 Fechar Roteiro do Dia</button></div>}
 
       <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}} focusReq={focusReq} rfv={rfvMap} excl={exclOrgs}/>
-      <CrmTab visible={tab.startsWith("crm")} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs}/>
+      <CrmTab visible={tab.startsWith("crm")} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs} pessoasQ={pessoaQ0}/>
       <Suspense fallback={null}>{mapaLigado&&<MapaTab visible={tab==="mapa"} orgs={orgs} plocs={plocs} user={user} rfv={rfvMap} excl={exclOrgs} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}</Suspense>
       {tab==="rotas"&&<RotasTab sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs}/>}
       {tab==="relatorio"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando relatório…</p>}><RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/></Suspense>}

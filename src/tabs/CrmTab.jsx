@@ -460,8 +460,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
 //  todos os contatos do CRM (D1), com empresa, cargo e ações
 //  WhatsApp/Ligar/E-mail. Enche de vez com a importação do backup.
 // ─────────────────────────────────────────────────────────────
-function PessoasView({ token, allOrgs, excl, onOpenOrg }) {
-  const [lista, setLista] = useState(null); const [q, setQ] = useState(""); const [vc, setVc] = useState(60);
+function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
+  const [lista, setLista] = useState(null); const [q, setQ] = useState(q0 || ""); const [vc, setVc] = useState(60);
   const carrega = async () => { try { const d = await crm(token, "/api/crm/contatos-todos"); setLista(d.contatos || []); } catch (e) { setLista([]); console.warn("pessoas:", e); } };
   useEffect(() => { carrega(); }, []);
   const achaOrg = (c) => { const k = soDig(c.cnpj); const tudo = [ ...(allOrgs || []), ...(excl || []) ];
@@ -487,6 +487,7 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg }) {
           <p style={{ margin: "3px 0 0", fontSize: 11, color: S.td }}>{[c.telefone, c.whatsapp, c.email].filter(Boolean).join(" · ") || "sem contato"}</p>
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          {onPerson && o && <button onClick={() => onPerson(o)} title="Editar pessoas desta empresa" style={{ background: S.gold + "18", border: `1px solid ${S.gold}55`, borderRadius: 8, padding: "6px 8px", display: "flex", cursor: "pointer" }}><Pencil size={14} color={S.gold}/></button>}
           {(c.whatsapp || c.telefone) && <a href={`https://wa.me/55${soDig(c.whatsapp || c.telefone)}`} target="_blank" rel="noreferrer" style={{ background: S.ok + "18", border: `1px solid ${S.ok}55`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><MessageCircle size={14} color={S.ok}/></a>}
           {c.telefone && <a href={`tel:${soDig(c.telefone)}`} style={{ background: S.pri + "18", border: `1px solid ${S.pri}55`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><Phone size={14} color={S.pri}/></a>}
           {c.email && <a href={`mailto:${c.email}`} style={{ background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><Mail size={14} color={S.ts}/></a>}
@@ -583,7 +584,7 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user 
 // ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl }) {
+export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl, pessoasQ }) {
   // secao controlada pelo menu lateral do App: inicio | empresas | pessoas
   const [sel, setSel] = useState(null);
   // Abrir a ficha de um cliente vindo de outra tela (ex.: clique no card em PDVs)
@@ -637,7 +638,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
 
   return (<div>
     {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
-    {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} />}
+    {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} onPerson={onPerson} q0={pessoasQ} />}
     {secao === "inicio" && <div>
     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
       <button onClick={() => setShowTarefa(true)} style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--chrome)", color: "#fff", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}><Calendar size={15}/> Nova tarefa</button>
