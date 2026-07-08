@@ -187,9 +187,9 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
       <div ref={divRef} style={{ height: fs ? "100vh" : "min(56vh, 520px)", minHeight: fs ? undefined : 320, background: "#111a28" }} />
       <button onClick={() => setFs(v => !v)} title={fs ? "Sair da tela cheia (Esc)" : "Tela cheia (ou duplo clique no mapa)"} style={{ position: "absolute", right: 12, bottom: fs ? 18 : 12, zIndex: 1001, width: 42, height: 42, borderRadius: 12, background: "var(--card-solid)", border: `1px solid ${S.brd}`, color: S.txt, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 3px 12px rgba(0,0,0,.35)" }}>{fs ? <Minimize2 size={19} /> : <Maximize2 size={19} />}</button>
       {sel && <div style={
-        mob
-          ? { position: "fixed", left: 10, right: 10, bottom: fs ? "calc(env(safe-area-inset-bottom, 0px) + 16px)" : "calc(env(safe-area-inset-bottom, 0px) + 74px)", zIndex: 2000, maxHeight: "42vh", overflowY: "auto", background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", boxShadow: "0 8px 28px rgba(0,0,0,.55)" }
-          : { position: "absolute", left: 10, right: 10, bottom: 10, zIndex: 1000, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", boxShadow: "0 8px 28px rgba(0,0,0,.45)" }
+        /* SEMPRE dentro do contêiner do mapa (absolute): imune ao zoom do body no iPhone
+           (position:fixed + zoom posiciona errado no Safari e o card caía atrás da barra de navegação) */
+        { position: "absolute", left: 10, right: 10, bottom: fs ? "calc(env(safe-area-inset-bottom, 0px) + 16px)" : 10, zIndex: 1000, maxHeight: fs ? "42vh" : "min(46%, 300px)", overflowY: "auto", WebkitOverflowScrolling: "touch", background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", boxShadow: "0 8px 28px rgba(0,0,0,.5)" }
       }>
         <div style={{ display: "flex", alignItems: "flex-start", gap: 10 }}>
           <div style={{ flex: 1, minWidth: 0 }}>

@@ -1,5 +1,5 @@
 // TeamCheck — App (orquestração principal)
-import { useState, useEffect, useMemo, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact } from "lucide-react";
 import { API, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
 import { Login, Banner, NoteModal, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
@@ -198,6 +198,19 @@ export default function App(){
     if(divergent)setTimeout(()=>alert(`ℹ️ Visita registrada.\nO GPS ficou a ${divDist}m do ponto salvo do cliente — a visita foi gravada normalmente e conta no relatório; fica só um selo ⚠️ para você conferir o cadastro depois.`),100);
     else if(next?.nextDate&&next?.nextDesc)setTimeout(()=>alert("Proximo passo agendado!"),100);
   };
+
+  // ─── Deep-link: teamcheck.jordanmt.com/?cliente={CNPJ} abre a ficha da empresa ───
+  const dlRef=useRef(false);
+  useEffect(()=>{
+    if(dlRef.current||!token||!user||!(allOrgs||[]).length)return;
+    dlRef.current=true;
+    let q="";try{q=(new URL(window.location.href).searchParams.get("cliente")||"").replace(/\D/g,"");}catch{}
+    if(!q)return;
+    const org=(allOrgs||[]).find(x=>String(x.cnpj||"").replace(/\D/g,"")===q);
+    try{const u=new URL(window.location.href);u.searchParams.delete("cliente");window.history.replaceState({},"",u.pathname+(u.search||""));}catch{}
+    if(!org)return;
+    setCrmFocus({org,t:Date.now()});setTab("crm_empresas");
+  },[allOrgs,token,user]);
 
   if(!token||!user)return <Login onLogin={(t,u)=>{setToken(t);setUser(u);sS("jc:session",t);sS("jc:user",u);setSSOCookie(t);}}/>;
 

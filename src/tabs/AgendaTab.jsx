@@ -90,11 +90,11 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
         <div style={{fontSize:16,fontWeight:700,color:S.txt}}>Agenda</div>
         <div style={{fontSize:12,color:S.ts,marginTop:2}}>{err||`${filtered.length} tarefa(s)${filter==="pending"?" pendentes":" finalizadas"}`}</div>
       </div>
-      <div style={{display:"flex",gap:8,alignItems:"center"}}>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",maxWidth:"100%"}}>
         <div style={{minWidth:210}}><SegTabs items={[["lista","📋 Lista"],["calendario","🗓️ Calendário"]]} value={view} onChange={setView} size={12.5}/></div>
         <button onClick={load} disabled={lo} style={{width:38,height:38,borderRadius:9,border:`1px solid ${S.inpBdr}`,background:S.inp,fontSize:14,padding:0}}>{lo?"…":"🔄"}</button>
-        <button onClick={()=>setShowAdd(true)} style={{display:"flex",alignItems:"center",gap:7,background:"var(--chrome)",color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:500,cursor:"pointer"}}>+ Nova tarefa</button>
-        {isAdmin&&<button onClick={()=>setShowPart(true)} title="Compromisso particular — só você vê; vai para o Google Agenda" style={{display:"flex",alignItems:"center",gap:7,background:S.gold,color:"#fff",border:"none",borderRadius:8,padding:"9px 16px",fontSize:13,fontWeight:600,cursor:"pointer"}}>🔒 Particular</button>}
+        <button onClick={()=>setShowAdd(true)} style={{display:"flex",alignItems:"center",gap:6,background:"var(--chrome)",color:"#fff",border:"none",borderRadius:8,padding:"9px 13px",fontSize:13,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nova tarefa</button>
+        {isAdmin&&<button onClick={()=>setShowPart(true)} title="Compromisso particular — só você vê; vai para o Google Agenda" style={{display:"flex",alignItems:"center",gap:6,background:S.gold,color:"#fff",border:"none",borderRadius:8,padding:"9px 13px",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>🔒 Particular</button>}
       </div>
     </div>
     {/* Barra de filtros (card padrão mockup) */}

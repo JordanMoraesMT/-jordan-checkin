@@ -23,14 +23,20 @@ function parseCSV(text){
 }
 const soDig=x=>String(x||"").replace(/\D/g,"");
 
-const ARow=({emo,t,d,onClick,disabled,color})=><div onClick={disabled?undefined:onClick} style={{display:"flex",alignItems:"center",gap:12,background:S.card,border:`1px solid ${S.brd}`,borderRadius:11,padding:"13px 16px",cursor:disabled?"default":"pointer",opacity:disabled?.6:1}}>
-  <span style={{width:34,height:34,borderRadius:9,background:S.cl,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}}>{emo}</span>
-  <div style={{flex:1,minWidth:0}}>
-    <div style={{fontSize:13.5,fontWeight:600,color:color||S.txt}}>{t}</div>
-    {d&&<div style={{fontSize:11.5,color:S.td,marginTop:1}}>{d}</div>}
+// Botões de ação no formato dos cards do Início do Dashboard (proporções menores)
+const ASETA=<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>;
+const ARow=({emo,t,d,onClick,disabled,color})=>{const cor=color||S.pri;return(
+  <div onClick={disabled?undefined:onClick} role="button"
+    style={{position:"relative",background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"12px 14px 10px",overflow:"hidden",cursor:disabled?"default":"pointer",opacity:disabled?.6:1,transition:"border-color .18s"}}
+    onMouseEnter={e=>{if(disabled)return;e.currentTarget.style.borderColor=cor;const b=e.currentTarget.querySelector(".cf-bar");if(b)b.style.transform="scaleX(1)";}}
+    onMouseLeave={e=>{e.currentTarget.style.borderColor="";e.currentTarget.style.border=`1px solid ${S.brd}`;const b=e.currentTarget.querySelector(".cf-bar");if(b)b.style.transform="scaleX(0)";}}>
+    <div style={{width:36,height:36,borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",background:cor+"1c",fontSize:17,marginBottom:9}}>{emo}</div>
+    <div style={{fontSize:13.5,fontWeight:700,letterSpacing:"-.01em",color:S.txt}}>{t}</div>
+    {d&&<div style={{fontSize:11.5,color:S.td,marginTop:4,lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{d}</div>}
+    <div style={{display:"flex",alignItems:"center",gap:5,marginTop:8,fontSize:11,fontWeight:600,color:cor}}>Abrir {ASETA}</div>
+    <span className="cf-bar" style={{position:"absolute",left:0,bottom:0,height:3,width:"100%",background:cor,transform:"scaleX(0)",transformOrigin:"left",transition:"transform .3s"}}/>
   </div>
-  <span style={{color:S.td,fontSize:14,flexShrink:0}}>›</span>
-</div>;
+);};
 function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStatus,syncing,syncMsg,onSync,onLoadHistory,onSyncPull,onShareGPS,onShowDB,onShowEnd,onDeleteGPS,onSaveGPS,onClearVisits,onClearAllGPS,onLogout,doSync}){
   const[gpsSearch,setGpsSearch]=useState("");const[histLoading,setHistLoading]=useState(false);const[shareLoading,setShareLoading]=useState(false);
   const[gpsAddSearch,setGpsAddSearch]=useState("");const[gpsAddTarget,setGpsAddTarget]=useState(null);const[gpsAddLat,setGpsAddLat]=useState(null);const[gpsAddLng,setGpsAddLng]=useState(null);
@@ -90,6 +96,7 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
     <div style={{display:"flex",flexDirection:"column",gap:9,marginBottom:16}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:10}}>
       <ARow emo="⚡" t="Forçar sincronização" d="Baixa a carteira, o histórico e o estado da equipe/GPS" onClick={async()=>{setHistLoading(true);await onSync();await onLoadHistory();setHistLoading(false);onSyncPull();}} disabled={syncing||histLoading}/>
       <ARow emo="📡" t={shareLoading?"Enviando GPS...":`Compartilhar ${Object.keys(plocs).length} GPS com equipe`} d="Publica as localizações salvas neste aparelho" onClick={async()=>{if(!confirm("Compartilhar GPS com equipe?"))return;setShareLoading(true);await onShareGPS();setShareLoading(false);}} disabled={shareLoading}/>
       <ARow emo="🗺️" t="Definir jornada" d="Origem e destino do dia (casa, hotel...)" onClick={onShowDB}/>
@@ -97,6 +104,7 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
       <ARow emo={("Notification"in window&&Notification.permission==="granted")?"🔔":"🔕"} t={("Notification"in window&&Notification.permission==="granted")?"Notificações ativadas":"Ativar notificações"} d="Lembretes de tarefas agendadas" color={("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold} onClick={()=>{if(!("Notification"in window)){alert("Navegador nao suporta notificacoes");return;}Notification.requestPermission().then(p=>{if(p==="granted")alert("Notificacoes ativadas! Voce recebera lembretes de tarefas agendadas.");else alert("Notificacoes bloqueadas. Ative nas configuracoes do navegador.");});}}/>
       {user?.role==="admin"&&<ARow emo="🛰️" t={gpsRec||"Recuperar GPS das visitas"} d="Reconstrói a localização de clientes (Sinop, Sorriso, Lucas, Nova Mutum...) a partir das coordenadas das visitas antigas" onClick={gpsRec?undefined:recuperaGps} disabled={!!gpsRec}/>}
       <ARow emo="📲" t={jaInstalado?"Aplicativo instalado ✓":"Instalar aplicativo no celular"} d={jaInstalado?"Você já está usando o TeamCheck instalado":"Ícone próprio na tela inicial — funciona como app (Android e iPhone)"} color={jaInstalado?S.ok:undefined} onClick={jaInstalado?undefined:instalar} disabled={jaInstalado}/>
+      </div>
 
       {/* Admin area (Jordan only) */}
       {user?.id===743088&&<>

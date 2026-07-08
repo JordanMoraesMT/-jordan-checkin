@@ -610,7 +610,27 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
     return [ ...(allOrgs || []).filter(casa), ...(excl || []).filter(casa) ].slice(0, 12);
   }, [q, allOrgs, excl]);
 
-  const abrePorFeed = (a) => { const o = (allOrgs || []).find(x => x.id === a.org_id) || (a.cnpj ? (allOrgs || []).find(x => soDig(x.cnpj) === a.cnpj) : null); if (o) { setSel(o); setQ(""); } else alert("Cliente não está na base sincronizada. Sincronize os clientes."); };
+  const abrePorFeed = async (a) => {
+    // Robusto contra: (1) base local ainda sincronizando (corrida na abertura do app);
+    // (2) atividade apontando para cliente EXCLUÍDO (não entra em allOrgs);
+    // (3) diferença de tipo número/texto no org_id.
+    const nid = a.org_id != null ? Number(a.org_id) : null;
+    const cn = soDig(a.cnpj || "");
+    const acha = (arr) => (arr || []).find(x => (nid != null && Number(x.id) === nid) || (cn && soDig(x.cnpj) === cn));
+    let o = acha(allOrgs) || acha(excl);
+    if (!o) { // fallback: busca direto no D1 (independe da sincronização local)
+      try {
+        const q = cn || (a.org_nome || "").trim().toLowerCase();
+        if (q) {
+          const r = await crm(token, `/api/crm/clientes?q=${encodeURIComponent(q)}&limit=6`);
+          const arr = r.clientes || [];
+          o = arr.find(x => nid != null && Number(x.id) === nid) || arr.find(x => cn && soDig(x.cnpj) === cn) || (arr.length === 1 ? arr[0] : null);
+        }
+      } catch {}
+    }
+    if (o) { setSel(o); setQ(""); }
+    else alert("Cliente não encontrado. Toque em 🔄 (Sincronizar) no topo e tente novamente.");
+  };
 
   if (!visible) return null;
   if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} />;

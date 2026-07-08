@@ -22,35 +22,39 @@ const TCLG_CSS = `
 .tclg-card{position:relative;z-index:2;width:392px;max-width:100%;border-radius:22px;overflow:hidden;background:#fff;text-align:left;
   box-shadow:0 44px 90px -34px rgba(2,40,58,.75),0 0 0 1px rgba(255,255,255,.08),0 2px 4px rgba(2,40,58,.2);animation:tclg-rise .6s cubic-bezier(.22,.9,.3,1) both;}
 .tclg-head{padding:32px 34px 18px;text-align:center;}
-.tclg-title{font-size:23px;font-weight:700;color:#0578A6;letter-spacing:.005em;margin-top:14px;}
-.tclg-sub{font-size:12px;color:#7C8893;margin-top:6px;}
+.tclg-title{font-size:23px;font-weight:700;color:#0578A6;letter-spacing:.005em;margin-top:14px;line-height:1.3;}
+.tclg-sub{font-size:12px;color:#7C8893;margin-top:6px;line-height:1.25;}
 .tclg-body{padding:4px 34px 28px;}
-.tclg-label{display:block;font-size:10.5px;letter-spacing:.12em;color:#7C8893;font-weight:600;margin-bottom:7px;}
+.tclg-label{display:block;font-size:10.5px;letter-spacing:.12em;color:#7C8893;font-weight:600;margin:0 0 7px;text-transform:none;line-height:1.3;}
 .tclg-field{display:flex;align-items:center;gap:11px;background:#F2F5F7;border:1px solid #E2E8EC;border-radius:11px;padding:13px 15px;margin-bottom:16px;transition:border-color .2s,box-shadow .2s,background .2s;}
 .tclg-field:focus-within{border-color:#0578A6;background:#fff;box-shadow:0 0 0 3px rgba(5,120,166,.14);}
 .tclg-field svg{flex-shrink:0;}
-.tclg-input{width:100%;border:none;outline:none;background:transparent;font-family:inherit;font-size:14px;color:#12303F;}
+.tclg-input{width:100%;border:none;outline:none;background:transparent;font-family:inherit;font-size:14px;color:#12303F;padding:0;margin:0;height:21px;line-height:21px;border-radius:0;box-shadow:none;}
 .tclg-input::placeholder{color:#9AA6B0;}
+.tclg-field input:-webkit-autofill,.tclg-field input:-webkit-autofill:hover,.tclg-field input:-webkit-autofill:focus{-webkit-box-shadow:0 0 0 1000px #F2F5F7 inset;box-shadow:0 0 0 1000px #F2F5F7 inset;-webkit-text-fill-color:#12303F;caret-color:#12303F;transition:background-color 99999s ease-in-out 0s;}
+.tclg-field:focus-within input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #fff inset;box-shadow:0 0 0 1000px #fff inset;}
 .tclg-eye{cursor:pointer;flex-shrink:0;color:#9AA6B0;}
-.tclg-btn{width:100%;background:#0578A6;color:#fff;border:none;border-radius:11px;padding:14px;font-size:14.5px;font-weight:600;cursor:pointer;font-family:inherit;box-shadow:0 12px 28px -14px rgba(5,120,166,.8);transition:background .2s,box-shadow .2s,transform .12s;}
+.tclg-btn{width:100%;background:#0578A6;color:#fff;border:none;border-radius:11px;padding:14px;font-size:14.5px;font-weight:600;line-height:1.2;cursor:pointer;font-family:inherit;box-shadow:0 12px 28px -14px rgba(5,120,166,.8);transition:background .2s,box-shadow .2s,transform .12s;margin:0;}
 .tclg-btn:hover{background:#036690;box-shadow:0 16px 34px -14px rgba(3,73,100,.7);}
 .tclg-btn:active{transform:translateY(1px);}
 .tclg-btn:disabled{opacity:.55;cursor:default;box-shadow:none;}
 .tclg-linkrow{text-align:center;margin-top:18px;}
-.tclg-link{background:none;border:none;font-family:inherit;font-size:12.5px;font-weight:500;color:#0578A6;text-decoration:none;cursor:pointer;padding:0;transition:color .2s;}
+.tclg-link{background:none;border:none;font-family:inherit;font-size:12.5px;font-weight:500;line-height:1.3;color:#0578A6;text-decoration:none;cursor:pointer;padding:0;margin:0;transition:color .2s;box-shadow:none;}
 .tclg-link:hover{color:#036690;}
 .tclg-or{display:flex;align-items:center;gap:12px;margin-top:18px;}
 .tclg-or .ln{flex:1;height:1px;background:#E7EDF0;}
-.tclg-or .tx{font-size:10px;letter-spacing:.14em;color:#9AA6B0;font-weight:600;}
-.tclg-2nd{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:16px;padding:12px;border:1px solid #CDE8EF;border-radius:11px;font-size:13px;font-weight:600;color:#0578A6;background:#F4FAFC;cursor:pointer;font-family:inherit;width:100%;transition:background .2s;}
+.tclg-or .tx{font-size:10px;letter-spacing:.14em;color:#9AA6B0;font-weight:600;line-height:1.3;}
+.tclg-2nd{display:flex;align-items:center;justify-content:center;gap:9px;margin-top:16px;padding:12px;border:1px solid #CDE8EF;border-radius:11px;font-size:13px;font-weight:600;line-height:1.2;color:#0578A6;background:#F4FAFC;cursor:pointer;font-family:inherit;width:100%;transition:background .2s;}
 .tclg-2nd:hover{background:#EAF6FA;}
 .tclg-hint{font-size:12px;color:#7C8893;line-height:1.5;margin:0 0 14px;}
 .tclg-hint b{color:#12303F;}
-.tclg-code{letter-spacing:8px;text-align:center;font-size:18px;font-weight:600;}
+.tclg-code{letter-spacing:8px;text-align:center;font-size:18px;font-weight:600;height:24px;line-height:24px;}
 .tclg-backrow{display:flex;justify-content:space-between;margin-top:16px;}
 .tclg-er{font-size:12.5px;color:#E4483A;margin-top:14px;text-align:center;line-height:1.45;}
 .tclg-ok{font-size:12.5px;color:#188F7F;margin-top:14px;text-align:center;line-height:1.45;}
-.tclg-foot{position:absolute;bottom:calc(18px + env(safe-area-inset-bottom));left:0;right:0;text-align:center;font-size:11px;color:rgba(234,245,251,.55);font-family:'IBM Plex Mono',monospace;z-index:2;}
+.tclg-foot{position:absolute;bottom:calc(18px + env(safe-area-inset-bottom));left:0;right:0;text-align:center;font-size:11px;line-height:1.2;color:rgba(234,245,251,.55);font-family:'IBM Plex Mono',monospace;z-index:2;}
+input.tclg-input:-webkit-autofill,input.tclg-input:-webkit-autofill:hover,input.tclg-input:-webkit-autofill:focus{-webkit-box-shadow:0 0 0 1000px #F2F5F7 inset;-webkit-text-fill-color:#12303F;caret-color:#12303F;transition:background-color 999999s;}
+.tclg-field:focus-within input.tclg-input:-webkit-autofill{-webkit-box-shadow:0 0 0 1000px #fff inset;}
 @media (prefers-reduced-motion:reduce){.tclg-card,.tclg-orb1,.tclg-orb2{animation:none;}}
 @media (max-width:440px){.tclg-head{padding:26px 24px 14px;}.tclg-body{padding:4px 24px 24px;}.tclg-foot{font-size:10px;}}
 `;
@@ -64,6 +68,7 @@ const IcEye=({off})=>(off
 
 const LB=({t,children})=><div style={{marginBottom:6}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px",textTransform:"uppercase",letterSpacing:.5}}>{t}</p>{children}</div>;
 function Login({onLogin}){
+  useEffect(()=>{if(!document.getElementById("tclg-fonts")){const l=document.createElement("link");l.id="tclg-fonts";l.rel="stylesheet";l.href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap";document.head.appendChild(l);}},[]);
   const SS=(k,d)=>{try{const v=sessionStorage.getItem(k);return v==null?d:v;}catch{return d;}};
   const[mode,setMode0]=useState(()=>SS("tc:lmode","login"));
   const setMode=m=>{try{sessionStorage.setItem("tc:lmode",m);}catch{}setMode0(m);};
