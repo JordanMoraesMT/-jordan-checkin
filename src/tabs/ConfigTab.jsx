@@ -63,6 +63,30 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
     try{await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:np})});}catch(e){}
     setGpsRec("");onSyncPull&&onSyncPull();alert(`${ids.length} localização(ões) recuperadas! Abra o Mapa para conferir.`);
   };
+  // ── Extensão do WhatsApp: grava a pasta pronta no computador (sem zip, sem descompactar) ──
+  const EXT_ARQS=["manifest.json","background.js","content.js","panel.css","icon128.png"];
+  const[extMsg,setExtMsg]=useState("");
+  const baixarExtensao=async()=>{
+    if(!window.showDirectoryPicker){
+      alert("A instalação automática funciona no Chrome do computador.\n\nAbra o TeamCheck no Chrome (Windows/Mac/Linux) e toque de novo neste card.");
+      return;
+    }
+    let raiz;
+    try{ raiz=await window.showDirectoryPicker({mode:"readwrite"}); }catch{ return; } // cancelou
+    try{
+      setExtMsg("Gravando arquivos...");
+      const pasta=await raiz.getDirectoryHandle("TeamCheck-Extensao",{create:true});
+      for(const nome of EXT_ARQS){
+        const r=await fetch(`/ext/${nome}`,{cache:"no-store"});
+        if(!r.ok) throw new Error(nome+" ("+r.status+")");
+        const bytes=await r.arrayBuffer();
+        const arq=await pasta.getFileHandle(nome,{create:true});
+        const w=await arq.createWritable(); await w.write(bytes); await w.close();
+      }
+      setExtMsg("");
+      alert("Pronto! A pasta TeamCheck-Extensao foi criada no local escolhido.\n\nAgora no Chrome:\n1. Abra chrome://extensions\n2. Ligue o \"Modo do desenvolvedor\" (canto superior direito)\n3. Clique em \"Carregar sem compactação\"\n4. Selecione a pasta TeamCheck-Extensao\n\nNão precisa descompactar nada.");
+    }catch(e){ setExtMsg(""); alert("Não consegui gravar a extensão: "+e.message); }
+  };
   const instalar=async()=>{
     if(instEvt){try{instEvt.prompt();const r=await instEvt.userChoice;if(r?.outcome==="accepted")alert("Aplicativo instalado! Procure o ícone TeamCheck na tela inicial.");}catch{}}
     else if(ehIOS)alert("No iPhone/iPad:\n1. Toque no botão Compartilhar (quadrado com seta) na barra do Safari\n2. Role e toque em \"Adicionar à Tela de Início\"\n3. Toque em \"Adicionar\"\n\nO TeamCheck vira um app com ícone próprio.");
@@ -91,7 +115,7 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
       <p style={{fontSize:12.5,color:S.t2,margin:0}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p className="mono" style={{fontSize:11.5,color:syncStatus.startsWith?.("Erro")?S.dng:S.pl,margin:"6px 0 0"}}>Sync {syncStatus||"aguardando..."}</p>
-      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v49</p>
+      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v60</p>
     </div>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
@@ -104,6 +128,7 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
       <ARow emo={("Notification"in window&&Notification.permission==="granted")?"🔔":"🔕"} t={("Notification"in window&&Notification.permission==="granted")?"Notificações ativadas":"Ativar notificações"} d="Lembretes de tarefas agendadas" color={("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold} onClick={()=>{if(!("Notification"in window)){alert("Navegador nao suporta notificacoes");return;}Notification.requestPermission().then(p=>{if(p==="granted")alert("Notificacoes ativadas! Voce recebera lembretes de tarefas agendadas.");else alert("Notificacoes bloqueadas. Ative nas configuracoes do navegador.");});}}/>
       {user?.role==="admin"&&<ARow emo="🛰️" t={gpsRec||"Recuperar GPS das visitas"} d="Reconstrói a localização de clientes (Sinop, Sorriso, Lucas, Nova Mutum...) a partir das coordenadas das visitas antigas" onClick={gpsRec?undefined:recuperaGps} disabled={!!gpsRec}/>}
       <ARow emo="📲" t={jaInstalado?"Aplicativo instalado ✓":"Instalar aplicativo no celular"} d={jaInstalado?"Você já está usando o TeamCheck instalado":"Ícone próprio na tela inicial — funciona como app (Android e iPhone)"} color={jaInstalado?S.ok:undefined} onClick={jaInstalado?undefined:instalar} disabled={jaInstalado}/>
+      <ARow emo="🧩" t={extMsg||"Baixar extensão do WhatsApp"} d="Grava a pasta pronta no seu computador (sem zip, sem descompactar). Depois é só 'Carregar sem compactação' no Chrome." color={S.gold} onClick={extMsg?undefined:baixarExtensao} disabled={!!extMsg}/>
       </div>
 
       {/* Admin area (Jordan only) */}

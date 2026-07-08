@@ -3,7 +3,7 @@
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check } from "lucide-react";
-import {CARGOS,  S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, todayLocal } from "../lib";
+import {CARGOS,  S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
 const DASH = "https://dashboard.jordanmt.com";
@@ -19,6 +19,27 @@ const TIPOS = [
 const tipoDe = (id) => TIPOS.find(t => t.id === id) || TIPOS[0];
 const soDig = (x) => String(x || "").replace(/\D/g, "");
 const fCnpj = (c) => { const d = soDig(c).padStart(14, "0"); return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5"); };
+const fCep = (c) => { const d = soDig(c); return d.length === 8 ? d.slice(0, 5) + "-" + d.slice(5) : (c || ""); };
+
+// ─── Planilhas de EMPRESAS — padrão único: CNPJ é SEMPRE a 1ª coluna ───
+const COLS_IMP = ["CNPJ", "Nome Fantasia", "Razão Social", "Grupo", "UF", "Cidade", "Bairro", "Endereço", "CEP", "Categoria", "Responsável", "Telefone", "E-mail"];
+const COLS_EMP = [...COLS_IMP.slice(0, 11), "Contato Principal", "Cargo", "Telefone", "E-mail", "Pessoa 2", "Telefone 2", "Pessoa 3", "Telefone 3", "Pessoa 4", "Telefone 4"];
+const norm = (s) => String(s || "").replace(/^\uFEFF/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+// Parser de CSV que respeita aspas — casa com o export (delimitador ; e aspas)
+function parseCSVEmp(text) {
+  const linhas = String(text).replace(/^\uFEFF/, "").replace(/\r\n?/g, "\n").split("\n").filter(l => l.length);
+  if (!linhas.length) return [];
+  const pv = (linhas[0].match(/;/g) || []).length, vg = (linhas[0].match(/,/g) || []).length;
+  const dl = pv >= vg ? ";" : ",";
+  return linhas.map(linha => {
+    const out = []; let cur = "", inQ = false;
+    for (let i = 0; i < linha.length; i++) { const ch = linha[i];
+      if (inQ) { if (ch === '"') { if (linha[i + 1] === '"') { cur += '"'; i++; } else inQ = false; } else cur += ch; }
+      else { if (ch === '"') inQ = true; else if (ch === dl) { out.push(cur); cur = ""; } else cur += ch; }
+    }
+    out.push(cur); return out.map(x => x.trim());
+  });
+}
 const fDH = (iso) => { // datetime do D1 -> Cuiabá (aceita "YYYY-MM-DD HH:MM:SS" UTC ou ISO com fuso)
   try { const s = String(iso); const temFuso = /[zZ]$|[+\-]\d{2}:?\d{2}$/.test(s.slice(10)); const d = new Date(temFuso ? s : (s.replace(" ", "T") + "Z")); if (isNaN(d)) return s; return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Cuiaba" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Cuiaba" }); } catch { return String(iso); }
 };
@@ -143,7 +164,12 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       else await crm(token, "/api/crm/contatos", { method: "POST", body: JSON.stringify({ ...f, org_id: org.id, cnpj: cnpjN || null }) });
       setCttForm(null); carregaCtts();
     } catch (e) { alert("Erro: " + e.message); } };
-  const delCtt = async (c) => { if (!confirm(`Excluir contato ${c.nome}?`)) return; try { await crm(token, `/api/crm/contatos?id=${c.id}`, { method: "DELETE" }); carregaCtts(); } catch (e) { alert("Erro: " + e.message); } };
+  const delCtt = async (c) => {
+    const aviso = c.vinculado
+      ? `EXCLUIR ${c.nome} do CRM?\n\nEsta pessoa está VINCULADA a mais de uma empresa — excluir some com ela de TODAS.\nSe você só quer tirá-la desta loja, use o botão 🔗 (dourado).`
+      : `Excluir o contato ${c.nome} do CRM?\n\nPara só tirá-lo desta empresa (mantendo em Pessoas), use o botão 🔗 (dourado).`;
+    if (!confirm(aviso)) return;
+    try { await crm(token, `/api/crm/contatos?id=${c.id}`, { method: "DELETE" }); carregaCtts(); } catch (e) { alert("Erro: " + e.message); } };
   const desvProprio = async (c) => { if (!confirm(`Tirar ${c.nome} desta empresa?\n\nO contato NÃO é excluído do CRM — só perde o vínculo com a empresa (fica em Pessoas, sem empresa).`)) return; try { await crm(token, "/api/crm/contato-desvincular", { method: "PUT", body: JSON.stringify({ id: c.id }) }); carregaCtts(); } catch (e) { alert("Erro: " + e.message); } };
   // v42: vincular pessoa JÁ EXISTENTE (rede com comprador único — editar uma vez reflete em todas as lojas)
   const [vincBusca, setVincBusca] = useState(null); // null | "" | texto
@@ -218,7 +244,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const infoContato = (
     <Crd>
       <p style={{ margin: "0 0 8px", fontSize: 12.5, fontWeight: 800, color: S.txt }}>Informações para contato</p>
-      {(org.addr?.street||org.addr?.city_name) && <p style={{ margin: "0 0 4px", fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"flex-start" }}><MapPin size={13} style={{marginTop:2, flexShrink:0}}/>{[ [org.addr?.street, org.addr?.number].filter(Boolean).join(", "), org.addr?.district, [org.addr?.city_name||org.addr?.city, org.addr?.state].filter(Boolean).join("/"), org.addr?.zip && ("CEP " + org.addr.zip) ].filter(Boolean).join(" · ")}</p>}
+      {(org.addr?.street||org.addr?.city_name) && <p style={{ margin: "0 0 4px", fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"flex-start" }}><MapPin size={13} style={{marginTop:2, flexShrink:0}}/>{[ [org.addr?.street, org.addr?.number].filter(Boolean).join(", "), org.addr?.district, [org.addr?.city_name||org.addr?.city, org.addr?.state].filter(Boolean).join("/"), org.addr?.zip && ("CEP " + fCep(org.addr.zip)) ].filter(Boolean).join(" · ")}</p>}
       {org.phone && <p style={{ margin: "0 0 4px", fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"center" }}><Phone size={13}/>{org.phone}
         <a href={`https://wa.me/55${String(org.phone).replace(/\D/g,"")}`} target="_blank" rel="noreferrer" style={{color:S.ok, fontWeight:700, textDecoration:"none"}}>WhatsApp</a>
         <a href={`tel:${String(org.phone).replace(/\D/g,"")}`} style={{color:S.pl, fontWeight:700, textDecoration:"none"}}>Ligar</a></p>}
@@ -359,8 +385,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
             {c.whatsapp && <a href={`https://wa.me/55${soDig(c.whatsapp)}`} target="_blank" rel="noopener noreferrer" style={{ width: 36, height: 36, borderRadius: 10, background: "#25D36622", display: "flex", alignItems: "center", justifyContent: "center" }}><MessageCircle size={17} color="#25D366" /></a>}
             {c.telefone && <a href={`tel:${soDig(c.telefone)}`} style={{ width: 36, height: 36, borderRadius: 10, background: S.pl + "22", display: "flex", alignItems: "center", justifyContent: "center" }}><Phone size={16} color={S.pl} /></a>}
             <button onClick={() => setCttForm({ ...c })} title={c.vinculado ? "Editar (atualiza em TODAS as empresas vinculadas)" : "Editar"} style={{ width: 36, height: 36, borderRadius: 10, background: S.cl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Pencil size={14} color={S.ts} /></button>
-            {!c.vinculado && <button onClick={() => desvProprio(c)} title="Tirar desta empresa (o contato continua no CRM)" style={{ width: 36, height: 36, borderRadius: 10, background: S.gold + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Unlink size={14} color={S.gold} /></button>}
-            <button onClick={() => c.vinculado ? desvincular(c) : delCtt(c)} title={c.vinculado ? "Desvincular desta empresa" : "Excluir contato"} style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>
+            <button onClick={() => c.vinculado ? desvincular(c) : desvProprio(c)} title="Tirar desta empresa (o contato continua no CRM)" style={{ width: 36, height: 36, borderRadius: 10, background: S.gold + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Unlink size={14} color={S.gold} /></button>
+            <button onClick={() => delCtt(c)} title="Excluir contato do CRM (some de todas as empresas)" style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>
           </div>
         </div>
       </Crd>)}
@@ -433,7 +459,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       <Crd>
         <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 800, color: S.txt }}>Cadastro</p>
         {[["Razão social", org.legalName], ["CNPJ", org.cnpj && fCnpj(org.cnpj)], ["Categoria", org.cat], ["Setor", org.sector], ["Responsável", org.owner], ["Grupo", org.grupo], ["Marcas", org.products],
-          ["Endereço", [org.addr?.street, org.addr?.number].filter(Boolean).join(", ")], ["Bairro", org.addr?.district], ["CEP", org.addr?.zip], ["Cidade", (org.addr?.city_name || org.addr?.city || "") + (org.addr?.state ? "/" + org.addr.state : "")]]
+          ["Endereço", [org.addr?.street, org.addr?.number].filter(Boolean).join(", ")], ["Bairro", org.addr?.district], ["CEP", org.addr?.zip && fCep(org.addr.zip)], ["Cidade", (org.addr?.city_name || org.addr?.city || "") + (org.addr?.state ? "/" + org.addr.state : "")]]
           .filter(([, v]) => v).map(([k, v]) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: `1px solid ${S.cl}` }}>
             <span style={{ fontSize: 12, color: S.ts, flexShrink: 0 }}>{k}</span><span style={{ fontSize: 12.5, color: S.txt, textAlign: "right", wordBreak: "break-word" }}>{v}</span></div>)}
       </Crd>
@@ -502,7 +528,7 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
   </div>);
 }
 
-function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user }) {
+function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user, onCrmChange }) {
   const rfvDe = (o) => { if (!rfv) return null; const k = soDig(o.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; };
   const PREF = "jc:empresas-prefs";
   const p0 = sL(PREF, {});
@@ -519,7 +545,7 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user 
   const lista = useMemo(() => {
     let l = (q.trim() || fCat.includes("Excluido")) ? [ ...(allOrgs || []), ...(excl || []) ] : (allOrgs || []);
     if (q.trim()) { const n = q.toLowerCase().replace(/[.\-\/]/g, "");
-      const casa = o => [o.name, o.nickname, o.legalName, soDig(o.cnpj), o.addr?.city_name, o.email, o.phone].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(n);
+      const casa = o => [o.name, o.nickname, o.legalName, soDig(o.cnpj), o.addr?.district, o.addr?.city_name, o.email, o.phone].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(n);
       l = l.filter(casa); }
     if (fCat.length) l = l.filter(o => fCat.includes(o.cat));
     if (fResp.length) l = l.filter(o => fResp.includes(o.owner));
@@ -531,6 +557,83 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user 
   }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, ordem, rfv]);
   const th = { textAlign: "left", padding: "8px 10px", fontSize: 10.5, fontWeight: 800, color: S.ts, textTransform: "uppercase", letterSpacing: .4, whiteSpace: "nowrap", borderBottom: `2px solid ${S.brd}` };
   const td = { padding: "9px 10px", fontSize: 12, color: S.txt, borderBottom: `1px solid ${S.cl}`, whiteSpace: "nowrap", verticalAlign: "middle" };
+
+  // ── Planilhas: CNPJ SEMPRE na 1ª coluna, gravado como TEXTO (preserva o zero à esquerda) ──
+  const [importar, setImportar] = useState(false);
+  const [impMsg, setImpMsg] = useState("");
+  const [impLog, setImpLog] = useState([]);
+
+  const exportar = async () => {
+    let ctts = [], vincs = [];
+    try { const d = await crm(token, "/api/crm/contatos-todos?limit=5000"); ctts = d.contatos || []; } catch (e) { alert("Não consegui carregar os contatos: " + e.message); }
+    try { const v = await crm(token, "/api/crm/contato-vinculos-todos"); vincs = v.vinculos || []; } catch (e) {}
+    const porId = new Map(ctts.map(c => [c.id, c]));
+    const prio = (c) => { const g = (c.cargo || "").toLowerCase(); if (/comprad/.test(g)) return 0; if (/propriet|dono|s[oó]ci/.test(g)) return 1; return 2; };
+    const deOrg = (o) => {
+      const k = soDig(o.cnpj);
+      const proprios = ctts.filter(c => (c.org_id && c.org_id === o.id) || (k && soDig(c.cnpj) === k));
+      const ids = new Set(proprios.map(c => c.id));
+      const ligados = vincs.filter(v => ((v.org_id && Number(v.org_id) === Number(o.id)) || (k && soDig(v.cnpj) === k)) && !ids.has(v.contato_id))
+        .map(v => porId.get(v.contato_id)).filter(Boolean);
+      return [...proprios, ...ligados].sort((a, b) => prio(a) - prio(b));
+    };
+    const fmtP = (c) => c ? (c.nome + (c.cargo ? " (" + c.cargo + ")" : "")) : "";
+    const rows = [COLS_EMP.slice()];
+    lista.forEach(o => { const ps = deOrg(o); const p1 = ps[0];
+      rows.push([txtCel(soDig(o.cnpj)), o.nickname || o.name, o.legalName || "", (o.grupo || "").replace("Grupo: ", ""), o.addr?.state || "", o.addr?.city_name || o.addr?.city || "", o.addr?.district || "", o.addr?.street || "", txtCel(soDig(o.addr?.zip)),
+        o.cat || "", o.owner || "",
+        p1 ? p1.nome : "", p1 ? (p1.cargo || "") : "", txtCel(p1 ? (p1.telefone || p1.whatsapp || o.phone || "") : (o.phone || "")), p1 ? (p1.email || o.email || "") : (o.email || ""),
+        fmtP(ps[1]), txtCel(ps[1] ? (ps[1].telefone || ps[1].whatsapp || "") : ""),
+        fmtP(ps[2]), txtCel(ps[2] ? (ps[2].telefone || ps[2].whatsapp || "") : ""),
+        fmtP(ps[3]), txtCel(ps[3] ? (ps[3].telefone || ps[3].whatsapp || "") : "")]); });
+    csv(rows, `empresas-${new Date().toISOString().slice(0, 10)}.csv`);
+  };
+
+  const baixarModelo = () => {
+    const rows = [COLS_IMP.slice()];
+    [...(allOrgs || [])].sort((a, b) => (a.nickname || a.name || "").localeCompare(b.nickname || b.name || "")).forEach(o =>
+      rows.push([txtCel(soDig(o.cnpj)), o.nickname || o.name || "", o.legalName || "", (o.grupo || "").replace("Grupo: ", ""), o.addr?.state || "", o.addr?.city_name || o.addr?.city || "", o.addr?.district || "", o.addr?.street || "", txtCel(soDig(o.addr?.zip)), o.cat || "", o.owner || "", txtCel(o.phone || ""), o.email || ""]));
+    csv(rows, `Jordan_Modelo_Empresas_${new Date().toISOString().slice(0, 10)}.csv`);
+  };
+
+  const importarArquivo = async (file) => {
+    const texto = await file.text();
+    const linhas = parseCSVEmp(texto);
+    if (linhas.length < 2) { alert("Planilha vazia. Use o modelo (CNPJ na 1ª coluna)."); return; }
+    const hdr = linhas[0].map(h => norm(h));
+    const ix = (...alvos) => hdr.findIndex(h => alvos.some(a => h.includes(a)));
+    const iCnpj = 0; // padronizado: CNPJ é sempre a 1ª coluna
+    if (!/cnpj/.test(hdr[0] || "")) { alert("A 1ª coluna precisa se chamar CNPJ.\nBaixe o modelo e use o mesmo cabeçalho."); return; }
+    const iFant = ix("nome fantasia", "fantasia"), iRaz = ix("razao social", "razao"), iGrp = ix("grupo"),
+      iUf = ix("uf"), iCid = ix("cidade"), iBai = ix("bairro"), iEnd = ix("endereco"), iCep = ix("cep"),
+      iCat = ix("categoria"), iResp = ix("responsavel"), iTel = ix("telefone"), iMail = ix("mail");
+    const val = (cols, i) => (i >= 0 ? String(cols[i] ?? "").replace(/^="?|"?$/g, "").trim() : "");
+    const body = linhas.slice(1).map(c => ({
+      cnpj: soDig(val(c, iCnpj).replace(/^=/, "")), fantasia: val(c, iFant), razao: val(c, iRaz), grupo: val(c, iGrp),
+      uf: val(c, iUf), cidade: val(c, iCid), bairro: val(c, iBai), endereco: val(c, iEnd), cep: soDig(val(c, iCep)),
+      categoria: val(c, iCat), responsavel: val(c, iResp), telefone: val(c, iTel), email: val(c, iMail),
+    })).filter(r => r.cnpj.length === 14);
+    if (!body.length) { alert("Nenhuma linha com CNPJ válido (14 dígitos) na 1ª coluna."); return; }
+    if (!confirm(`Processar ${body.length} empresa(s)?\nCNPJ existente = atualizar · CNPJ novo = cadastrar.`)) return;
+    setImpLog([]); let ok = 0, novos = 0, falhas = 0; const log = [];
+    for (let i = 0; i < body.length; i++) {
+      const r = body[i];
+      setImpMsg(`Processando ${i + 1} de ${body.length}...`);
+      const org = (allOrgs || []).find(o => soDig(o.cnpj) === r.cnpj) || (excl || []).find(o => soDig(o.cnpj) === r.cnpj);
+      const corpo = { cnpj: r.cnpj, fantasia: r.fantasia || null, razao: r.razao || null, cidade: r.cidade || null, uf: r.uf || null,
+        grupo: r.grupo || null, categoria_nome: r.categoria || null, vendedor: r.responsavel || null,
+        endereco: r.endereco || null, bairro: r.bairro || null, cep: r.cep || null, telefone: r.telefone || null, email: r.email || null };
+      try {
+        if (org) { await crm(token, "/api/crm/cliente-upsert", { method: "POST", body: JSON.stringify({ ...corpo, org_id: org.id }) }); ok++; log.push(`✏️ ${(r.fantasia || r.cnpj).slice(0, 34)}`); }
+        else { await crm(token, "/api/crm/cliente-criar", { method: "POST", body: JSON.stringify({ ...corpo, rua: r.endereco || null }) }); novos++; log.push(`➕ ${(r.fantasia || r.cnpj).slice(0, 34)}`); }
+      } catch (e) { falhas++; log.push(`❌ ${(r.fantasia || r.cnpj).slice(0, 28)}: ${e.message}`); }
+      setImpLog([...log]);
+    }
+    setImpMsg("");
+    alert(`Concluído!\n✏️ ${ok} atualizadas\n➕ ${novos} cadastradas\n❌ ${falhas} falharam\n\nToque em 🔄 (sincronizar) no topo para ver na lista.`);
+    onCrmChange && onCrmChange();
+  };
+
   return (<div>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
       <p style={{ margin: 0, fontSize: 12.5, color: S.ts }}>Exibindo <b style={{ color: S.txt }}>{Math.min(vc, lista.length)}</b> de <b style={{ color: S.txt }}>{lista.length}</b> empresas</p>
@@ -538,7 +641,7 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user 
     </div>
     <div style={{ position: "relative", marginBottom: 8 }}>
       <Search size={15} color={S.td} style={{ position: "absolute", left: 12, top: 12 }} />
-      <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Buscar por nome, CNPJ, cidade, e-mail ou telefone..." style={{ ...inp, paddingLeft: 34 }} />
+      <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Buscar por nome, CNPJ, bairro, cidade, e-mail ou telefone..." style={{ ...inp, paddingLeft: 34 }} />
     </div>
     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
       <MultiSelect values={fCat} onChange={v => { setFCat(v); setVc(60); }} placeholder="Categoria" allLabel="todas" style={{ flex: 1 }} colorFor={c => CC[c] || S.pri} options={[...CATS, "Excluido"]} />
@@ -554,10 +657,10 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user 
       <button onClick={() => { setFCat([]); setFResp([]); setFRfv([]); setFGrp([]); setFSr([]); setFCid([]); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
     </div>
     <div style={{ overflowX: "auto", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: S.shadow }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 820 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 940 }}>
         <thead><tr>
           <th style={{ ...th, cursor: "pointer" }} onClick={() => setOrdem(o => -o)}>Nome {ordem === 1 ? "▲" : "▼"}</th>
-          <th style={th}>Categoria</th><th style={th}>Cidade</th><th style={th}>UF</th><th style={th}>RFV</th><th style={th}>Responsável</th><th style={th}>E-mail</th><th style={th}>Telefone</th><th style={th}></th>
+          <th style={th}>Categoria</th><th style={th}>Bairro</th><th style={th}>Cidade</th><th style={th}>UF</th><th style={th}>RFV</th><th style={th}>Responsável</th><th style={th}>E-mail</th><th style={th}>Telefone</th><th style={th}></th>
         </tr></thead>
         <tbody>
           {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id}>
@@ -567,6 +670,7 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user 
                 <span style={{ display: "block", fontSize: 10.5, color: S.td }}>{[o.addr?.city_name || o.addr?.city, o.cnpj].filter(Boolean).join(" · ")}</span>
               </button></td>
             <td style={td}>{o.cat && <span style={{ fontSize: 10.5, color: "#fff", background: cor, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{o.cat}</span>}</td>
+            <td style={{ ...td, fontSize: 11.5, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis" }} title={o.addr?.district || ""}>{o.addr?.district || "—"}</td>
             <td style={{ ...td, fontSize: 11.5 }}>{o.addr?.city_name || o.addr?.city || "—"}</td>
             <td style={{ ...td, fontSize: 11.5, color: S.ts }}>{o.addr?.state || "—"}</td>
             <td style={td}>{(() => { const r = rfvDe(o); if (!r) return "—"; const rc = { "Campeão": S.gold, "Leal": S.ok, "Em Crescimento": S.pri, "Em Risco": "#E76F51", "Inativo": S.td }[r.rfv] || S.ts; return <span style={{ fontSize: 10.5, color: rc, border: `1px solid ${rc}66`, background: rc + "18", padding: "2px 7px", borderRadius: 4, fontWeight: 700 }}>{r.rfv}</span>; })()}</td>
@@ -578,22 +682,26 @@ function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user 
         </tbody>
       </table>
     </div>
-    <button onClick={async () => {
-      // Planilha completa: cadastro + endereço + contatos priorizados (Comprador > Proprietário/Sócio > demais)
-      let ctts = [];
-      try { const d = await crm(token, "/api/crm/contatos-todos?limit=3000"); ctts = d.contatos || []; } catch (e) {}
-      const prio = (c) => { const g = (c.cargo || "").toLowerCase(); if (/comprad/.test(g)) return 0; if (/propriet|dono|s[oó]ci/.test(g)) return 1; return 2; };
-      const deOrg = (o) => { const k = soDig(o.cnpj); return ctts.filter(c => (c.org_id && c.org_id === o.id) || (k && soDig(c.cnpj) === k)).sort((a, b) => prio(a) - prio(b)); };
-      const fmtP = (c) => c ? (c.nome + (c.cargo ? " (" + c.cargo + ")" : "")) : "";
-      const rows = [["Nome Fantasia","Razão Social","CNPJ","Grupo","UF","Cidade","Bairro","Endereço","CEP","Categoria","Responsável","Contato Principal","Cargo","Telefone","E-mail","Pessoa 2","Telefone 2","Pessoa 3","Telefone 3","Pessoa 4","Telefone 4"]];
-      lista.forEach(o => { const ps = deOrg(o); const p1 = ps[0];
-        rows.push([o.nickname || o.name, o.legalName || "", o.cnpj || "", (o.grupo || "").replace("Grupo: ", ""), o.addr?.state || "", o.addr?.city_name || o.addr?.city || "", o.addr?.district || "", [o.addr?.street, o.addr?.number].filter(Boolean).join(", "), o.addr?.zip || "",
-          o.cat || "", o.owner || "",
-          p1 ? p1.nome : "", p1 ? (p1.cargo || "") : "", p1 ? (p1.telefone || p1.whatsapp || o.phone || "") : (o.phone || ""), p1 ? (p1.email || o.email || "") : (o.email || ""),
-          fmtP(ps[1]), ps[1] ? (ps[1].telefone || ps[1].whatsapp || "") : "",
-          fmtP(ps[2]), ps[2] ? (ps[2].telefone || ps[2].whatsapp || "") : "",
-          fmtP(ps[3]), ps[3] ? (ps[3].telefone || ps[3].whatsapp || "") : ""]); });
-      csv(rows, `empresas-${new Date().toISOString().slice(0,10)}.csv`); }} style={{ width: "100%", marginTop: 10, padding: 12, fontSize: 13, background: S.pri + "22", border: `1px solid ${S.pri}55`, color: S.pl, fontWeight: 600, borderRadius: 10 }}>📊 Exportar {lista.length} empresas (Excel)</button>
+    {/* Barra de planilhas: exportar (CNPJ na 1ª coluna, como texto) e importar/cadastrar em massa */}
+    <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+      <button onClick={exportar} disabled={!!impMsg} style={{ flex: 1, minWidth: 200, padding: 12, fontSize: 13, background: S.pri + "22", border: `1px solid ${S.pri}55`, color: S.pl, fontWeight: 600, borderRadius: 10, cursor: "pointer" }}>📊 Exportar {lista.length} empresas (Excel)</button>
+      <button onClick={() => setImportar(v => !v)} style={{ flex: 1, minWidth: 200, padding: 12, fontSize: 13, background: importar ? S.acc : S.acc + "18", border: `1px solid ${S.acc}66`, color: importar ? "#fff" : S.acc, fontWeight: 600, borderRadius: 10, cursor: "pointer" }}>📥 Cadastrar empresas por planilha</button>
+    </div>
+
+    {importar && <Crd style={{ marginTop: 10, borderColor: S.acc + "66" }}>
+      <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 13.5, color: S.txt }}>Cadastrar / atualizar empresas por planilha</p>
+      <p style={{ margin: "0 0 10px", fontSize: 11.5, color: S.ts, lineHeight: 1.5 }}>
+        O <b>CNPJ é sempre a 1ª coluna</b> — mesmo padrão do arquivo exportado. Linhas com CNPJ que <b>já existe</b> são <b>atualizadas</b>; CNPJ novo <b>cria</b> a empresa.
+        Campos em branco não apagam o que já está no cadastro. Colunas lidas: CNPJ · Nome Fantasia · Razão Social · Grupo · UF · Cidade · Bairro · Endereço · CEP · Categoria · Responsável · Telefone · E-mail.
+      </p>
+      <button onClick={() => baixarModelo()} style={{ width: "100%", marginBottom: 8, padding: "9px", fontSize: 12, fontWeight: 600, background: S.pri + "18", border: `1px solid ${S.pri}66`, color: S.pl, borderRadius: 9, cursor: "pointer" }}>📄 Baixar modelo (cabeçalho + carteira atual)</button>
+      <input type="file" accept=".csv,text/csv" disabled={!!impMsg} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importarArquivo(f); }} style={{ width: "100%", fontSize: 11, padding: 6 }} />
+      {impMsg && <p style={{ margin: "8px 0 0", fontSize: 12, color: S.pri, fontWeight: 600 }}>{impMsg}</p>}
+      {impLog.length > 0 && <div style={{ marginTop: 8, maxHeight: 180, overflowY: "auto", background: S.cl, borderRadius: 8, padding: "8px 10px" }}>
+        {impLog.map((l, i) => <p key={i} style={{ margin: 0, fontSize: 11, color: S.ts, fontFamily: "monospace", wordBreak: "break-word" }}>{l}</p>)}
+      </div>}
+    </Crd>}
+
     {vc < lista.length && <button onClick={() => setVc(v => v + 60)} style={{ width: "100%", marginTop: 10, padding: 12, fontSize: 13, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.txt, cursor: "pointer" }}>Ver mais ({lista.length - vc})</button>}
   </div>);
 }
@@ -654,7 +762,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
 
   return (<div>
-    {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
+    {secao === "empresas" && <EmpresasView token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}
     {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} onPerson={onPerson} q0={pessoasQ} />}
     {secao === "inicio" && <div>
     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>

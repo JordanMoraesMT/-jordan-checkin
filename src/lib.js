@@ -83,7 +83,11 @@ function trAg(m){const s=String(m||"").trim();const map=[[/contact email is inva
 function agErr(e){let arr=[];if(e&&e.body){try{const j=JSON.parse(e.body);if(Array.isArray(j.errors))arr=j.errors.map(x=>typeof x==="string"?x:(x.message||x.field||JSON.stringify(x)));else if(j.message)arr=[j.message];else if(j.error)arr=[j.error];}catch{if(e.body)arr=[e.body];}}if(!arr.length){const m=(e&&e.message)||"Erro";arr=[/^\d{3}$/.test(m)?("Erro "+m+" (dados inválidos)"):m];}const pt=[...new Set(arr.map(trAg).filter(Boolean))];return pt.join(" · ");}
 function gps(){return new Promise((r,j)=>{if(!navigator.geolocation)return j(new Error("GPS"));navigator.geolocation.getCurrentPosition(p=>r({lat:p.coords.latitude,lng:p.coords.longitude,acc:Math.round(p.coords.accuracy)}),j,{enableHighAccuracy:true,timeout:15000,maximumAge:0});});}
 async function roadKm(a,b,c,d){try{const r=await fetch(`${OSRM}/${b},${a};${d},${c}?overview=false`);const j=await r.json();if(j.code==="Ok"&&j.routes?.[0])return{km:j.routes[0].distance/1000,dur:Math.round(j.routes[0].duration/60)};}catch{}return{km:hav(a,b,c,d)*1.3,dur:0};}
-function csv(rows,fn){const b="\uFEFF"+rows.map(r=>r.map(c=>`"${String(c??"").replace(/"/g,'""')}"`).join(";")).join("\n");Object.assign(document.createElement("a"),{href:URL.createObjectURL(new Blob([b],{type:"text/csv;charset=utf-8"})),download:fn}).click();}
+// Célula "crua": sai sem aspas externas. Usada por txtCel() para forçar TEXTO no Excel/Sheets.
+const cel=c=>(c&&typeof c==="object"&&"__raw" in c)?String(c.__raw):`"${String(c??"").replace(/"/g,'""')}"`;
+// Força o Excel a ler como texto (preserva zeros à esquerda em CNPJ, CEP, telefone).
+const txtCel=v=>{const s=String(v??"").replace(/"/g,'""');return s?{__raw:`="${s}"`}:"\"\"";};
+function csv(rows,fn){const b="\uFEFF"+rows.map(r=>r.map(cel).join(";")).join("\n");Object.assign(document.createElement("a"),{href:URL.createObjectURL(new Blob([b],{type:"text/csv;charset=utf-8"})),download:fn}).click();}
 // ROBUST encoding fix: tries multiple strategies, picks the best result
 function fixMojibake(s){
   if(!s||typeof s!=="string")return s;
@@ -171,4 +175,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export {CARGOS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };
+export {CARGOS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };
