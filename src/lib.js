@@ -15,6 +15,7 @@ let CATS=["Ativo","Prospecção","Perdido","Prospectar","Somente Visita","Inativ
 let CARGOS=["Comprador","Conferente","Financeiro","Fiscal","Gerente de Vendas","Marketing","Proprietário","Recebimento","Repositor","Vendedor"]; // sobrescrito por loadCatalogos (catálogo "Cargos") // v28: default; sobrescrito por loadCatalogos(). Excluído fica fora do PDV
 let BRANDS=["TRAMONTINA","PADO","HIPER TEXTIL","PLASTILIT","FESTCOLOR","ZAGONEL","RUVOLO","SANTANA"];
 let SECTORS=[{id:4512997,n:"Açougues"},{id:4513651,n:"Agropecuarias"},{id:4513000,n:"Atacados"},{id:4512998,n:"Decoração"},{id:4513649,n:"Eletromoveis"},{id:4724740,n:"Embalagens"},{id:4513001,n:"Garden"},{id:4512999,n:"Mat. Construção"},{id:4513019,n:"Outros"},{id:4513020,n:"Papelaria"},{id:4513650,n:"Presenteiros"},{id:4512995,n:"Supermercados"},{id:4512996,n:"Variedades"}];
+let CANAIS=["Presencial","Online - B2B"]; // sobrescrito por loadCatalogos (catálogo "canal")
 let CAT_IDS=[{id:3186598,n:"Ativo"},{id:3186011,n:"Prospecção"},{id:4165331,n:"Perdido"},{id:3186012,n:"Prospectar"},{id:3186601,n:"Somente Visita"},{id:3186600,n:"Inativo"},{id:4136717,n:"Online - B2B"},{id:3187967,n:"Excluido"}];
 let ORIGINS=[{id:1981672,n:"Carteira"},{id:1979723,n:"Indicação"},{id:1980476,n:"Prospecção"},{id:1979725,n:"Site"},{id:1980477,n:"Instagram"},{id:1980478,n:"Leads"}];
 let USERS=[{id:743088,n:"Jordan Moraes"},{id:743347,n:"Alisson Henrique"}];
@@ -69,6 +70,7 @@ async function loadCatalogos(token){
     const or=by("origem");    if(or.length)  ORIGINS=or.map(x=>({id:x.agendor_id,n:x.nome}));
     const ind=by("industria");if(ind.length) BRANDS=ind.map(x=>x.nome);
     const cg=by("cargo"); if(cg.length) CARGOS.splice(0,CARGOS.length,...cg.map(x=>x.nome));
+    const cn=by("canal"); if(cn.length) CANAIS=cn.map(x=>x.nome);
     const us=by("usuario");
     if(us.length){
       USERS=us.map(x=>({id:x.agendor_id,n:x.nome}));
@@ -175,4 +177,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export {CARGOS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };
+export {CARGOS, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };

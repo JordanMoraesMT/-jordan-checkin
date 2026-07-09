@@ -8,6 +8,7 @@ const TIPOS = [
   { id: "status",    l: "Status de clientes", emo: "🔖", temEmail: false, temCor: true },
   { id: "industria", l: "Indústrias", emo: "🏭", temEmail: false, temCor: true },
   { id: "cargo",     l: "Cargos",     emo: "💼", temEmail: false, temCor: false },
+  { id: "canal",     l: "Canais",     emo: "🛒", temEmail: false, temCor: false },
 ];
 const PALETA = ["#0AAEE8","#12C265","#8B5CF6","#06B6D4","#FFB020","#FF4D8D","#FB4B3A","#06C281"];
 
@@ -20,6 +21,10 @@ function ConfigCatalogos({ token }) {
   const [edit, setEdit] = useState(null); // item em edição
   const [form, setForm] = useState({ nome: "", email: "", cor: PALETA[0], admin: false });
   const [convLo, setConvLo] = useState(null); // id do item convidando
+  const [delIt, setDelIt] = useState(null);   // item pedindo confirmação de exclusão
+  const [delTxt, setDelTxt] = useState("");   // texto digitado na confirmação
+  const [delAcesso, setDelAcesso] = useState(false); // remover o login junto (usuários)
+  const [delLo, setDelLo] = useState(false);
 
   // Convite por e-mail: cria o acesso (login) no Worker e envia e-mail com código para definir a senha
   const convidar = async (it) => {
@@ -80,6 +85,23 @@ function ConfigCatalogos({ token }) {
     } catch (e) { alert("Erro ao salvar: " + (e.body || e.message)); }
   };
 
+  const excluir = async () => {
+    const it = delIt; if (!it) return;
+    if (delTxt.trim().toUpperCase() !== "EXCLUIR") { alert('Digite EXCLUIR para confirmar.'); return; }
+    let ex = {}; try { ex = it.extra ? JSON.parse(it.extra) : {}; } catch {}
+    setDelLo(true);
+    try {
+      await cfgApi(token, "POST", { op: "delete", id: it.id, email: ex.email || null, removerAcesso: delAcesso });
+      setDelIt(null); setDelTxt(""); setDelAcesso(false);
+      await carregar();
+    } catch (e) {
+      let msg = e.body || e.message;
+      try { const j = JSON.parse(e.body); if (j.error) msg = j.error; } catch {}
+      alert(msg);
+    }
+    setDelLo(false);
+  };
+
   const alternarAtivo = async (it) => {
     try { await cfgApi(token, "POST", { op: "toggle", id: it.id, ativo: it.ativo ? 0 : 1 }); await carregar(); }
     catch (e) { alert("Erro: " + (e.body || e.message)); }
@@ -91,7 +113,7 @@ function ConfigCatalogos({ token }) {
         <div>
           <div style={{ fontSize: 16, fontWeight: 700, color: S.txt }}>Cadastros do sistema</div>
           <div style={{ fontSize: 12, color: S.ts, marginTop: 2 }}>
-            {err || "Usuários, segmentos, status de clientes e indústrias — a base do CRM"}
+            {err || "Usuários, segmentos, status, canais, indústrias e cargos — a base do CRM"}
           </div>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
@@ -170,14 +192,44 @@ function ConfigCatalogos({ token }) {
               {meta.temEmail && <button onClick={() => convidar(it)} disabled={convLo === it.id} title="Enviar convite de acesso por e-mail" style={{ height: 32, borderRadius: 8, border: `1px solid ${S.acc}55`, background: S.inp, color: S.acc, cursor: "pointer", fontSize: 12, fontWeight: 600, padding: "0 10px" }}>{convLo === it.id ? "..." : "✉️ Convidar"}</button>}
               <button onClick={() => abrirEdit(it)} title="Editar" style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: S.inp, cursor: "pointer", fontSize: 13, padding: 0 }}>✏️</button>
               <button onClick={() => alternarAtivo(it)} title={it.ativo ? "Desativar" : "Reativar"} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${it.ativo ? S.dng : S.acc}55`, background: S.inp, color: it.ativo ? S.dng : S.acc, cursor: "pointer", fontSize: 14, padding: 0 }}>{it.ativo ? "⏻" : "↻"}</button>
+              <button onClick={() => { setDelIt(it); setDelTxt(""); setDelAcesso(false); }} title="Excluir de vez" style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${S.dng}55`, background: S.dng + "12", color: S.dng, cursor: "pointer", fontSize: 13, padding: 0 }}>🗑️</button>
             </div>
           );
         })}
       </div>
 
+      {delIt && (() => { let ex = {}; try { ex = delIt.extra ? JSON.parse(delIt.extra) : {}; } catch {}
+        return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
+          <div style={{ background: S.cardSolid, borderRadius: 16, padding: 22, width: "100%", maxWidth: 440, border: `1px solid ${S.dng}55` }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: S.dng, marginBottom: 6 }}>Excluir de vez?</div>
+            <p style={{ fontSize: 13, color: S.txt, margin: "0 0 8px", lineHeight: 1.5 }}>
+              Você vai apagar <b>{delIt.nome}</b> de <b>{meta.l}</b>. Isso <b>não tem volta</b>.
+            </p>
+            <p style={{ fontSize: 11.5, color: S.ts, margin: "0 0 12px", lineHeight: 1.5 }}>
+              Se o item ainda estiver em uso por algum cliente, contato ou venda, a exclusão será recusada —
+              nesse caso use <b>⏻ Desativar</b>, que esconde das listas e preserva o histórico.
+            </p>
+            {meta.temEmail && ex.email && (
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 12.5, color: S.t2, cursor: "pointer" }}>
+                <input type="checkbox" checked={delAcesso} onChange={e => setDelAcesso(e.target.checked)} />
+                Remover também o acesso de login ({ex.email})
+              </label>
+            )}
+            <label style={{ fontSize: 11.5, color: S.ts }}>Digite <b>EXCLUIR</b> para confirmar</label>
+            <input value={delTxt} onChange={e => setDelTxt(e.target.value)} placeholder="EXCLUIR" autoFocus style={{ width: "100%", marginTop: 4 }} />
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button onClick={() => { setDelIt(null); setDelTxt(""); }} style={{ flex: 1 }}>Cancelar</button>
+              <button onClick={excluir} disabled={delLo || delTxt.trim().toUpperCase() !== "EXCLUIR"} style={{ flex: 1, background: delTxt.trim().toUpperCase() === "EXCLUIR" ? S.dng : S.cl, border: "none", color: "#fff", fontWeight: 600 }}>{delLo ? "..." : "Excluir"}</button>
+            </div>
+          </div>
+        </div>); })()}
+
       <p style={{ fontSize: 11, color: S.td, marginTop: 16, lineHeight: 1.6 }}>
         Estes cadastros vivem no banco do TeamCheck (D1) e são a base de catálogos do CRM.
-        Desativar preserva o histórico — nada é apagado. Itens com "ID origem #" vieram da importação inicial. Em Usuários, o botão ✉️ Convidar cria o acesso de login e envia um e-mail com código para o próprio usuário definir a senha (vale por 48 horas).
+        <b> ⏻ Desativar</b> preserva o histórico (nada é apagado) e some das listas; <b>🗑️ Excluir</b> apaga de vez,
+        e só funciona se ninguém mais estiver usando o item. Itens com "ID origem #" vieram da importação inicial.
+        Em Usuários, o botão ✉️ Convidar cria o acesso de login e envia um e-mail com código para o próprio usuário definir a senha (vale por 48 horas).
       </p>
     </div>
   );

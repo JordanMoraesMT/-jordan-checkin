@@ -3,7 +3,7 @@
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check } from "lucide-react";
-import {CARGOS,  S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal } from "../lib";
+import {CARGOS, CANAIS, S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
 const DASH = "https://dashboard.jordanmt.com";
@@ -22,8 +22,8 @@ const fCnpj = (c) => { const d = soDig(c).padStart(14, "0"); return d.replace(/^
 const fCep = (c) => { const d = soDig(c); return d.length === 8 ? d.slice(0, 5) + "-" + d.slice(5) : (c || ""); };
 
 // ─── Planilhas de EMPRESAS — padrão único: CNPJ é SEMPRE a 1ª coluna ───
-const COLS_IMP = ["CNPJ", "Nome Fantasia", "Razão Social", "Grupo", "UF", "Cidade", "Bairro", "Endereço", "CEP", "Categoria", "Responsável", "Telefone", "E-mail"];
-const COLS_EMP = [...COLS_IMP.slice(0, 11), "Contato Principal", "Cargo", "Telefone", "E-mail", "Pessoa 2", "Telefone 2", "Pessoa 3", "Telefone 3", "Pessoa 4", "Telefone 4"];
+const COLS_IMP = ["CNPJ", "Nome Fantasia", "Razão Social", "Grupo", "UF", "Cidade", "Bairro", "Endereço", "CEP", "Categoria", "Canal", "Responsável", "Telefone", "E-mail"];
+const COLS_EMP = [...COLS_IMP.slice(0, 12), "Contato Principal", "Cargo", "Telefone", "E-mail", "Pessoa 2", "Telefone 2", "Pessoa 3", "Telefone 3", "Pessoa 4", "Telefone 4"];
 const norm = (s) => String(s || "").replace(/^\uFEFF/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 // Parser de CSV que respeita aspas — casa com o export (delimitador ; e aspas)
 function parseCSVEmp(text) {
@@ -581,7 +581,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     const rows = [COLS_EMP.slice()];
     lista.forEach(o => { const ps = deOrg(o); const p1 = ps[0];
       rows.push([txtCel(soDig(o.cnpj)), o.nickname || o.name, o.legalName || "", (o.grupo || "").replace("Grupo: ", ""), o.addr?.state || "", o.addr?.city_name || o.addr?.city || "", o.addr?.district || "", o.addr?.street || "", txtCel(soDig(o.addr?.zip)),
-        o.cat || "", o.owner || "",
+        o.cat || "", o.canal || "Presencial", o.owner || "",
         p1 ? p1.nome : "", p1 ? (p1.cargo || "") : "", txtCel(p1 ? (p1.telefone || p1.whatsapp || o.phone || "") : (o.phone || "")), p1 ? (p1.email || o.email || "") : (o.email || ""),
         fmtP(ps[1]), txtCel(ps[1] ? (ps[1].telefone || ps[1].whatsapp || "") : ""),
         fmtP(ps[2]), txtCel(ps[2] ? (ps[2].telefone || ps[2].whatsapp || "") : ""),
@@ -592,7 +592,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const baixarModelo = () => {
     const rows = [COLS_IMP.slice()];
     [...(allOrgs || [])].sort((a, b) => (a.nickname || a.name || "").localeCompare(b.nickname || b.name || "")).forEach(o =>
-      rows.push([txtCel(soDig(o.cnpj)), o.nickname || o.name || "", o.legalName || "", (o.grupo || "").replace("Grupo: ", ""), o.addr?.state || "", o.addr?.city_name || o.addr?.city || "", o.addr?.district || "", o.addr?.street || "", txtCel(soDig(o.addr?.zip)), o.cat || "", o.owner || "", txtCel(o.phone || ""), o.email || ""]));
+      rows.push([txtCel(soDig(o.cnpj)), o.nickname || o.name || "", o.legalName || "", (o.grupo || "").replace("Grupo: ", ""), o.addr?.state || "", o.addr?.city_name || o.addr?.city || "", o.addr?.district || "", o.addr?.street || "", txtCel(soDig(o.addr?.zip)), o.cat || "", o.canal || "Presencial", o.owner || "", txtCel(o.phone || ""), o.email || ""]));
     csv(rows, `Jordan_Modelo_Empresas_${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
@@ -606,12 +606,12 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     if (!/cnpj/.test(hdr[0] || "")) { alert("A 1ª coluna precisa se chamar CNPJ.\nBaixe o modelo e use o mesmo cabeçalho."); return; }
     const iFant = ix("nome fantasia", "fantasia"), iRaz = ix("razao social", "razao"), iGrp = ix("grupo"),
       iUf = ix("uf"), iCid = ix("cidade"), iBai = ix("bairro"), iEnd = ix("endereco"), iCep = ix("cep"),
-      iCat = ix("categoria"), iResp = ix("responsavel"), iTel = ix("telefone"), iMail = ix("mail");
+      iCat = ix("categoria"), iCanal = ix("canal"), iResp = ix("responsavel"), iTel = ix("telefone"), iMail = ix("mail");
     const val = (cols, i) => (i >= 0 ? String(cols[i] ?? "").replace(/^="?|"?$/g, "").trim() : "");
     const body = linhas.slice(1).map(c => ({
       cnpj: soDig(val(c, iCnpj).replace(/^=/, "")), fantasia: val(c, iFant), razao: val(c, iRaz), grupo: val(c, iGrp),
       uf: val(c, iUf), cidade: val(c, iCid), bairro: val(c, iBai), endereco: val(c, iEnd), cep: soDig(val(c, iCep)),
-      categoria: val(c, iCat), responsavel: val(c, iResp), telefone: val(c, iTel), email: val(c, iMail),
+      categoria: val(c, iCat), canal: val(c, iCanal), responsavel: val(c, iResp), telefone: val(c, iTel), email: val(c, iMail),
     })).filter(r => r.cnpj.length === 14);
     if (!body.length) { alert("Nenhuma linha com CNPJ válido (14 dígitos) na 1ª coluna."); return; }
     if (!confirm(`Processar ${body.length} empresa(s)?\nCNPJ existente = atualizar · CNPJ novo = cadastrar.`)) return;
@@ -622,7 +622,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       const org = (allOrgs || []).find(o => soDig(o.cnpj) === r.cnpj) || (excl || []).find(o => soDig(o.cnpj) === r.cnpj);
       const corpo = { cnpj: r.cnpj, fantasia: r.fantasia || null, razao: r.razao || null, cidade: r.cidade || null, uf: r.uf || null,
         grupo: r.grupo || null, categoria_nome: r.categoria || null, vendedor: r.responsavel || null,
-        endereco: r.endereco || null, bairro: r.bairro || null, cep: r.cep || null, telefone: r.telefone || null, email: r.email || null };
+        endereco: r.endereco || null, bairro: r.bairro || null, cep: r.cep || null, telefone: r.telefone || null, email: r.email || null, canal: r.canal || null };
       try {
         if (org) { await crm(token, "/api/crm/cliente-upsert", { method: "POST", body: JSON.stringify({ ...corpo, org_id: org.id }) }); ok++; log.push(`✏️ ${(r.fantasia || r.cnpj).slice(0, 34)}`); }
         else { await crm(token, "/api/crm/cliente-criar", { method: "POST", body: JSON.stringify({ ...corpo, rua: r.endereco || null }) }); novos++; log.push(`➕ ${(r.fantasia || r.cnpj).slice(0, 34)}`); }
@@ -657,10 +657,10 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       <button onClick={() => { setFCat([]); setFResp([]); setFRfv([]); setFGrp([]); setFSr([]); setFCid([]); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
     </div>
     <div style={{ overflowX: "auto", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: S.shadow }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 940 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1030 }}>
         <thead><tr>
           <th style={{ ...th, cursor: "pointer" }} onClick={() => setOrdem(o => -o)}>Nome {ordem === 1 ? "▲" : "▼"}</th>
-          <th style={th}>Categoria</th><th style={th}>Bairro</th><th style={th}>Cidade</th><th style={th}>UF</th><th style={th}>RFV</th><th style={th}>Responsável</th><th style={th}>E-mail</th><th style={th}>Telefone</th><th style={th}></th>
+          <th style={th}>Categoria</th><th style={th}>Canal</th><th style={th}>Bairro</th><th style={th}>Cidade</th><th style={th}>UF</th><th style={th}>RFV</th><th style={th}>Responsável</th><th style={th}>E-mail</th><th style={th}>Telefone</th><th style={th}></th>
         </tr></thead>
         <tbody>
           {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id}>
@@ -670,6 +670,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
                 <span style={{ display: "block", fontSize: 10.5, color: S.td }}>{[o.addr?.city_name || o.addr?.city, o.cnpj].filter(Boolean).join(" · ")}</span>
               </button></td>
             <td style={td}>{o.cat && <span style={{ fontSize: 10.5, color: "#fff", background: cor, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{o.cat}</span>}</td>
+            <td style={td}>{(o.canal || "Presencial") === "Presencial" ? <span style={{ fontSize: 10.5, color: S.td }}>Presencial</span> : <span style={{ fontSize: 10.5, color: S.acc, border: `1px solid ${S.acc}66`, background: S.acc + "18", padding: "2px 7px", borderRadius: 4, fontWeight: 700 }}>{o.canal}</span>}</td>
             <td style={{ ...td, fontSize: 11.5, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis" }} title={o.addr?.district || ""}>{o.addr?.district || "—"}</td>
             <td style={{ ...td, fontSize: 11.5 }}>{o.addr?.city_name || o.addr?.city || "—"}</td>
             <td style={{ ...td, fontSize: 11.5, color: S.ts }}>{o.addr?.state || "—"}</td>
@@ -692,7 +693,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 13.5, color: S.txt }}>Cadastrar / atualizar empresas por planilha</p>
       <p style={{ margin: "0 0 10px", fontSize: 11.5, color: S.ts, lineHeight: 1.5 }}>
         O <b>CNPJ é sempre a 1ª coluna</b> — mesmo padrão do arquivo exportado. Linhas com CNPJ que <b>já existe</b> são <b>atualizadas</b>; CNPJ novo <b>cria</b> a empresa.
-        Campos em branco não apagam o que já está no cadastro. Colunas lidas: CNPJ · Nome Fantasia · Razão Social · Grupo · UF · Cidade · Bairro · Endereço · CEP · Categoria · Responsável · Telefone · E-mail.
+        Campos em branco não apagam o que já está no cadastro. Colunas lidas: CNPJ · Nome Fantasia · Razão Social · Grupo · UF · Cidade · Bairro · Endereço · CEP · Categoria · Canal · Responsável · Telefone · E-mail.
       </p>
       <button onClick={() => baixarModelo()} style={{ width: "100%", marginBottom: 8, padding: "9px", fontSize: 12, fontWeight: 600, background: S.pri + "18", border: `1px solid ${S.pri}66`, color: S.pl, borderRadius: 9, cursor: "pointer" }}>📄 Baixar modelo (cabeçalho + carteira atual)</button>
       <input type="file" accept=".csv,text/csv" disabled={!!impMsg} onChange={e => { const f = e.target.files?.[0]; e.target.value = ""; if (f) importarArquivo(f); }} style={{ width: "100%", fontSize: 11, padding: 6 }} />
