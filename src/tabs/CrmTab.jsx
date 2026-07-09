@@ -536,7 +536,8 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const [q, setQ] = useState("");
   const [fCat, setFCat] = useState(arr(p0.fCat)); const [fResp, setFResp] = useState(() => p0.fResp !== undefined ? arr(p0.fResp) : (user?.name ? [user.name] : []));/* v43: pré-seleção do usuário */
   const [fRfv, setFRfv] = useState(arr(p0.fRfv)); const [fGrp, setFGrp] = useState(arr(p0.fGrp)); const [fSr, setFSr] = useState(arr(p0.fSr)); const [fCid, setFCid] = useState(arr(p0.fCid)); // v41: Grupo no lugar da Curva ABC
-  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid]);
+  const [fCanal, setFCanal] = useState(arr(p0.fCanal)); // v64: canal de venda
+  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal]);
   const [ordem, setOrdem] = useState(1); // 1 = A→Z, -1 = Z→A
   const [vc, setVc] = useState(60);
   const resps = useMemo(() => { const s = new Set(USERS.map(u => u.n)); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
@@ -549,12 +550,13 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       l = l.filter(casa); }
     if (fCat.length) l = l.filter(o => fCat.includes(o.cat));
     if (fResp.length) l = l.filter(o => fResp.includes(o.owner));
+    if (fCanal.length) l = l.filter(o => fCanal.includes(o.canal || "Presencial"));
     if (fCid.length) l = l.filter(o => fCid.includes(o.addr?.city_name || o.addr?.city));
     if (fGrp.length) l = l.filter(o => fGrp.includes(((o.grupo || "").replace("Grupo: ", "")).trim()));
     if (fRfv.length || fSr.length) l = l.filter(o => { const r = rfvDe(o); if (!r) return false;
       if (fRfv.length && !fRfv.includes(r.rfv)) return false; if (fSr.length && !fSr.includes(r.status)) return false; return true; });
     return [...l].sort((a, b) => ordem * (a.nickname || a.name || "").localeCompare(b.nickname || b.name || ""));
-  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, ordem, rfv]);
+  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, ordem, rfv]);
   const th = { textAlign: "left", padding: "8px 10px", fontSize: 10.5, fontWeight: 800, color: S.ts, textTransform: "uppercase", letterSpacing: .4, whiteSpace: "nowrap", borderBottom: `2px solid ${S.brd}` };
   const td = { padding: "9px 10px", fontSize: 12, color: S.txt, borderBottom: `1px solid ${S.cl}`, whiteSpace: "nowrap", verticalAlign: "middle" };
 
@@ -654,7 +656,8 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
       <MultiSelect values={fSr} onChange={v => { setFSr(v); setVc(60); }} placeholder="Status Recompra" allLabel="todos" style={{ flex: 1 }} options={["Em Dia", "Momento de Recompra", "Atrasado"]} />
       <MultiSelect values={fCid} onChange={v => { setFCid(v); setVc(60); }} placeholder="Cidade" allLabel="todas" style={{ flex: 1 }} options={cidades} />
-      <button onClick={() => { setFCat([]); setFResp([]); setFRfv([]); setFGrp([]); setFSr([]); setFCid([]); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
+      <MultiSelect values={fCanal} onChange={v => { setFCanal(v); setVc(60); }} placeholder="Canal" allLabel="todos" style={{ flex: 1 }} options={CANAIS} />
+      <button onClick={() => { setFCat([]); setFResp([]); setFRfv([]); setFGrp([]); setFSr([]); setFCid([]); setFCanal([]); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
     </div>
     <div style={{ overflowX: "auto", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: S.shadow }}>
       <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1030 }}>
