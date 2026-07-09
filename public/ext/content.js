@@ -210,6 +210,12 @@
     } catch (e) {}
     const lista = empresas.slice(0, 8);
     const dets = await Promise.all(lista.map(c => detalhesEmpresa(c.empresa || c.org_nome, c.org_id)));
+    // opções de empresa para NOTA e TAREFA (quando o contato atende mais de uma)
+    const empOpts = lista.map((c, i) => ({
+      org_id: c.org_id || (dets[i] && dets[i].id) || null,
+      cnpj: dig(c.cnpj || (dets[i] && dets[i].cnpj) || ""),
+      nome: c.empresa || (dets[i] && dets[i].name) || c.org_nome || "(sem nome)"
+    }));
     const cnpjPrincipal = dig(pessoa.cnpj || (dets[0] && dets[0].cnpj) || "");
     const empHtml = lista.map((c, i) => {
       const o = dets[i] || {};
@@ -246,21 +252,25 @@
           <p class="tcx-bt">Últimas atividades · ${esc(pessoa.empresa || "")}</p>
           ${atvs.length ? atvs.map(a => `<p class="tcx-li"><span class="tcx-tipo">${esc(a.tipo)}</span> ${esc((a.texto || "").slice(0, 90))}<br><span class="tcx-data">${esc((a.criado_em || "").slice(0, 16).replace("T", " "))} · ${esc(a.user_nome || "")}</span></p>`).join("") : `<p class="tcx-li tcx-vazio">Sem atividades recentes.</p>`}
         </div>
-        <textarea class="tcx-inp" id="tcx-nota" rows="2" placeholder="Registrar nota rápida (em ${esc(pessoa.empresa || "principal")})…"></textarea>
+        ${empOpts.length > 1 ? `<p class="tcx-bt" style="margin:0 0 4px">Registrar em qual empresa?</p>
+        <select class="tcx-inp" id="tcx-nota-emp">${empOpts.map((o, i) => `<option value="${i}">${esc(o.nome)}</option>`).join("")}</select>` : ""}
+        <textarea class="tcx-inp" id="tcx-nota" rows="2" placeholder="Registrar nota rápida${empOpts.length > 1 ? "" : ` (em ${esc(pessoa.empresa || "principal")})`}…"></textarea>
         <button class="tcx-btn" id="tcx-salvar">Salvar nota</button>
         <button class="tcx-sec" id="tcx-agendar">📅 Agendar tarefa</button>
         <a class="tcx-btn tcx-link" href="${fichaUrl(cnpjPrincipal)}" target="_blank">Abrir ficha completa ${cnpjPrincipal ? "de " + esc(pessoa.empresa || "") : "no TeamCheck"} ›</a>
       </div>`;
     ligaVoltar();
+    const empSel = () => { const sel = $("#tcx-nota-emp", corpo); const o = empOpts[Number(sel ? sel.value : 0)] || empOpts[0]; return o || { org_id: pessoa.org_id || null, cnpj: dig(pessoa.cnpj || ""), nome: pessoa.empresa || pessoa.nome }; };
     $("#tcx-salvar", corpo).onclick = async () => {
       const t = $("#tcx-nota", corpo).value.trim(); if (!t) return;
+      const emp = empSel();
       try {
-        await crm("/api/crm/atividades", { method: "POST", body: JSON.stringify({ org_id: pessoa.org_id || null, cnpj: dig(pessoa.cnpj || "") || null, org_nome: pessoa.empresa || pessoa.nome, tipo: "WHATSAPP", texto: t }) });
+        await crm("/api/crm/atividades", { method: "POST", body: JSON.stringify({ org_id: emp.org_id || null, cnpj: emp.cnpj || null, org_nome: emp.nome, tipo: "WHATSAPP", texto: t }) });
         $("#tcx-nota", corpo).value = ""; renderFicha(achados, origem, telCtx);
       } catch (e) { if (e.status === 401) { await trata401(); } else alert("Erro ao salvar: " + e.message); }
     };
     const g = $("#tcx-ger", corpo); if (g) g.onclick = () => telaGerenciar(telCtx);
-    const ag = $("#tcx-agendar", corpo); if (ag) ag.onclick = () => telaAgendar(pessoa, () => renderFicha(achados, origem, telCtx));
+    const ag = $("#tcx-agendar", corpo); if (ag) ag.onclick = () => telaAgendar(pessoa, () => renderFicha(achados, origem, telCtx), empOpts);
     const v = $("#tcx-vinc", corpo); if (v) v.onclick = () => telaVincular(pessoa, () => { contatos = null; telCtx ? mostraFichaTel(telCtx) : renderFicha(achados, origem, telCtx); });
     const fx = $("#tcx-fix", corpo); if (fx) fx.onclick = async () => { await fixSet(chaveAtual, { id: pessoa.id, nome: pessoa.nome || "" }); renderFicha(achados, origem, telCtx); };
     const ufx = $("#tcx-unfix", corpo); if (ufx) ufx.onclick = async () => { await fixDel(chaveAtual); renderFicha(achados, origem, telCtx); };
@@ -429,15 +439,18 @@
   }
 
   // agendar TAREFA na empresa do contato (aparece na Agenda do TeamCheck)
-  async function telaAgendar(pessoa, aoVoltar) {
-    pushView("agendar:" + pessoa.id, () => telaAgendar(pessoa, aoVoltar));
+  async function telaAgendar(pessoa, aoVoltar, empOpts) {
+    pushView("agendar:" + pessoa.id, () => telaAgendar(pessoa, aoVoltar, empOpts));
     const hoje = new Date(); const amanha = new Date(hoje.getTime() + 86400000);
     const dIso = (d) => d.toISOString().slice(0, 10);
     const TIPOS = ["VISITA", "LIGACAO", "EMAIL", "REUNIAO", "WHATSAPP", "PROPOSTA", "NOTA"];
+    const opts = (empOpts && empOpts.length) ? empOpts : [{ org_id: pessoa.org_id || null, cnpj: dig(pessoa.cnpj || ""), nome: pessoa.empresa || pessoa.nome || "" }];
     corpo.innerHTML = `
       <div class="tcx-ficha">
         ${btnVoltarHtml()}
-        <p class="tcx-bt" style="margin-bottom:8px">Agendar tarefa · ${esc(pessoa.empresa || "")}</p>
+        <p class="tcx-bt" style="margin-bottom:8px">Agendar tarefa · ${esc(pessoa.nome || "")}</p>
+        ${opts.length > 1 ? `<p class="tcx-bt" style="margin:0 0 4px">Em qual empresa?</p>
+        <select class="tcx-inp" id="tcx-ag-emp">${opts.map((o, i) => `<option value="${i}">${esc(o.nome)}</option>`).join("")}</select>` : ""}
         <select class="tcx-inp" id="tcx-ag-tipo">${TIPOS.map(t => `<option value="${t}"${t === "VISITA" ? " selected" : ""}>${t}</option>`).join("")}</select>
         <textarea class="tcx-inp" id="tcx-ag-txt" rows="2" placeholder="O que precisa ser feito?"></textarea>
         <div style="display:flex;gap:8px">
@@ -456,7 +469,8 @@
       if (!dt) return alert("Escolha a data.");
       const b = $("#tcx-ag-go", corpo); b.disabled = true; b.textContent = "Criando…";
       try {
-        await crm("/api/crm/atividades", { method: "POST", body: JSON.stringify({ org_id: pessoa.org_id || null, cnpj: dig(pessoa.cnpj || "") || null, org_nome: pessoa.empresa || pessoa.nome, tipo: $("#tcx-ag-tipo", corpo).value, texto: txt, origem: "tarefa", due_em: `${dt}T${hr}:00-04:00` } ) });
+        const selE = $("#tcx-ag-emp", corpo); const emp = opts[Number(selE ? selE.value : 0)] || opts[0];
+        await crm("/api/crm/atividades", { method: "POST", body: JSON.stringify({ org_id: emp.org_id || null, cnpj: emp.cnpj || null, org_nome: emp.nome, tipo: $("#tcx-ag-tipo", corpo).value, texto: txt, origem: "tarefa", due_em: `${dt}T${hr}:00-04:00` } ) });
         b.textContent = "✓ Tarefa criada!";
         setTimeout(aoVoltar, 700);
       } catch (e) { b.disabled = false; b.textContent = "Criar tarefa"; if (e.status === 401) { await trata401(); } else alert("Erro: " + e.message); }

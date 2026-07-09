@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TeamCheck para WhatsApp Web",
-  "version": "7.1.0",
+  "version": "7.2.0",
   "description": "Veja a ficha do cliente do TeamCheck direto no WhatsApp Web — Jordan Representações. Usa sua sessão já aberta (sem login).",
   "permissions": [
     "storage",
