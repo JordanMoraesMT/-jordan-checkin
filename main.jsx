@@ -1,586 +1,201 @@
-// TeamCheck — Aba CRM (v14)
-// CRM próprio: histórico de atividades, contatos, fotos/arquivos da loja e GPS.
-// Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
-import { useState, useEffect, useMemo, useRef } from "react";
-import { Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check } from "lucide-react";
-import { S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, todayLocal } from "../lib";
-import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
+// TeamCheck — aba ConfigTab
+import { useState } from "react";
+import { HOMES, TZ, S, DASH, API, csv, getBase, getEnd, sL, sS } from "../lib";
+import { HotelGeoInput, ProgressBar } from "../components";
+import { ConfigCatalogos } from "./ConfigCatalogos";
 
-const DASH = "https://dashboard.jordanmt.com";
-const TIPOS = [
-  { id: "NOTA",     l: "Nota",     I: StickyNote,    c: "#8B5CF6" },
-  { id: "VISITA",   l: "Visita",   I: MapPin,        c: "#12C265" },
-  { id: "LIGACAO",  l: "Ligação",  I: PhoneCall,     c: "#0AAEE8" },
-  { id: "WHATSAPP", l: "WhatsApp", I: MessageCircle, c: "#25D366" },
-  { id: "EMAIL",    l: "E-mail",   I: Mail,          c: "#F59E0B" },
-  { id: "REUNIAO",  l: "Reunião",  I: Handshake,     c: "#FF4D8D" },
-  { id: "PROPOSTA", l: "Proposta", I: FileText,      c: "#FFB020" },
-];
-const tipoDe = (id) => TIPOS.find(t => t.id === id) || TIPOS[0];
-const soDig = (x) => String(x || "").replace(/\D/g, "");
-const fCnpj = (c) => { const d = soDig(c).padStart(14, "0"); return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5"); };
-const fDH = (iso) => { // datetime do D1 -> Cuiabá (aceita "YYYY-MM-DD HH:MM:SS" UTC ou ISO com fuso)
-  try { const s = String(iso); const temFuso = /[zZ]$|[+\-]\d{2}:?\d{2}$/.test(s.slice(10)); const d = new Date(temFuso ? s : (s.replace(" ", "T") + "Z")); if (isNaN(d)) return s; return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", timeZone: "America/Cuiaba" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Cuiaba" }); } catch { return String(iso); }
-};
-
-// fetch autenticado por sessão (mesma sessão do proxy) — JSON
-async function crm(token, path, opts = {}) {
-  const headers = { "X-Session": token, ...(opts.headers || {}) };
-  if (opts.body && !(opts.body instanceof FormData)) headers["Content-Type"] = "application/json";
-  const r = await fetch(DASH + path, { ...opts, headers, cache: "no-store" });
-  const d = await r.json().catch(() => ({}));
-  if (!r.ok || d.erro) throw new Error(d.erro || d.detalhe || ("HTTP " + r.status));
-  return d;
-}
-
-// comprime imagem no aparelho antes do upload (máx 1600px, webp)
-function comprime(file) {
-  return new Promise((res) => {
-    if (!file.type.startsWith("image/")) return res(file);
-    const img = new Image(); const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const max = 1600; let { width: w, height: h } = img;
-      if (w > max || h > max) { const k = Math.min(max / w, max / h); w = Math.round(w * k); h = Math.round(h * k); }
-      const cv = document.createElement("canvas"); cv.width = w; cv.height = h;
-      cv.getContext("2d").drawImage(img, 0, 0, w, h);
-      cv.toBlob((b) => { URL.revokeObjectURL(url); if (!b || b.size >= file.size) return res(file);
-        res(new File([b], file.name.replace(/\.[^.]+$/, "") + ".webp", { type: "image/webp" })); }, "image/webp", 0.82);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); res(file); };
-    img.src = url;
-  });
-}
-
-const Crd = ({ children, style }) => <div style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", marginBottom: 10, boxShadow: S.shadow, ...style }}>{children}</div>;
-const Chip = ({ on, onClick, children, color }) => <button onClick={onClick} style={{ border: `1px solid ${on ? (color || S.pri) : S.brd}`, background: on ? (color || S.pri) : S.card, color: on ? "#fff" : S.ts, borderRadius: 20, padding: "5px 12px", fontSize: 12, fontWeight: on ? 700 : 400, cursor: "pointer", whiteSpace: "nowrap" }}>{children}</button>;
-const inp = { width: "100%", boxSizing: "border-box", background: "var(--inp)", border: `1px solid ${S.brd}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, color: S.txt };
-
-// ─────────────────────────────────────────────────────────────
-//  Card de atividade (timeline — mesmo desenho do início do Agendor)
-// ─────────────────────────────────────────────────────────────
-function AtvCard({ a, onOrg, onDel, canDel, onFinish }) {
-  const t = tipoDe(a.tipo);
-  const isTask = a.origem === "tarefa"; const done = !!a.concluida;
-  const atrasada = isTask && !done && a.due_em && a.due_em.slice(0, 10) < todayLocal();
-  return (<Crd style={{ padding: 0, overflow: "hidden" }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: S.cl, borderBottom: `1px solid ${S.brd}` }}>
-      <div style={{ width: 28, height: 28, borderRadius: "50%", background: t.c + "22", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><t.I size={15} color={t.c} /></div>
-      <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: S.txt, letterSpacing: 0.4 }}>{t.l.toUpperCase()}{a.origem === "checkout" && <span style={{ fontWeight: 400, color: S.ts }}> · check-out</span>}{isTask && <span style={{ fontWeight: 700, color: done ? S.ok : atrasada ? S.dng : S.gold, marginLeft: 6, fontSize: 10 }}>· {done ? "TAREFA OK" : "TAREFA"}</span>}</p>
-      <p style={{ margin: "0 0 0 auto", fontSize: 11, color: S.ts, display: "flex", alignItems: "center", gap: 4 }}><Clock size={11} />{fDH(a.criado_em)}</p>
-      {canDel && <button onClick={() => onDel(a)} style={{ background: "transparent", border: "none", padding: 2, cursor: "pointer" }}><Trash2 size={14} color={S.td} /></button>}
-    </div>
-    <div style={{ padding: "10px 12px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-        <p style={{ margin: 0, fontSize: 12, color: S.ts }}>{a.user_nome || "—"}</p>
-        {a.org_nome && <button onClick={() => onOrg && onOrg(a)} style={{ background: "transparent", border: "none", padding: 0, cursor: onOrg ? "pointer" : "default", display: "flex", alignItems: "center", gap: 4, color: S.pri, fontSize: 12, fontWeight: 600, textAlign: "right" }}><Building2 size={12} />{a.org_nome}</button>}
-      </div>
-      <p style={{ margin: 0, fontSize: 13.5, color: S.txt, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{a.texto}</p>
-      {isTask && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-        {a.due_em ? <span style={{ fontSize: 11.5, fontFamily: "monospace", color: done ? S.ts : atrasada ? S.dng : S.gold }}>Prazo {fD(a.due_em)} {fT(a.due_em)}</span> : <span />}
-        <button onClick={() => !done && onFinish && onFinish(a)} disabled={done || !onFinish} title={done ? "Tarefa finalizada" : "Marcar como finalizada"} style={{ display: "flex", alignItems: "center", gap: 8, background: done ? S.ok + "18" : S.inp, border: `1px solid ${done ? S.ok : S.inpBdr}`, borderRadius: 8, padding: "7px 12px", cursor: done ? "default" : (onFinish ? "pointer" : "default") }}>
-          <span style={{ width: 17, height: 17, borderRadius: 5, border: `1.5px solid ${done ? S.ok : S.inpBdr}`, background: done ? S.ok : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>{done && <Check size={12} color="#fff" strokeWidth={3} />}</span>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: done ? S.ok : S.ts }}>{done ? "Finalizada" : "Finalizar"}</span>
-        </button>
-      </div>}
-    </div>
-  </Crd>);
-}
-
-// ─────────────────────────────────────────────────────────────
-//  Tela do cliente — cabeçalho + Histórico | Contatos | Fotos | Dados
-// ─────────────────────────────────────────────────────────────
-function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange }) {
-  const [sub, setSub] = useState("hist");
-  const [info, setInfo] = useState(null);           // /api/crm/cliente
-  const [atvs, setAtvs] = useState([]); const [ldA, setLdA] = useState(false);
-  const [ctts, setCtts] = useState([]); const [ldC, setLdC] = useState(false);
-  const [arqs, setArqs] = useState([]); const [ldF, setLdF] = useState(false);
-  const [thumbs, setThumbs] = useState({});         // id -> objectURL
-  const [msg, setMsg] = useState("");
-  const cnpjN = soDig(org.cnpj);
-  const idQS = `org_id=${org.id}${cnpjN ? `&cnpj=${cnpjN}` : ""}`;
-
-  const carregaInfo = async () => { try { const d = await crm(token, `/api/crm/cliente?${cnpjN ? "cnpj=" + cnpjN : "org_id=" + org.id}`); setInfo(d); } catch (e) { setInfo({ erro: e.message }); } };
-  const carregaAtvs = async () => { setLdA(true); try {
-    // Histórico COMPLETO do cliente (sem filtro de data). limit alto p/ nunca truncar.
-    const r1 = await crm(token, `/api/crm/atividades?org_id=${org.id}&limit=1000`);
-    let lista = r1.atividades || [];
-    if (cnpjN) { try { const r2 = await crm(token, `/api/crm/atividades?cnpj=${cnpjN}&limit=1000`); const ids = new Set(lista.map(a => a.id)); lista = [...lista, ...(r2.atividades || []).filter(a => !ids.has(a.id))]; } catch {} }
-    lista.sort((a, b) => (b.criado_em || "").localeCompare(a.criado_em || "") || b.id - a.id);
-    setAtvs(lista);
-  } catch (e) { setMsg("Histórico: " + e.message); } setLdA(false); };
-  const carregaCtts = async () => { setLdC(true); try { const d = await crm(token, `/api/crm/contatos?${idQS}`); setCtts(d.contatos || []); } catch (e) { setMsg("Contatos: " + e.message); } setLdC(false); };
-  const carregaArqs = async () => { setLdF(true); try { const d = await crm(token, `/api/crm/arquivos?${idQS}`); setArqs(d.arquivos || []); } catch (e) { setMsg("Arquivos: " + e.message); } setLdF(false); };
-  useEffect(() => { setMsg(""); carregaInfo(); carregaAtvs(); carregaCtts(); carregaArqs(); }, [org.id]);
-
-  // thumbs das fotos (fetch autenticado -> objectURL)
-  useEffect(() => { let vivo = true; (async () => {
-    for (const a of arqs.filter(x => x.tipo === "foto" && !thumbs[x.id])) {
-      try { const r = await fetch(`${DASH}/api/crm/arquivo?id=${a.id}`, { headers: { "X-Session": token } });
-        if (!r.ok) continue; const b = await r.blob(); if (!vivo) return;
-        setThumbs(p => ({ ...p, [a.id]: URL.createObjectURL(b) }));
-      } catch {} }
-  })(); return () => { vivo = false; }; }, [arqs]);
-
-  // ── composer do histórico ──
-  const [nTipo, setNTipo] = useState("NOTA"); const [nTxt, setNTxt] = useState(""); const [espelha, setEspelha] = useState(true); const [salvando, setSalvando] = useState(false);
-  const [nUsers, setNUsers] = useState(() => [String(user?.id)]);// responsáveis do registro (igual à Agenda)
-  const salvaAtv = async () => { if (!nTxt.trim() || salvando) return; if (!nUsers.length) { alert("Escolha ao menos um responsável."); return; } setSalvando(true); setMsg("");
-    try {
-      for (const uid of nUsers) { const U = USERS.find(u => String(u.id) === String(uid));
-        await crm(token, "/api/crm/atividades", { method: "POST", body: JSON.stringify({ org_id: org.id, cnpj: cnpjN || null, org_nome: org.nickname || org.name, tipo: nTipo, texto: nTxt.trim(), user_id: Number(uid) || null, user_nome: U ? U.n : null }) }); }
-      setNTxt(""); carregaAtvs(); onCrmChange && onCrmChange();
-    } catch (e) { setMsg("Erro ao salvar: " + e.message); }
-    setSalvando(false); };
-  const delAtv = async (a) => { if (!confirm("Excluir esta atividade do CRM?")) return; try { await crm(token, `/api/crm/atividades?id=${a.id}`, { method: "DELETE" }); setAtvs(p => p.filter(x => x.id !== a.id)); } catch (e) { alert("Erro: " + e.message); } };
-
-  // ── contatos ──
-  const cttVazio = { nome: "", cargo: "", telefone: "", whatsapp: "", email: "", obs: "" };
-  const [cttForm, setCttForm] = useState(null); // null | {..., id?}
-  const salvaCtt = async () => { const f = cttForm; if (!f?.nome?.trim()) return alert("Informe o nome.");
-    try {
-      if (f.id) await crm(token, "/api/crm/contatos", { method: "PUT", body: JSON.stringify(f) });
-      else await crm(token, "/api/crm/contatos", { method: "POST", body: JSON.stringify({ ...f, org_id: org.id, cnpj: cnpjN || null }) });
-      setCttForm(null); carregaCtts();
-    } catch (e) { alert("Erro: " + e.message); } };
-  const delCtt = async (c) => { if (!confirm(`Excluir contato ${c.nome}?`)) return; try { await crm(token, `/api/crm/contatos?id=${c.id}`, { method: "DELETE" }); carregaCtts(); } catch (e) { alert("Erro: " + e.message); } };
-
-  // ── arquivos/fotos ──
-  const fotoRef = useRef(); const arqRef = useRef(); const [subindo, setSubindo] = useState("");
-  // v41: aceita VÁRIOS arquivos de uma vez (computador e celular) — envia em sequência com contador
-  const upload = async (files) => { const lista = Array.from(files || []).filter(Boolean); if (!lista.length) return; setMsg("");
-    let falhas = 0;
-    for (let i = 0; i < lista.length; i++) { const file = lista[i];
-      setSubindo(lista.length > 1 ? `${i + 1}/${lista.length} — ${file.name}` : file.name);
-      try { const f = await comprime(file);
-        const fd = new FormData(); fd.append("file", f, f.name); fd.append("org_id", String(org.id)); if (cnpjN) fd.append("cnpj", cnpjN);
-        await crm(token, "/api/crm/arquivos", { method: "POST", body: fd });
-      } catch (e) { falhas++; setMsg(`Upload de ${file.name}: ` + e.message); }
+// Parser de CSV que respeita aspas ("") — casa com o export do helper csv() (delimitador ; e aspas)
+function parseCSV(text){
+  const lines=text.replace(/\r\n?/g,"\n").split("\n").filter(l=>l.length);
+  if(!lines.length)return[];
+  const semi=(lines[0].match(/;/g)||[]).length,comma=(lines[0].match(/,/g)||[]).length;
+  const delim=semi>=comma?";":",";
+  const rows=[];
+  for(const line of lines){
+    const out=[];let cur="",inQ=false;
+    for(let i=0;i<line.length;i++){const ch=line[i];
+      if(inQ){if(ch==='"'){if(line[i+1]==='"'){cur+='"';i++;}else inQ=false;}else cur+=ch;}
+      else{if(ch==='"')inQ=true;else if(ch===delim){out.push(cur);cur="";}else cur+=ch;}
     }
-    setSubindo(""); carregaArqs();
-    if (falhas && lista.length > 1) setMsg(`${lista.length - falhas} de ${lista.length} enviados — ${falhas} falharam.`); };
-  const delArq = async (a) => { if (!confirm(`Excluir ${a.nome}?`)) return; try { await crm(token, `/api/crm/arquivos?id=${a.id}`, { method: "DELETE" }); setArqs(p => p.filter(x => x.id !== a.id)); } catch (e) { alert("Erro: " + e.message); } };
-  const baixaArq = async (a) => { try { const r = await fetch(`${DASH}/api/crm/arquivo?id=${a.id}`, { headers: { "X-Session": token } }); const b = await r.blob(); const u = URL.createObjectURL(b); const el = document.createElement("a"); el.href = u; el.download = a.nome || "arquivo"; el.click(); setTimeout(() => URL.revokeObjectURL(u), 5000); } catch (e) { alert("Erro: " + e.message); } };
-  const [preview, setPreview] = useState(null);
-
-  // ── GPS ──
-  const gpsD1 = info?.gps; const gpsKV = plocs?.[org.id];
-  const gpsAtual = gpsD1 || gpsKV || null;
-  const salvaGPS = async () => { try { const g = await gps();
-      await crm(token, "/api/crm/gps", { method: "PUT", body: JSON.stringify({ org_id: org.id, cnpj: cnpjN || null, lat: g.lat, lng: g.lng, precisao: g.acc }) });
-      carregaInfo(); alert(`GPS salvo (±${g.acc}m).`);
-    } catch (e) { alert("GPS: " + (e.message || e)); } };
-
-  // Agendar tarefa: cria tarefa com prazo no D1 (aparece na Agenda)
-  const [agTask, setAgTask] = useState(false);
-  const [agTipo, setAgTipo] = useState("VISITA"); const [agTxt, setAgTxt] = useState("");
-  const [agData, setAgData] = useState(""); const [agHora, setAgHora] = useState("09:00"); const [agLo, setAgLo] = useState(false);
-  const [agUsers, setAgUsers] = useState(() => [String(user?.id)]); // responsáveis (permite atribuir a outro)
-  const salvaTarefa = async () => { if (!agTxt.trim() || !agData) { alert("Preencha descrição e data."); return; } if (!agUsers.length) { alert("Escolha ao menos um responsável."); return; } setAgLo(true);
-    try {
-      for (const uid of agUsers) { const U = USERS.find(u => String(u.id) === String(uid));
-        await fetch(`${DASH}/api/crm/atividades`, { method: "POST", headers: { "X-Session": token, "Content-Type": "application/json" }, body: JSON.stringify({ org_id: org.id, cnpj: cnpjN || null, org_nome: org.nickname || org.name, tipo: agTipo, texto: agTxt, origem: "tarefa", due_em: `${agData}T${agHora}:00-04:00`, agendor_id: null, user_id: Number(uid) || null, user_nome: U ? U.n : null }) }).catch(() => {}); }
-      alert("Tarefa agendada!"); setAgTask(false); setAgTxt(""); setAgData(""); onCrmChange && onCrmChange();
-    } catch (e) { alert("Erro: " + (e.message || e)); } setAgLo(false); };
-  const catCor = CC[org.cat] || S.ts;
-  // Matriz RFV consolidada (mesma régua do Dashboard)
-  const rfvInfo = useMemo(() => { if (!rfv) return null; const k = soDig(org.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[org.id] || null; }, [rfv, org.id, org.cnpj]);
-  const RFVC = { "Campeão": S.gold, "Leal": S.ok, "Em Crescimento": S.pri, "Em Risco": "#E76F51", "Inativo": S.td };
-  const SRC_ = { "Em Dia": S.ok, "Momento de Recompra": S.gold, "Atrasado": S.dng };
-  const ultimaVisita = useMemo(() => (visits || []).filter(v => v.orgId === org.id && v.checkoutTime).sort((a, b) => b.checkinTime.localeCompare(a.checkinTime))[0], [visits, org.id]);
-  const subs = [["hist", "Histórico"], ["ctt", "Contatos"], ["arq", "Fotos & Arquivos"], ["dados", "Dados"]];
-  const infoContato = (
-    <Crd>
-      <p style={{ margin: "0 0 8px", fontSize: 12.5, fontWeight: 800, color: S.txt }}>Informações para contato</p>
-      {(org.addr?.street||org.addr?.city_name) && <p style={{ margin: "0 0 4px", fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"flex-start" }}><MapPin size={13} style={{marginTop:2, flexShrink:0}}/>{[ [org.addr?.street, org.addr?.number].filter(Boolean).join(", "), org.addr?.district, [org.addr?.city_name||org.addr?.city, org.addr?.state].filter(Boolean).join("/") ].filter(Boolean).join(" · ")}</p>}
-      {org.phone && <p style={{ margin: "0 0 4px", fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"center" }}><Phone size={13}/>{org.phone}
-        <a href={`https://wa.me/55${String(org.phone).replace(/\D/g,"")}`} target="_blank" rel="noreferrer" style={{color:S.ok, fontWeight:700, textDecoration:"none"}}>WhatsApp</a>
-        <a href={`tel:${String(org.phone).replace(/\D/g,"")}`} style={{color:S.pl, fontWeight:700, textDecoration:"none"}}>Ligar</a></p>}
-      {org.email && <p style={{ margin: 0, fontSize: 12, color: S.ts, display:"flex", gap:6, alignItems:"center" }}><Mail size={13}/><a href={`mailto:${org.email}`} style={{color:S.pl, textDecoration:"none"}}>{org.email}</a></p>}
-      {!org.phone && !org.email && !(org.addr?.street||org.addr?.city_name) && <p style={{margin:0, fontSize:12, color:S.td}}>Sem contato no cadastro — use Editar para preencher.</p>}
-    </Crd>);
-
-  return (<div>
-    <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: S.pri, fontSize: 13, fontWeight: 700, padding: "2px 0 10px", cursor: "pointer" }}><ArrowLeft size={16} />Voltar ao CRM</button>
-
-    {/* Cabeçalho do cliente */}
-    <Crd>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-        <div style={{ minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 17, fontWeight: 800, color: S.txt, lineHeight: 1.2 }}>{org.nickname || org.name}</p>
-          {(org.ranking||0)>0 && <p style={{ margin: "2px 0 0", fontSize: 12, color: S.gold, letterSpacing: 1 }}>{"★".repeat(org.ranking)}{"☆".repeat(Math.max(0,5-org.ranking))}</p>}
-          {org.legalName && <p style={{ margin: "2px 0 0", fontSize: 11.5, color: S.ts }}>{org.legalName}</p>}
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: S.ts, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-            <MapPin size={12} />{org.addr?.city_name || org.addr?.city || "—"}{org.addr?.state ? "/" + org.addr.state : ""}
-            {org.sector && <span>· {org.sector}</span>}{org.owner && <span>· Resp.: {org.owner}</span>}
-          </p>
-          {org.cnpj && <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.td }}>CNPJ {fCnpj(org.cnpj)}</p>}
-        </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
-          {org.cat && <span style={{ background: catCor + "22", color: catCor, border: `1px solid ${catCor}55`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{org.cat}</span>}
-          {rfvInfo && <span style={{ background: (RFVC[rfvInfo.rfv] || S.ts) + "18", color: RFVC[rfvInfo.rfv] || S.ts, border: `1px solid ${(RFVC[rfvInfo.rfv] || S.ts)}55`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>RFV: {rfvInfo.rfv}</span>}
-          {rfvInfo && rfvInfo.status && <span style={{ fontSize: 10, color: SRC_[rfvInfo.status] || S.ts, whiteSpace: "nowrap" }}>{rfvInfo.status}</span>}
-          <button onClick={() => setAgTask(v=>!v)} style={{ display:"flex", alignItems:"center", gap:5, background:S.pri, color:"#fff", border:"none", borderRadius:20, padding:"5px 11px", fontSize:11, fontWeight:700, cursor:"pointer" }}><Calendar size={13}/>Agendar tarefa</button>
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-        {cnpjN && <button onClick={() => window.open(`${DASH}/?cliente=${cnpjN}`, "_blank", "noopener")} style={{ flex: 1, minWidth: 120, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "9px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><BarChart3 size={15} />Dashboard</button>}
-        <button onClick={() => onEdit && onEdit(org)} style={{ flex: 1, minWidth: 100, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.card, color: S.txt, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "9px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Pencil size={14} />Editar</button>
-        <button onClick={() => onPerson && onPerson(org)} style={{ flex: 1, minWidth: 100, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.card, color: S.txt, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "9px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Users2 size={14} />Pessoas</button>
-      </div>
-    </Crd>
-
-    {/* GPS */}
-    <Crd style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-      <Navigation size={18} color={gpsAtual ? S.acc : S.td} />
-      <div style={{ flex: 1, minWidth: 150 }}>
-        <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: S.txt }}>GPS do PDV</p>
-        <p style={{ margin: 0, fontSize: 11.5, color: S.ts }}>{gpsAtual ? `${(+gpsAtual.lat).toFixed(6)}, ${(+gpsAtual.lng).toFixed(6)}${gpsD1?.atualizado_em ? " · " + fDH(gpsD1.atualizado_em) : gpsKV ? " · do app" : ""}` : "sem coordenada registrada"}</p>
-      </div>
-      {gpsAtual && <button onClick={() => window.open(`https://www.google.com/maps?q=${gpsAtual.lat},${gpsAtual.lng}`, "_blank", "noopener")} style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, color: S.pri, cursor: "pointer" }}>Maps</button>}
-      <button onClick={salvaGPS} style={{ background: S.acc, border: "none", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, color: "#fff", cursor: "pointer" }}>Salvar GPS atual</button>
-    </Crd>
-
-    {msg && <p style={{ fontSize: 12, color: S.dng, margin: "0 0 8px" }}>{msg}</p>}
-
-    {/* Sub-abas */}
-    <div style={{ display: "flex", gap: 3, marginBottom: 12, background: S.cl, borderRadius: 8, padding: 3 }}>
-    {agTask && <Crd style={{ borderColor: S.pri + "66" }}>
-      <p style={{ margin: "0 0 8px", fontSize: 12.5, fontWeight: 800, color: S.txt }}>Agendar tarefa</p>
-      <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-        {TIPOS.filter(x=>x.id!=="NOTA").map(x => <Chip key={x.id} on={agTipo===x.id} color={x.c} onClick={()=>setAgTipo(x.id)}>{x.l}</Chip>)}
-      </div>
-      <textarea value={agTxt} onChange={e=>setAgTxt(e.target.value)} placeholder="Descrição da tarefa..." rows={2} style={{ ...inp, resize: "vertical", marginBottom: 8 }}/>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-        <DateField value={agData} onChange={setAgData} today={todayLocal()} placeholder="Data" style={{ flex: 2 }}/>
-        <input type="time" value={agHora} onChange={e=>setAgHora(e.target.value)} style={{ ...inp, flex: 1 }}/>
-      </div>
-      <p style={{ margin: "0 0 5px", fontSize: 11, color: S.ts, fontWeight: 600 }}>Responsável(eis)</p>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{USERS.map(u => { const on = agUsers.includes(String(u.id)); return <button key={u.id} type="button" onClick={() => setAgUsers(p => on ? p.filter(x => x !== String(u.id)) : [...p, String(u.id)])} style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: on ? 700 : 500, border: on ? "none" : `1px solid ${S.brd}`, background: on ? S.acc : S.card, color: on ? "#fff" : S.ts, cursor: "pointer" }}>{u.n.split(" ")[0]}</button>; })}</div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={salvaTarefa} disabled={agLo} style={{ flex: 1, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{agLo ? "Salvando..." : "Agendar"}</button>
-        <button onClick={()=>setAgTask(false)} style={{ background: "transparent", color: S.dng, border: `1px solid ${S.dng}55`, borderRadius: 10, padding: "10px 14px", fontSize: 13, cursor: "pointer" }}>Cancelar</button>
-      </div>
-    </Crd>}
-      {subs.map(([id, l]) => <button key={id} onClick={() => setSub(id)} style={{ flex: 1, border: "none", background: sub === id ? S.pri : "transparent", borderRadius: 6, padding: "8px 2px", fontSize: 11.5, fontWeight: sub === id ? 700 : 400, color: sub === id ? "#fff" : S.ts, cursor: "pointer" }}>{l}</button>)}
-    </div>
-
-    {/* ── HISTÓRICO ── */}
-    {sub === "hist" && <div>
-      <Crd>
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6 }}>{TIPOS.map(t => <Chip key={t.id} on={nTipo === t.id} color={t.c} onClick={() => setNTipo(t.id)}>{t.l}</Chip>)}</div>
-        <textarea value={nTxt} onChange={e => setNTxt(e.target.value)} rows={3} placeholder="Escreva a atividade / observação..." style={{ ...inp, resize: "vertical", marginTop: 4 }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-          <span style={{ fontSize: 11, color: S.ts, fontWeight: 600, marginRight: 2 }}>Responsável:</span>
-          {USERS.map(u => { const on = nUsers.includes(String(u.id)); return <button key={u.id} type="button" onClick={() => setNUsers(p => on ? p.filter(x => x !== String(u.id)) : [...p, String(u.id)])} style={{ padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: on ? 700 : 500, border: on ? "none" : `1px solid ${S.brd}`, background: on ? S.acc : S.card, color: on ? "#fff" : S.ts, cursor: "pointer" }}>{u.n.split(" ")[0]}</button>; })}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-          <button onClick={salvaAtv} disabled={salvando || !nTxt.trim() || !nUsers.length} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: nTxt.trim() ? S.acc : S.cl, color: nTxt.trim() ? "#fff" : S.td, border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Send size={14} />{salvando ? "Salvando..." : "Registrar"}</button>
-        </div>
-      </Crd>
-      {ldA && <p style={{ fontSize: 12, color: S.ts }}>Carregando histórico...</p>}
-      {!ldA && !atvs.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Nenhuma atividade registrada ainda.</p></Crd>}
-      {atvs.map(a => <AtvCard key={a.id} a={a} onFinish={async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setAtvs(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } }} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={delAtv} />)}
-    </div>}
-
-    {/* ── CONTATOS ── */}
-    {sub === "ctt" && <div>
-      {!cttForm && <button onClick={() => setCttForm({ ...cttVazio })} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.acc, color: "#fff", border: "none", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, marginBottom: 10, cursor: "pointer" }}><Plus size={16} />Novo contato</button>}
-      {cttForm && <Crd>
-        <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}><p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>{cttForm.id ? "Editar contato" : "Novo contato"}</p><button onClick={() => setCttForm(null)} style={{ background: "transparent", border: "none", cursor: "pointer" }}><X size={16} color={S.ts} /></button></div>
-        <div style={{ display: "grid", gap: 8 }}>
-          <input style={inp} placeholder="Nome *" value={cttForm.nome} onChange={e => setCttForm(f => ({ ...f, nome: e.target.value }))} />
-          <input style={inp} placeholder="Cargo (comprador, gerente...)" value={cttForm.cargo || ""} onChange={e => setCttForm(f => ({ ...f, cargo: e.target.value }))} />
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <input style={inp} placeholder="Telefone" inputMode="tel" value={cttForm.telefone || ""} onChange={e => setCttForm(f => ({ ...f, telefone: e.target.value }))} />
-            <input style={inp} placeholder="WhatsApp" inputMode="tel" value={cttForm.whatsapp || ""} onChange={e => setCttForm(f => ({ ...f, whatsapp: e.target.value }))} />
-          </div>
-          <input style={inp} placeholder="E-mail" inputMode="email" value={cttForm.email || ""} onChange={e => setCttForm(f => ({ ...f, email: e.target.value }))} />
-          <input style={inp} placeholder="Observações" value={cttForm.obs || ""} onChange={e => setCttForm(f => ({ ...f, obs: e.target.value }))} />
-          <button onClick={salvaCtt} style={{ background: S.acc, color: "#fff", border: "none", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>Salvar contato</button>
-        </div>
-      </Crd>}
-      {ldC && <p style={{ fontSize: 12, color: S.ts }}>Carregando contatos...</p>}
-      {!ldC && !ctts.length && !cttForm && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Nenhum contato no CRM. Use “Novo contato”.</p></Crd>}
-      {ctts.map(c => <Crd key={c.id}>
-        <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
-          <div style={{ minWidth: 0 }}>
-            <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: S.txt }}>{c.nome}</p>
-            {c.cargo && <p style={{ margin: "1px 0 0", fontSize: 12, color: S.ts }}>{c.cargo}</p>}
-            {(c.telefone || c.whatsapp || c.email) && <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.td, wordBreak: "break-word" }}>{[c.telefone, c.whatsapp && "WA " + c.whatsapp, c.email].filter(Boolean).join(" · ")}</p>}
-            {c.obs && <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.ts }}>{c.obs}</p>}
-          </div>
-          <div style={{ display: "flex", gap: 6, alignItems: "flex-start", flexShrink: 0 }}>
-            {c.whatsapp && <a href={`https://wa.me/55${soDig(c.whatsapp)}`} target="_blank" rel="noopener noreferrer" style={{ width: 36, height: 36, borderRadius: 10, background: "#25D36622", display: "flex", alignItems: "center", justifyContent: "center" }}><MessageCircle size={17} color="#25D366" /></a>}
-            {c.telefone && <a href={`tel:${soDig(c.telefone)}`} style={{ width: 36, height: 36, borderRadius: 10, background: S.pl + "22", display: "flex", alignItems: "center", justifyContent: "center" }}><Phone size={16} color={S.pl} /></a>}
-            <button onClick={() => setCttForm({ ...c })} style={{ width: 36, height: 36, borderRadius: 10, background: S.cl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Pencil size={14} color={S.ts} /></button>
-            <button onClick={() => delCtt(c)} style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>
-          </div>
-        </div>
-      </Crd>)}
-      {org.people && <p style={{ fontSize: 11.5, color: S.td, margin: "4px 2px" }}>Pessoas: {org.people}</p>}
-    </div>}
-
-    {/* ── FOTOS & ARQUIVOS ── */}
-    {sub === "arq" && <div>
-      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-        <button onClick={() => fotoRef.current?.click()} disabled={!!subindo} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Camera size={16} />Foto da loja</button>
-        <button onClick={() => arqRef.current?.click()} disabled={!!subindo} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.card, color: S.txt, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Paperclip size={16} />Arquivo</button>
-        <input ref={fotoRef} type="file" accept="image/*" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
-        <input ref={arqRef} type="file" multiple style={{ display: "none" }} onChange={e => { upload(e.target.files); e.target.value = ""; }} />
-      </div>
-      {subindo && <p style={{ fontSize: 12, color: S.pri, margin: "0 0 8px" }}>Enviando {subindo}...</p>}
-      {ldF && <p style={{ fontSize: 12, color: S.ts }}>Carregando arquivos...</p>}
-      {!ldF && !arqs.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Nenhuma foto ou arquivo desta loja ainda.</p></Crd>}
-      {/* grade de fotos */}
-      {arqs.some(a => a.tipo === "foto") && <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(105px, 1fr))", gap: 8, marginBottom: 12 }}>
-        {arqs.filter(a => a.tipo === "foto").map(a => <div key={a.id} style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${S.brd}`, background: S.cl, aspectRatio: "1" }}>
-          {thumbs[a.id] ? <img src={thumbs[a.id]} alt={a.nome} onClick={() => setPreview(a)} style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><Camera size={20} color={S.td} /></div>}
-          <button onClick={() => delArq(a)} style={{ position: "absolute", top: 4, right: 4, width: 26, height: 26, borderRadius: 8, background: "rgba(0,0,0,0.5)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={13} color="#fff" /></button>
-        </div>)}
-      </div>}
-      {/* lista de arquivos não-imagem */}
-      {arqs.filter(a => a.tipo !== "foto").map(a => <Crd key={a.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <FileText size={18} color={S.pri} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: S.txt, wordBreak: "break-all" }}>{a.nome}</p>
-          <p style={{ margin: 0, fontSize: 11, color: S.td }}>{(a.tamanho / 1024).toFixed(0)} KB · {a.user_nome || "—"} · {fDH(a.criado_em)}</p>
-        </div>
-        <button onClick={() => baixaArq(a)} style={{ width: 36, height: 36, borderRadius: 10, background: S.pl + "22", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Download size={15} color={S.pl} /></button>
-        <button onClick={() => delArq(a)} style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>
-      </Crd>)}
-      {preview && <div onClick={() => setPreview(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 60, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
-        <img src={thumbs[preview.id]} alt={preview.nome} style={{ maxWidth: "100%", maxHeight: "82vh", borderRadius: 10 }} />
-        <p style={{ color: "#fff", fontSize: 12, margin: "10px 0 0" }}>{preview.nome} · {preview.user_nome || "—"} · {fDH(preview.criado_em)} — toque para fechar</p>
-      </div>}
-    </div>}
-
-    {/* ── DADOS ── */}
-    {sub === "dados" && <div>
-    {infoContato}
-      <Crd>
-        <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 800, color: S.txt }}>Cadastro</p>
-        {[["Razão social", org.legalName], ["CNPJ", org.cnpj && fCnpj(org.cnpj)], ["Categoria", org.cat], ["Setor", org.sector], ["Responsável", org.owner], ["Grupo", org.grupo], ["Marcas", org.products],
-          ["Endereço", [org.addr?.street, org.addr?.number].filter(Boolean).join(", ")], ["Bairro", org.addr?.district], ["Cidade", (org.addr?.city_name || org.addr?.city || "") + (org.addr?.state ? "/" + org.addr.state : "")]]
-          .filter(([, v]) => v).map(([k, v]) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: `1px solid ${S.cl}` }}>
-            <span style={{ fontSize: 12, color: S.ts, flexShrink: 0 }}>{k}</span><span style={{ fontSize: 12.5, color: S.txt, textAlign: "right", wordBreak: "break-word" }}>{v}</span></div>)}
-      </Crd>
-      <Crd>
-        <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 800, color: S.txt }}>Resumo comercial</p>
-        {info?.compras ? <>
-          {[["Última compra", info.compras.ultima_compra ? fD(info.compras.ultima_compra + "T12:00:00") : "—"],
-            ["Faturamento 12m", info.compras.fat_12m != null ? "R$ " + Number(info.compras.fat_12m).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "—"],
-            ["Pedidos (total)", info.compras.pedidos ?? "—"], ["Indústrias", info.compras.industrias || "—"],
-            ["Última visita", ultimaVisita ? fD(ultimaVisita.checkinTime) + " (" + (ultimaVisita.userName || "—") + ")" : "—"]]
-            .map(([k, v]) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: `1px solid ${S.cl}` }}>
-              <span style={{ fontSize: 12, color: S.ts }}>{k}</span><span style={{ fontSize: 12.5, color: S.txt, textAlign: "right" }}>{v}</span></div>)}
-          {cnpjN && <button onClick={() => window.open(`${DASH}/?cliente=${cnpjN}`, "_blank", "noopener")} style={{ width: "100%", marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><ExternalLink size={14} />Ficha completa no Dashboard</button>}
-        </> : <p style={{ margin: 0, fontSize: 12, color: S.ts }}>{info?.erro ? "Erro: " + info.erro : "Carregando..."}</p>}
-      </Crd>
-    </div>}
-  </div>);
+    out.push(cur);rows.push(out.map(s=>s.trim()));
+  }
+  return rows;
 }
+const soDig=x=>String(x||"").replace(/\D/g,"");
 
-// ─────────────────────────────────────────────────────────────
-//  EMPRESAS — relação de clientes fiel à tela do Agendor:
-//  tabela Nome | Categoria | Responsável | E-mail | Telefone |
-//  Ranking | Editar, com busca, filtros e "Exibindo X de N".
-// ─────────────────────────────────────────────────────────────
-// ─────────────────────────────────────────────────────────────
-//  PESSOAS — lista global de contatos (menu Pessoas do Agendor):
-//  todos os contatos do CRM (D1), com empresa, cargo e ações
-//  WhatsApp/Ligar/E-mail. Enche de vez com a importação do backup.
-// ─────────────────────────────────────────────────────────────
-function PessoasView({ token, allOrgs, excl, onOpenOrg }) {
-  const [lista, setLista] = useState(null); const [q, setQ] = useState(""); const [vc, setVc] = useState(60);
-  const carrega = async () => { try { const d = await crm(token, "/api/crm/contatos-todos"); setLista(d.contatos || []); } catch (e) { setLista([]); console.warn("pessoas:", e); } };
-  useEffect(() => { carrega(); }, []);
-  const achaOrg = (c) => { const k = soDig(c.cnpj); const tudo = [ ...(allOrgs || []), ...(excl || []) ];
-    return tudo.find(o => (c.org_id && o.id === c.org_id) || (k && soDig(o.cnpj) === k)) || null; };
-  const filtrada = useMemo(() => { if (!lista) return []; const n = q.trim().toLowerCase(); if (!n) return lista;
-    return lista.filter(c => [c.nome, c.empresa, c.cargo, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ").toLowerCase().includes(n)); }, [lista, q]);
-  return (<div>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-      <p style={{ margin: 0, fontSize: 12.5, color: S.ts }}>Exibindo <b style={{ color: S.txt }}>{Math.min(vc, filtrada.length)}</b> de <b style={{ color: S.txt }}>{filtrada.length}</b> pessoas</p>
-      <button onClick={carrega} style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: `1px solid ${S.brd}`, borderRadius: 10, padding: "7px 10px", fontSize: 12, color: S.ts }}><RefreshCw size={13}/>Atualizar</button>
-    </div>
-    <div style={{ position: "relative", marginBottom: 10 }}>
-      <Search size={15} color={S.td} style={{ position: "absolute", left: 12, top: 12 }} />
-      <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Buscar pessoa, empresa, cargo, telefone ou e-mail..." style={{ ...inp, paddingLeft: 34 }} />
-    </div>
-    {lista === null && <p style={{ color: S.ts, textAlign: "center", padding: "1.5rem 0" }}>Carregando pessoas...</p>}
-    {lista !== null && filtrada.length === 0 && <Crd><p style={{ margin: 0, fontSize: 12.5, color: S.ts, textAlign: "center" }}>Nenhuma pessoa encontrada.{!q && " A lista enche com os contatos criados no CRM e com a importação inicial."}</p></Crd>}
-    {filtrada.slice(0, vc).map(c => { const o = achaOrg(c); return (<Crd key={c.id} style={{ padding: "10px 12px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-        <div style={{ minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: S.txt }}>{c.nome}{c.cargo && <span style={{ fontWeight: 400, color: S.ts, fontSize: 11.5 }}> · {c.cargo}</span>}</p>
-          {(c.empresa || o) && <button onClick={() => o && onOpenOrg(o)} disabled={!o} style={{ background: "transparent", border: "none", padding: 0, margin: "2px 0 0", fontSize: 11.5, color: o ? S.pl : S.td, cursor: o ? "pointer" : "default", display: "flex", alignItems: "center", gap: 4, textAlign: "left" }}><Building2 size={12}/>{c.empresa || (o && (o.nickname || o.name))}</button>}
-          <p style={{ margin: "3px 0 0", fontSize: 11, color: S.td }}>{[c.telefone, c.whatsapp, c.email].filter(Boolean).join(" · ") || "sem contato"}</p>
-        </div>
-        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-          {(c.whatsapp || c.telefone) && <a href={`https://wa.me/55${soDig(c.whatsapp || c.telefone)}`} target="_blank" rel="noreferrer" style={{ background: S.ok + "18", border: `1px solid ${S.ok}55`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><MessageCircle size={14} color={S.ok}/></a>}
-          {c.telefone && <a href={`tel:${soDig(c.telefone)}`} style={{ background: S.pri + "18", border: `1px solid ${S.pri}55`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><Phone size={14} color={S.pri}/></a>}
-          {c.email && <a href={`mailto:${c.email}`} style={{ background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><Mail size={14} color={S.ts}/></a>}
-        </div>
+// Botões de ação no formato dos cards do Início do Dashboard (proporções menores)
+const ASETA=<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>;
+const ARow=({emo,t,d,onClick,disabled,color})=>{const cor=color||S.pri;return(
+  <div onClick={disabled?undefined:onClick} role="button"
+    style={{position:"relative",background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"12px 14px 10px",overflow:"hidden",cursor:disabled?"default":"pointer",opacity:disabled?.6:1,transition:"border-color .18s"}}
+    onMouseEnter={e=>{if(disabled)return;e.currentTarget.style.borderColor=cor;const b=e.currentTarget.querySelector(".cf-bar");if(b)b.style.transform="scaleX(1)";}}
+    onMouseLeave={e=>{e.currentTarget.style.borderColor="";e.currentTarget.style.border=`1px solid ${S.brd}`;const b=e.currentTarget.querySelector(".cf-bar");if(b)b.style.transform="scaleX(0)";}}>
+    <div style={{width:36,height:36,borderRadius:11,display:"flex",alignItems:"center",justifyContent:"center",background:cor+"1c",fontSize:17,marginBottom:9}}>{emo}</div>
+    <div style={{fontSize:13.5,fontWeight:700,letterSpacing:"-.01em",color:S.txt}}>{t}</div>
+    {d&&<div style={{fontSize:11.5,color:S.td,marginTop:4,lineHeight:1.4,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>{d}</div>}
+    <div style={{display:"flex",alignItems:"center",gap:5,marginTop:8,fontSize:11,fontWeight:600,color:cor}}>Abrir {ASETA}</div>
+    <span className="cf-bar" style={{position:"absolute",left:0,bottom:0,height:3,width:"100%",background:cor,transform:"scaleX(0)",transformOrigin:"left",transition:"transform .3s"}}/>
+  </div>
+);};
+function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStatus,syncing,syncMsg,onSync,onLoadHistory,onSyncPull,onShareGPS,onShowDB,onShowEnd,onDeleteGPS,onSaveGPS,onClearVisits,onClearAllGPS,onLogout,doSync}){
+  const[gpsSearch,setGpsSearch]=useState("");const[histLoading,setHistLoading]=useState(false);const[shareLoading,setShareLoading]=useState(false);
+  const[gpsAddSearch,setGpsAddSearch]=useState("");const[gpsAddTarget,setGpsAddTarget]=useState(null);const[gpsAddLat,setGpsAddLat]=useState(null);const[gpsAddLng,setGpsAddLng]=useState(null);
+  const gpsResults=gpsSearch.trim().length>=2?orgs.filter(o=>{const q=gpsSearch.toLowerCase().replace(/[.\-\/]/g,"");return plocs[o.id]&&[o.name,o.nickname,o.cnpj?.replace(/[.\-\/]/g,"")].filter(Boolean).join(" ").toLowerCase().includes(q);}).slice(0,10):[];
+  const gpsAddResults=gpsAddSearch.trim().length>=2?orgs.filter(o=>{const q=gpsAddSearch.toLowerCase().replace(/[.\-\/]/g,"");return[o.name,o.nickname,o.cnpj?.replace(/[.\-\/]/g,"")].filter(Boolean).join(" ").toLowerCase().includes(q);}).slice(0,10):[];
+  const[tema,setTema]=useState(()=>sL("jc:theme","dark"));
+  const trocaTema=(t)=>{setTema(t);sS("jc:theme",t);document.documentElement.dataset.theme=t;};
+  const isAdmin=user?.id===743088;
+  const[sub,setSub]=useState("acoes"); // acoes | cadastros
+  const jaInstalado=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;
+  const ehIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
+  // v43: reconstrói o GPS dos clientes a partir das coordenadas das visitas de campo (KV visits_*)
+  const[gpsRec,setGpsRec]=useState("");
+  const recuperaGps=async()=>{
+    const cand={};
+    (visits||[]).forEach(v=>{if(v.orgId&&v.lat&&v.lng&&!plocs[v.orgId]){if(!cand[v.orgId]||v.checkinTime>cand[v.orgId].t)cand[v.orgId]={lat:v.lat,lng:v.lng,t:v.checkinTime};}});
+    const ids=Object.keys(cand);
+    if(!ids.length){alert("Nenhuma localização nova encontrada nas visitas — tudo que as visitas têm já está salvo.");return;}
+    if(!confirm(`Encontrei ${ids.length} cliente(s) com GPS nas visitas antigas que NÃO está salvo hoje.\nRecuperar e salvar?`))return;
+    setGpsRec("Salvando 0/"+ids.length);
+    const np={...plocs};let n=0;
+    for(const oid of ids){const g=cand[oid];np[oid]={lat:g.lat,lng:g.lng};n++;setGpsRec(`Salvando ${n}/${ids.length}`);
+      try{await fetch(`${DASH}/api/crm/gps`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:Number(oid),lat:g.lat,lng:g.lng})});}catch(e){}}
+    try{await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:np})});}catch(e){}
+    setGpsRec("");onSyncPull&&onSyncPull();alert(`${ids.length} localização(ões) recuperadas! Abra o Mapa para conferir.`);
+  };
+  // ── Extensão do WhatsApp ──
+  // Instalação com 1 clique só existe via Chrome Web Store (o Chrome bloqueia instalação automática
+  // por site). Assim que a extensão for publicada (modo "Não listado"), cole o link dela aqui:
+  const EXT_STORE_URL=""; // ex.: "https://chromewebstore.google.com/detail/abcdefghijklmnop"
+  const EXT_ARQS=["manifest.json","background.js","content.js","panel.css","icon128.png"];
+  const[extMsg,setExtMsg]=useState("");
+  const baixarExtensao=async()=>{
+    if(!window.showDirectoryPicker){
+      alert("A instalação automática funciona no Chrome do computador.\n\nAbra o TeamCheck no Chrome (Windows/Mac/Linux) e toque de novo neste card.");
+      return;
+    }
+    let raiz;
+    try{ raiz=await window.showDirectoryPicker({mode:"readwrite"}); }catch{ return; } // cancelou
+    try{
+      setExtMsg("Gravando arquivos...");
+      const pasta=await raiz.getDirectoryHandle("TeamCheck-Extensao",{create:true});
+      for(const nome of EXT_ARQS){
+        const r=await fetch(`/ext/${nome}`,{cache:"no-store"});
+        if(!r.ok) throw new Error(nome+" ("+r.status+")");
+        const bytes=await r.arrayBuffer();
+        const arq=await pasta.getFileHandle(nome,{create:true});
+        const w=await arq.createWritable(); await w.write(bytes); await w.close();
+      }
+      setExtMsg("");
+      alert("Pronto! A pasta TeamCheck-Extensao foi criada no local escolhido.\n\nAgora no Chrome:\n1. Abra chrome://extensions\n2. Ligue o \"Modo do desenvolvedor\" (canto superior direito)\n3. Clique em \"Carregar sem compactação\"\n4. Selecione a pasta TeamCheck-Extensao\n\nNão precisa descompactar nada.");
+    }catch(e){ setExtMsg(""); alert("Não consegui gravar a extensão: "+e.message); }
+  };
+  const instalar=async()=>{
+    if(instEvt){try{instEvt.prompt();const r=await instEvt.userChoice;if(r?.outcome==="accepted")alert("Aplicativo instalado! Procure o ícone TeamCheck na tela inicial.");}catch{}}
+    else if(ehIOS)alert("No iPhone/iPad:\n1. Toque no botão Compartilhar (quadrado com seta) na barra do Safari\n2. Role e toque em \"Adicionar à Tela de Início\"\n3. Toque em \"Adicionar\"\n\nO TeamCheck vira um app com ícone próprio.");
+    else alert("No Android (Chrome): toque nos 3 pontinhos ⋮ e depois em \"Instalar aplicativo\" (ou \"Adicionar à tela inicial\").\nNo computador: ícone de instalação na barra de endereço.");
+  };
+  return(<div>
+    {isAdmin&&<div style={{display:"flex",gap:5,background:S.cl,border:`1px solid ${S.brd}`,borderRadius:11,padding:4,marginBottom:16,maxWidth:420}}>
+      {[["acoes","⚙️ Ações & Sync"],["cadastros","🗂️ Cadastros"]].map(([id,l])=>
+        <button key={id} onClick={()=>setSub(id)} style={{flex:1,textAlign:"center",padding:"9px 6px",borderRadius:8,fontSize:13,fontWeight:sub===id?600:500,background:sub===id?"var(--card-solid)":"transparent",color:sub===id?S.pl:S.ts,boxShadow:sub===id?"0 1px 2px rgba(3,73,100,.14)":"none",border:"none",cursor:"pointer"}}>{l}</button>)}
+    </div>}
+    {isAdmin&&sub==="cadastros"?<ConfigCatalogos token={token}/>:<div>
+    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12,boxShadow:S.shadow}}>
+      <p style={{fontSize:13,fontWeight:700,color:S.txt,margin:"0 0 8px"}}>🎨 Tema</p>
+      <div style={{display:"flex",gap:8}}>
+        <button onClick={()=>trocaTema("dark")} style={{flex:1,padding:"10px",fontSize:13,fontWeight:tema==="dark"?700:400,background:tema==="dark"?S.pri:"transparent",color:tema==="dark"?"#fff":S.ts,border:`1px solid ${tema==="dark"?S.pri:S.brd}`,borderRadius:10}}>🌙 Escuro</button>
+        <button onClick={()=>trocaTema("light")} style={{flex:1,padding:"10px",fontSize:13,fontWeight:tema==="light"?700:400,background:tema==="light"?S.pri:"transparent",color:tema==="light"?"#fff":S.ts,border:`1px solid ${tema==="light"?S.pri:S.brd}`,borderRadius:10}}>☀️ Claro</button>
       </div>
-    </Crd>); })}
-    {vc < filtrada.length && <button onClick={() => setVc(v => v + 60)} style={{ width: "100%", marginTop: 4, padding: 12, fontSize: 13, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.txt }}>Ver mais ({filtrada.length - vc})</button>}
-  </div>);
-}
+      <p style={{fontSize:11,color:S.td,margin:"8px 0 0"}}>Mesmo sistema de temas do Dashboard. A escolha fica salva neste aparelho.</p>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12,marginBottom:12}}>
+    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
+      <p style={{fontSize:14,fontWeight:700,margin:"0 0 6px",color:S.txt}}>{user?.name}</p>
+      {HOMES[user?.id]&&<p style={{fontSize:12,color:S.pl,margin:0}}>Casa: <b>{HOMES[user.id].label}</b></p>}
+      {getBase(dayBases,today,user?.id)&&<p style={{fontSize:12,color:S.ts,margin:"2px 0 0"}}>Base hoje: {getBase(dayBases,today,user?.id)?.label||"Casa"}{getEnd(dayBases,today,user?.id)!==getBase(dayBases,today,user?.id)?` → ${getEnd(dayBases,today,user?.id)?.label||"Casa"}`:""}</p>}
+    </div>
+    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
+      <p style={{fontSize:12.5,color:S.t2,margin:0}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
+      <p className="mono" style={{fontSize:11.5,color:syncStatus.startsWith?.("Erro")?S.dng:S.pl,margin:"6px 0 0"}}>Sync {syncStatus||"aguardando..."}</p>
+      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v64</p>
+    </div>
+    </div>
+    <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
+    <div style={{display:"flex",flexDirection:"column",gap:9,marginBottom:16}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(230px,1fr))",gap:10}}>
+      <ARow emo="⚡" t="Forçar sincronização" d="Baixa a carteira, o histórico e o estado da equipe/GPS" onClick={async()=>{setHistLoading(true);await onSync();await onLoadHistory();setHistLoading(false);onSyncPull();}} disabled={syncing||histLoading}/>
+      <ARow emo="📡" t={shareLoading?"Enviando GPS...":`Compartilhar ${Object.keys(plocs).length} GPS com equipe`} d="Publica as localizações salvas neste aparelho" onClick={async()=>{if(!confirm("Compartilhar GPS com equipe?"))return;setShareLoading(true);await onShareGPS();setShareLoading(false);}} disabled={shareLoading}/>
+      <ARow emo="🗺️" t="Definir jornada" d="Origem e destino do dia (casa, hotel...)" onClick={onShowDB}/>
+      <ARow emo="🏨" t="Fechar roteiro do dia" d="Define o ponto final e conclui o dia" onClick={onShowEnd}/>
+      <ARow emo={("Notification"in window&&Notification.permission==="granted")?"🔔":"🔕"} t={("Notification"in window&&Notification.permission==="granted")?"Notificações ativadas":"Ativar notificações"} d="Lembretes de tarefas agendadas" color={("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold} onClick={()=>{if(!("Notification"in window)){alert("Navegador nao suporta notificacoes");return;}Notification.requestPermission().then(p=>{if(p==="granted")alert("Notificacoes ativadas! Voce recebera lembretes de tarefas agendadas.");else alert("Notificacoes bloqueadas. Ative nas configuracoes do navegador.");});}}/>
+      {user?.role==="admin"&&<ARow emo="🛰️" t={gpsRec||"Recuperar GPS das visitas"} d="Reconstrói a localização de clientes (Sinop, Sorriso, Lucas, Nova Mutum...) a partir das coordenadas das visitas antigas" onClick={gpsRec?undefined:recuperaGps} disabled={!!gpsRec}/>}
+      <ARow emo="📲" t={jaInstalado?"Aplicativo instalado ✓":"Instalar aplicativo no celular"} d={jaInstalado?"Você já está usando o TeamCheck instalado":"Ícone próprio na tela inicial — funciona como app (Android e iPhone)"} color={jaInstalado?S.ok:undefined} onClick={jaInstalado?undefined:instalar} disabled={jaInstalado}/>
+      {EXT_STORE_URL
+        ? <ARow emo="🧩" t="Instalar extensão do WhatsApp" d="1 clique: abre a Chrome Web Store e é só tocar em 'Usar no Chrome'." color={S.gold} onClick={()=>window.open(EXT_STORE_URL,"_blank")}/>
+        : <ARow emo="🧩" t={extMsg||"Baixar extensão do WhatsApp"} d="Grava a pasta pronta no seu computador (sem zip, sem descompactar). Depois é só 'Carregar sem compactação' no Chrome." color={S.gold} onClick={extMsg?undefined:baixarExtensao} disabled={!!extMsg}/>}
+      </div>
 
-function EmpresasView({ allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa }) {
-  const rfvDe = (o) => { if (!rfv) return null; const k = soDig(o.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; };
-  const PREF = "jc:empresas-prefs";
-  const p0 = sL(PREF, {});
-  const arr = v => Array.isArray(v) ? v : [];
-  const [q, setQ] = useState("");
-  const [fCat, setFCat] = useState(arr(p0.fCat)); const [fResp, setFResp] = useState(arr(p0.fResp));
-  const [fRfv, setFRfv] = useState(arr(p0.fRfv)); const [fGrp, setFGrp] = useState(arr(p0.fGrp)); const [fSr, setFSr] = useState(arr(p0.fSr)); const [fCid, setFCid] = useState(arr(p0.fCid)); // v41: Grupo no lugar da Curva ABC
-  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid]);
-  const [ordem, setOrdem] = useState(1); // 1 = A→Z, -1 = Z→A
-  const [vc, setVc] = useState(60);
-  const resps = useMemo(() => { const s = new Set(USERS.map(u => u.n)); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
-  const cidades = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const c = o.addr?.city_name || o.addr?.city; if (c) s.add(c); }); return [...s].sort(); }, [allOrgs]);
-  const gruposE = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const g = ((o.grupo || "").replace("Grupo: ", "")).trim(); if (g) s.add(g); }); return [...s].sort(); }, [allOrgs]);
-  const lista = useMemo(() => {
-    let l = (q.trim() || fCat.includes("Excluido")) ? [ ...(allOrgs || []), ...(excl || []) ] : (allOrgs || []);
-    if (q.trim()) { const n = q.toLowerCase().replace(/[.\-\/]/g, "");
-      const casa = o => [o.name, o.nickname, o.legalName, soDig(o.cnpj), o.addr?.city_name, o.email, o.phone].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(n);
-      l = l.filter(casa); }
-    if (fCat.length) l = l.filter(o => fCat.includes(o.cat));
-    if (fResp.length) l = l.filter(o => fResp.includes(o.owner));
-    if (fCid.length) l = l.filter(o => fCid.includes(o.addr?.city_name || o.addr?.city));
-    if (fGrp.length) l = l.filter(o => fGrp.includes(((o.grupo || "").replace("Grupo: ", "")).trim()));
-    if (fRfv.length || fSr.length) l = l.filter(o => { const r = rfvDe(o); if (!r) return false;
-      if (fRfv.length && !fRfv.includes(r.rfv)) return false; if (fSr.length && !fSr.includes(r.status)) return false; return true; });
-    return [...l].sort((a, b) => ordem * (a.nickname || a.name || "").localeCompare(b.nickname || b.name || ""));
-  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, ordem, rfv]);
-  const th = { textAlign: "left", padding: "8px 10px", fontSize: 10.5, fontWeight: 800, color: S.ts, textTransform: "uppercase", letterSpacing: .4, whiteSpace: "nowrap", borderBottom: `2px solid ${S.brd}` };
-  const td = { padding: "9px 10px", fontSize: 12, color: S.txt, borderBottom: `1px solid ${S.cl}`, whiteSpace: "nowrap", verticalAlign: "middle" };
-  return (<div>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
-      <p style={{ margin: 0, fontSize: 12.5, color: S.ts }}>Exibindo <b style={{ color: S.txt }}>{Math.min(vc, lista.length)}</b> de <b style={{ color: S.txt }}>{lista.length}</b> empresas</p>
-      <button onClick={onNovaEmpresa} style={{ display: "flex", alignItems: "center", gap: 5, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}><Plus size={14}/>Adicionar empresa</button>
+      {/* Admin area (Jordan only) */}
+      {user?.id===743088&&<>
+        <div style={{borderTop:`1px solid ${S.brd}`,paddingTop:12,marginTop:4}}>
+          <p style={{fontSize:12,fontWeight:600,color:S.gold,margin:"0 0 8px"}}>⚙️ Administrador</p>
+        </div>
+        {/* GPS manual save */}
+        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginBottom:8}}>
+          <p style={{fontSize:12,fontWeight:500,margin:"0 0 6px"}}>📍 Salvar GPS de cliente</p>
+          <input value={gpsAddSearch} onChange={e=>{setGpsAddSearch(e.target.value);setGpsAddTarget(null);setGpsAddLat(null);setGpsAddLng(null);}} placeholder="Buscar cliente por nome, CNPJ..." style={{width:"100%",marginBottom:6,fontSize:12}}/>
+          {!gpsAddTarget&&gpsAddResults.length>0&&<div style={{maxHeight:160,overflowY:"auto"}}>
+            {gpsAddResults.map(o=><div key={o.id} onClick={()=>{setGpsAddTarget(o);if(plocs[o.id]){setGpsAddLat(plocs[o.id].lat);setGpsAddLng(plocs[o.id].lng);}}} style={{padding:"6px 0",borderBottom:`1px solid ${S.brd}`,cursor:"pointer"}}>
+              <p style={{fontSize:12,fontWeight:500,margin:0}}>{plocs[o.id]?"🟢 ":"⚪ "}{o.name}</p>
+              <p style={{fontSize:10,color:S.ts,margin:0}}>{o.cnpj||""} · {o.addr?.city_name||o.addr?.city||""}{plocs[o.id]?` · GPS: ${plocs[o.id].lat.toFixed(4)},${plocs[o.id].lng.toFixed(4)}`:""}</p>
+            </div>)}
+          </div>}
+          {gpsAddTarget&&<div style={{background:S.cl,borderRadius:8,padding:10,marginTop:4}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+              <p style={{fontSize:12,fontWeight:600,margin:0}}>{gpsAddTarget.name}</p>
+              <button onClick={()=>{setGpsAddTarget(null);setGpsAddLat(null);setGpsAddLng(null);}} style={{fontSize:10,padding:"2px 8px",color:S.td}}>✕</button>
+            </div>
+            <HotelGeoInput name={gpsAddTarget.addr?.city_name||gpsAddTarget.name} onNameChange={()=>{}} lat={gpsAddLat} lng={gpsAddLng} onCoordsChange={(la,ln)=>{setGpsAddLat(la);setGpsAddLng(ln);}} label="Buscar localização no Maps"/>
+            <button onClick={()=>{if(!gpsAddLat||!gpsAddLng){alert("Defina as coordenadas primeiro.");return;}if(confirm(`Salvar GPS de ${gpsAddTarget.name}?\n${gpsAddLat.toFixed(5)}, ${gpsAddLng.toFixed(5)}`)){onSaveGPS(gpsAddTarget.id,gpsAddLat,gpsAddLng);setGpsAddTarget(null);setGpsAddSearch("");setGpsAddLat(null);setGpsAddLng(null);}}} disabled={!gpsAddLat||!gpsAddLng} style={{width:"100%",marginTop:6,padding:8,fontSize:12,background:gpsAddLat?S.ok:S.cl,border:"none",fontWeight:600}}>💾 Salvar GPS</button>
+          </div>}
+        </div>
+        {/* GPS delete per client */}
+        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px"}}>
+          <p style={{fontSize:12,fontWeight:500,margin:"0 0 6px"}}>🗑️ Apagar GPS de cliente</p>
+          <input value={gpsSearch} onChange={e=>setGpsSearch(e.target.value)} placeholder="Buscar por nome, CNPJ..." style={{width:"100%",marginBottom:6,fontSize:12}}/>
+          {gpsResults.length>0&&<div style={{maxHeight:200,overflowY:"auto"}}>
+            {gpsResults.map(o=><div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:`1px solid ${S.brd}`}}>
+              <div style={{flex:1,minWidth:0}}>
+                <p style={{fontSize:12,fontWeight:500,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.name}</p>
+                <p style={{fontSize:10,color:S.ts,margin:0}}>{o.cnpj||""} · GPS: {plocs[o.id]?.lat?.toFixed(4)},{plocs[o.id]?.lng?.toFixed(4)}</p>
+              </div>
+              <button onClick={()=>{if(confirm(`Apagar GPS de ${o.name}?`)){onDeleteGPS(o.id);setGpsSearch("");}}} style={{padding:"4px 10px",fontSize:10,background:S.dng+"22",border:`1px solid ${S.dng}`,color:S.dng,flexShrink:0}}>Apagar</button>
+            </div>)}
+          </div>}
+          {gpsSearch.trim().length>=2&&!gpsResults.length&&<p style={{fontSize:11,color:S.ts}}>Nenhum cliente com GPS encontrado</p>}
+        </div>
+        <button onClick={()=>{const dt=prompt("Data para limpar visitas (DD/MM/AAAA):");if(!dt)return;const[d,m,y]=dt.split("/");const target=`${y}-${m}-${d}`;const count=visits.filter(v=>v.checkinTime?.startsWith(target)).length;if(!count){alert("Nenhuma visita nessa data.");return;}if(confirm(`Tem certeza que deseja excluir ${count} visitas de ${dt}?\nEssa ação não pode ser desfeita.`))onClearVisits(target);}} style={{color:S.gold}}>🗓️ Limpar visitas (por data)</button>
+        <button onClick={async()=>{if(!confirm("Forçar reload completo?\nIsto vai limpar cache e re-sincronizar todos os dados.\nVocê não perderá nada.\n\nUsado para corrigir caracteres especiais corrompidos."))return;try{if("caches" in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister();}}catch{}localStorage.removeItem("jc:prefill");window.location.reload(true);}} style={{color:S.acc}}>♻️ Forçar reload (corrigir caracteres)</button>
+        <button onClick={()=>{if(confirm(`Tem certeza que deseja apagar TODOS os ${Object.keys(plocs).length} GPS salvos?\nEssa ação não pode ser desfeita.`))onClearAllGPS();}} style={{color:S.gold}}>📍 Limpar todos GPS PDVs</button>
+        {/* Bulk update grupos (empresas) — com modelo pré-preenchido */}
+        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginTop:8}}>
+          <p style={{fontSize:12,fontWeight:600,margin:"0 0 4px",color:S.txt}}>🏢 Atualizar grupos em massa</p>
+          <p style={{fontSize:10.5,color:S.ts,margin:"0 0 8px"}}>Baixe o modelo já preenchido com sua carteira, edite a coluna <b>Grupo</b> e reenvie. Colunas: CNPJ · Empresa · Grupo.</p>
+          <button onClick={()=>{const rows=[["CNPJ","Empresa","Grupo"]];[...allOrgs].sort((a,b)=>(a.name||a.nickname||"").localeCompare(b.name||b.nickname||"")).forEach(o=>rows.push([o.cnpj||"",o.name||o.nickname||"",(o.grupo||"").replace(/^Grupo:\s*/i,"").trim()]));csv(rows,`Jordan_Modelo_Grupos_${new Date().toISOString().slice(0,10)}.csv`);}} style={{width:"100%",marginBottom:8,padding:"9px",fontSize:12,fontWeight:600,background:S.pri+"18",border:`1px solid ${S.pri}66`,color:S.pl,borderRadius:9,cursor:"pointer"}}>📥 Baixar modelo (empresas)</button>
+          <input type="file" accept=".csv" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;const text=await file.text();const rows=parseCSV(text);const body=rows.slice(1).map(cols=>({cnpj:soDig(cols[0]),grupo:(cols[cols.length-1]||"").trim()})).filter(r=>r.cnpj&&r.grupo);if(!body.length){alert("CSV vazio ou inválido.\nUse o modelo baixado (CNPJ · Empresa · Grupo).");e.target.value="";return;}if(!confirm(`Atualizar grupos em ${body.length} clientes no cadastro (D1)?`)){e.target.value="";return;}let ok=0,fail=0,notfound=0;const log=[];for(const r of body){const org=allOrgs.find(o=>soDig(o.cnpj)===r.cnpj);if(!org){notfound++;log.push(`${r.cnpj}: não encontrado`);continue;}try{await fetch(`${DASH}/api/crm/cliente-upsert`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:org.id,cnpj:soDig(org.cnpj)||null,grupo:r.grupo})});ok++;log.push(`✅ ${(org.name||"").slice(0,30)} → ${r.grupo}`);}catch(x){fail++;log.push(`❌ ${(org.name||"").slice(0,30)}: ${x.message}`);}}alert(`Concluído!\n✅ ${ok} atualizados\n❌ ${fail} falharam\n⚠️ ${notfound} não encontrados\n\n${log.slice(0,20).join("\n")}${log.length>20?`\n... +${log.length-20} mais`:""}`);e.target.value="";if(ok)await doSync();}} style={{width:"100%",fontSize:11,padding:6}}/>
+        </div>
+        {/* Bulk update pessoas (contatos) — com modelo pré-preenchido */}
+        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginTop:8}}>
+          <p style={{fontSize:12,fontWeight:600,margin:"0 0 4px",color:S.txt}}>👥 Atualizar pessoas em massa</p>
+          <p style={{fontSize:10.5,color:S.ts,margin:"0 0 8px"}}>Baixe o modelo com os contatos, edite e reenvie. Linhas com <b>ID</b> são atualizadas; linhas sem ID (com CNPJ) criam contato novo. Colunas: ID · Nome · Empresa · CNPJ · Cargo · Telefone · WhatsApp · Email.</p>
+          <button onClick={async()=>{try{const r=await fetch(`${DASH}/api/crm/contatos-todos`,{headers:{"X-Session":token},cache:"no-store"});const d=await r.json();const cts=(d&&d.contatos)||[];const rows=[["ID","Nome","Empresa","CNPJ","Cargo","Telefone","WhatsApp","Email"]];cts.forEach(c=>rows.push([c.id||"",c.nome||"",c.empresa||"",c.cnpj||"",c.cargo||"",c.telefone||"",c.whatsapp||"",c.email||""]));csv(rows,`Jordan_Modelo_Pessoas_${new Date().toISOString().slice(0,10)}.csv`);}catch(x){alert("Não consegui baixar os contatos: "+x.message);}}} style={{width:"100%",marginBottom:8,padding:"9px",fontSize:12,fontWeight:600,background:S.pri+"18",border:`1px solid ${S.pri}66`,color:S.pl,borderRadius:9,cursor:"pointer"}}>📥 Baixar modelo (pessoas)</button>
+          <input type="file" accept=".csv" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;const text=await file.text();const rows=parseCSV(text);const hdr=(rows[0]||[]).map(h=>h.toLowerCase());const ix=n=>hdr.findIndex(h=>h.includes(n));const iId=ix("id"),iNome=ix("nome"),iCnpj=ix("cnpj"),iCargo=ix("cargo"),iTel=ix("telefone"),iWa=ix("whats"),iMail=ix("mail");const body=rows.slice(1).map(c=>({id:iId>=0?(c[iId]||"").trim():"",nome:iNome>=0?(c[iNome]||"").trim():"",cnpj:iCnpj>=0?soDig(c[iCnpj]):"",cargo:iCargo>=0?(c[iCargo]||"").trim():"",telefone:iTel>=0?(c[iTel]||"").trim():"",whatsapp:iWa>=0?(c[iWa]||"").trim():"",email:iMail>=0?(c[iMail]||"").trim():""})).filter(r=>r.id||(r.nome&&r.cnpj));if(!body.length){alert("CSV vazio ou inválido.\nUse o modelo baixado (Pessoas).");e.target.value="";return;}if(!confirm(`Processar ${body.length} contatos?\nCom ID = atualizar · sem ID = criar novo.`)){e.target.value="";return;}let upd=0,cri=0,fail=0,notfound=0;const log=[];for(const r of body){try{if(r.id){await fetch(`${DASH}/api/crm/contatos`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({id:r.id,nome:r.nome,cargo:r.cargo,telefone:r.telefone,whatsapp:r.whatsapp,email:r.email})});upd++;log.push(`✏️ ${r.nome.slice(0,28)}`);}else{const org=allOrgs.find(o=>soDig(o.cnpj)===r.cnpj);if(!org){notfound++;log.push(`⚠️ ${r.nome.slice(0,24)}: CNPJ ${r.cnpj} não achado`);continue;}await fetch(`${DASH}/api/crm/contatos`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({nome:r.nome,cargo:r.cargo,telefone:r.telefone,whatsapp:r.whatsapp,email:r.email,org_id:org.id,cnpj:r.cnpj||null})});cri++;log.push(`➕ ${r.nome.slice(0,28)} → ${(org.name||"").slice(0,20)}`);}}catch(x){fail++;log.push(`❌ ${r.nome.slice(0,24)}: ${x.message}`);}}alert(`Concluído!\n✏️ ${upd} atualizados\n➕ ${cri} criados\n❌ ${fail} falharam\n⚠️ ${notfound} sem CNPJ\n\n${log.slice(0,20).join("\n")}${log.length>20?`\n... +${log.length-20} mais`:""}`);e.target.value="";}} style={{width:"100%",fontSize:11,padding:6}}/>
+        </div>
+      </>}
+      <button onClick={()=>{if(confirm("Deseja realmente desconectar?\nVoce precisara inserir o token novamente."))onLogout();}} style={{color:S.dng,marginTop:8}}>🚪 Desconectar</button>
     </div>
-    <div style={{ position: "relative", marginBottom: 8 }}>
-      <Search size={15} color={S.td} style={{ position: "absolute", left: 12, top: 12 }} />
-      <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Buscar por nome, CNPJ, cidade, e-mail ou telefone..." style={{ ...inp, paddingLeft: 34 }} />
-    </div>
-    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-      <MultiSelect values={fCat} onChange={v => { setFCat(v); setVc(60); }} placeholder="Categoria" allLabel="todas" style={{ flex: 1 }} colorFor={c => CC[c] || S.pri} options={[...CATS, "Excluido"]} />
-      <MultiSelect values={fResp} onChange={v => { setFResp(v); setVc(60); }} placeholder="Responsável" allLabel="todos" style={{ flex: 1 }} options={resps} />
-    </div>
-    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-      <MultiSelect values={fRfv} onChange={v => { setFRfv(v); setVc(60); }} placeholder="Classe RFV" allLabel="todas" style={{ flex: 1 }} options={["Campeão", "Leal", "Em Crescimento", "Em Risco", "Inativo"]} />
-      <MultiSelect values={fGrp} onChange={v => { setFGrp(v); setVc(60); }} placeholder="Grupo" allLabel="todos" style={{ flex: 1 }} options={gruposE} />
-    </div>
-    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-      <MultiSelect values={fSr} onChange={v => { setFSr(v); setVc(60); }} placeholder="Status Recompra" allLabel="todos" style={{ flex: 1 }} options={["Em Dia", "Momento de Recompra", "Atrasado"]} />
-      <MultiSelect values={fCid} onChange={v => { setFCid(v); setVc(60); }} placeholder="Cidade" allLabel="todas" style={{ flex: 1 }} options={cidades} />
-      <button onClick={() => { setFCat([]); setFResp([]); setFRfv([]); setFGrp([]); setFSr([]); setFCid([]); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
-    </div>
-    <div style={{ overflowX: "auto", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: S.shadow }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 820 }}>
-        <thead><tr>
-          <th style={{ ...th, cursor: "pointer" }} onClick={() => setOrdem(o => -o)}>Nome {ordem === 1 ? "▲" : "▼"}</th>
-          <th style={th}>Categoria</th><th style={th}>Cidade</th><th style={th}>UF</th><th style={th}>RFV</th><th style={th}>Responsável</th><th style={th}>E-mail</th><th style={th}>Telefone</th><th style={th}></th>
-        </tr></thead>
-        <tbody>
-          {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id}>
-            <td style={{ ...td, maxWidth: 230, overflow: "hidden", textOverflow: "ellipsis" }}>
-              <button onClick={() => onOpen(o)} style={{ background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer" }}>
-                <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: S.pl }}>{o.nickname || o.name}</span>
-                <span style={{ display: "block", fontSize: 10.5, color: S.td }}>{[o.addr?.city_name || o.addr?.city, o.cnpj].filter(Boolean).join(" · ")}</span>
-              </button></td>
-            <td style={td}>{o.cat && <span style={{ fontSize: 10.5, color: "#fff", background: cor, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{o.cat}</span>}</td>
-            <td style={{ ...td, fontSize: 11.5 }}>{o.addr?.city_name || o.addr?.city || "—"}</td>
-            <td style={{ ...td, fontSize: 11.5, color: S.ts }}>{o.addr?.state || "—"}</td>
-            <td style={td}>{(() => { const r = rfvDe(o); if (!r) return "—"; const rc = { "Campeão": S.gold, "Leal": S.ok, "Em Crescimento": S.pri, "Em Risco": "#E76F51", "Inativo": S.td }[r.rfv] || S.ts; return <span style={{ fontSize: 10.5, color: rc, border: `1px solid ${rc}66`, background: rc + "18", padding: "2px 7px", borderRadius: 4, fontWeight: 700 }}>{r.rfv}</span>; })()}</td>
-            <td style={{ ...td, fontSize: 11.5 }}>{o.owner || "—"}</td>
-            <td style={{ ...td, fontSize: 11.5 }}>{o.email ? <a href={`mailto:${o.email}`} style={{ color: S.pl, textDecoration: "none" }}>{o.email}</a> : "—"}</td>
-            <td style={{ ...td, fontSize: 11.5 }}>{o.phone ? <a href={`https://wa.me/55${String(o.phone).replace(/\D/g, "")}`} target="_blank" rel="noreferrer" style={{ color: S.ok, textDecoration: "none", fontWeight: 600 }}>{o.phone}</a> : "—"}</td>
-            <td style={td}><button onClick={() => onEdit(o)} title="Editar empresa" style={{ background: "transparent", border: `1px solid ${S.gold}66`, color: S.gold, borderRadius: 8, padding: "5px 8px", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={14}/></button></td>
-          </tr>); })}
-        </tbody>
-      </table>
-    </div>
-    <button onClick={() => { const rows = [["Nome","CNPJ","Cidade","UF","Categoria","Classe RFV","Curva ABC","Status Recompra","Responsável","E-mail","Telefone"]];
-      lista.forEach(o => { const r = rfvDe(o); rows.push([o.nickname || o.name, o.cnpj || "", o.addr?.city_name || o.addr?.city || "", o.addr?.state || "", o.cat || "", r ? r.rfv : "", r ? r.abc : "", r ? r.status : "", o.owner || "", o.email || "", o.phone || ""]); });
-      csv(rows, `empresas-${new Date().toISOString().slice(0,10)}.csv`); }} style={{ width: "100%", marginTop: 10, padding: 12, fontSize: 13, background: S.pri + "22", border: `1px solid ${S.pri}55`, color: S.pl, fontWeight: 600, borderRadius: 10 }}>📊 Exportar {lista.length} empresas (Excel)</button>
-    {vc < lista.length && <button onClick={() => setVc(v => v + 60)} style={{ width: "100%", marginTop: 10, padding: 12, fontSize: 13, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.txt, cursor: "pointer" }}>Ver mais ({lista.length - vc})</button>}
-  </div>);
-}
+    </div>}
+  </div>);}
 
-// ─────────────────────────────────────────────────────────────
-//  Aba principal: busca de cliente + feed de atividades (Início)
-// ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl }) {
-  // secao controlada pelo menu lateral do App: inicio | empresas | pessoas
-  const [sel, setSel] = useState(null);
-  // Abrir a ficha de um cliente vindo de outra tela (ex.: clique no card em PDVs)
-  useEffect(() => { if (focus && focus.org) setSel(focus.org); }, [focus?.t]);
-  const [q, setQ] = useState("");
-  const [feed, setFeed] = useState([]); const [ld, setLd] = useState(false); const [erro, setErro] = useState("");
-  const [fTipo, setFTipo] = useState([]); const [fUser, setFUser] = useState([]); const [fDias, setFDias] = useState(90); // v41: multi (combináveis)
-  const [showTarefa, setShowTarefa] = useState(false);// modal "Nova tarefa" no Início (mesmo da Agenda)
-
-  const carregaFeed = async () => { setLd(true); setErro("");
-    try {
-      const desde = new Date(Date.now() - fDias * 86400000).toISOString().slice(0, 10);
-      const ps = new URLSearchParams({ limit: "1000", desde });
-      const d = await crm(token, "/api/crm/atividades?" + ps.toString());
-      setFeed(d.atividades || []);
-    } catch (e) { setErro(e.message); }
-    setLd(false); };
-  useEffect(() => { if (visible && token) carregaFeed(); }, [visible, fDias, bump]);
-  // v41: tipo e equipe filtram no aparelho (combináveis entre si)
-  const feedF = useMemo(() => feed.filter(a => (!fTipo.length || fTipo.includes(a.tipo)) && (!fUser.length || fUser.includes(String(a.user_id)) || fUser.some(uid => { const U = USERS.find(u => String(u.id) === uid); return U && (a.user_nome || "") && (a.user_nome === U.n || a.user_nome.includes(U.n.split(" ")[0])); }))), [feed, fTipo, fUser]);
-
-  const achados = useMemo(() => { const t = q.trim().toLowerCase(); if (t.length < 2) return [];
-    const casa = o => (o.nickname || o.name || "").toLowerCase().includes(t) || soDig(o.cnpj).includes(soDig(t)) || (o.addr?.city_name || "").toLowerCase().includes(t);
-    return [ ...(allOrgs || []).filter(casa), ...(excl || []).filter(casa) ].slice(0, 12);
-  }, [q, allOrgs, excl]);
-
-  const abrePorFeed = (a) => { const o = (allOrgs || []).find(x => x.id === a.org_id) || (a.cnpj ? (allOrgs || []).find(x => soDig(x.cnpj) === a.cnpj) : null); if (o) { setSel(o); setQ(""); } else alert("Cliente não está na base sincronizada. Sincronize os clientes."); };
-
-  if (!visible) return null;
-  if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} />;
-
-  return (<div>
-    {secao === "empresas" && <EmpresasView allOrgs={allOrgs} excl={excl} rfv={rfv} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} />}
-    {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} />}
-    {secao === "inicio" && <div>
-    <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
-      <button onClick={() => setShowTarefa(true)} style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--chrome)", color: "#fff", border: "none", borderRadius: 10, padding: "9px 15px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}><Calendar size={15}/> Nova tarefa</button>
-    </div>
-    <TarefaModal open={showTarefa} onClose={() => setShowTarefa(false)} token={token} user={user} allOrgs={allOrgs} onCreated={() => { carregaFeed(); onCrmChange && onCrmChange(); }} />
-    {/* Busca de cliente */}
-    <div style={{ position: "relative", marginBottom: 10 }}>
-      <Search size={16} color={S.td} style={{ position: "absolute", left: 12, top: 12 }} />
-      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Abrir cliente: nome, CNPJ ou cidade..." style={{ ...inp, paddingLeft: 36 }} />
-      {achados.length > 0 && <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 20, background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, marginTop: 4, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", overflow: "hidden" }}>
-        {achados.map(o => <button key={o.id} onClick={() => { setSel(o); setQ(""); }} style={{ display: "block", width: "100%", textAlign: "left", background: "transparent", border: "none", borderBottom: `1px solid ${S.cl}`, padding: "10px 12px", cursor: "pointer" }}>
-          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: S.txt }}>{o.nickname || o.name}</p>
-          <p style={{ margin: 0, fontSize: 11, color: S.ts }}>{[o.addr?.city_name || o.addr?.city, o.cat].filter(Boolean).join(" · ")}</p>
-        </button>)}
-      </div>}
-    </div>
-
-    {/* Filtros do feed */}
-    <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 8 }}>
-      <Chip on={!fTipo.length} onClick={() => setFTipo([])}>Todos</Chip>
-      {TIPOS.map(t => <Chip key={t.id} on={fTipo.includes(t.id)} color={t.c} onClick={() => setFTipo(p => p.includes(t.id) ? p.filter(x => x !== t.id) : [...p, t.id])}>{t.l}</Chip>)}
-    </div>
-    <div style={{ display: "flex", gap: 8, marginBottom: 10, alignItems: "center" }}>
-      <MultiSelect values={fUser} onChange={setFUser} placeholder="Equipe" allLabel="toda" style={{ flex: 1 }} options={USERS.map(u => [String(u.id), u.n.split(" ")[0]])} />
-      <SearchSelect value={String(fDias)} onChange={v => setFDias(+v)} placeholder="Período" style={{ flex: 1 }} options={[["7", "7 dias"], ["30", "30 dias"], ["90", "3 meses"], ["180", "6 meses"], ["365", "12 meses"]]} />
-      <button onClick={carregaFeed} style={{ width: 38, height: 38, borderRadius: 10, background: S.pl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 }}><RefreshCw size={16} color="#fff" className={ld ? "spin" : ""} /></button>
-    </div>
-
-    <p style={{ fontSize: 12, color: S.ts, margin: "0 0 8px" }}>{ld ? "Carregando atividades..." : `${feedF.length} atividade(s) no período`}</p>
-    {erro && <Crd style={{ borderColor: S.dng + "66" }}><p style={{ margin: 0, fontSize: 12.5, color: S.dng }}>Erro ao carregar o feed: {erro}</p><p style={{ margin: "4px 0 0", fontSize: 11.5, color: S.ts }}>Verifique se o Dashboard está no ar (rotas CRM) e se você está logado.</p></Crd>}
-    {!ld && !erro && !feedF.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Sem atividades no período. Elas aparecem aqui a cada check-out, ligação, WhatsApp ou registro manual na tela do cliente.</p></Crd>}
-    {feedF.map(a => <AtvCard key={a.id} a={a} onOrg={abrePorFeed} onFinish={async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setFeed(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } }} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={async (x) => { if (!confirm("Excluir esta atividade do CRM?")) return; try { await crm(token, `/api/crm/atividades?id=${x.id}`, { method: "DELETE" }); setFeed(p => p.filter(y => y.id !== x.id)); } catch (e) { alert("Erro: " + e.message); } }} />)}
-  </div>}
-  </div>);
-}
+export { ConfigTab };

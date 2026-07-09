@@ -1,147 +1,171 @@
-// TeamCheck — aba ConfigTab
-import { useState } from "react";
-import { HOMES, TZ, S, DASH, csv, getBase, getEnd, sL, sS } from "../lib";
-import { HotelGeoInput, ProgressBar } from "../components";
-import { ConfigCatalogos } from "./ConfigCatalogos";
+// TeamCheck — aba AgendaTab
+import { useState, useEffect, useMemo, useRef } from "react";
+import { Check } from "lucide-react";
+import { DASH, toLocalDate, todayLocal, TYPES, USERS, S, fT, fD, crmFire, gcalUrl } from "../lib";
+import { LB, SegTabs, Chip, DateField, MonthCalendar, TarefaModal } from "../components";
 
-// Parser de CSV que respeita aspas ("") — casa com o export do helper csv() (delimitador ; e aspas)
-function parseCSV(text){
-  const lines=text.replace(/\r\n?/g,"\n").split("\n").filter(l=>l.length);
-  if(!lines.length)return[];
-  const semi=(lines[0].match(/;/g)||[]).length,comma=(lines[0].match(/,/g)||[]).length;
-  const delim=semi>=comma?";":",";
-  const rows=[];
-  for(const line of lines){
-    const out=[];let cur="",inQ=false;
-    for(let i=0;i<line.length;i++){const ch=line[i];
-      if(inQ){if(ch==='"'){if(line[i+1]==='"'){cur+='"';i++;}else inQ=false;}else cur+=ch;}
-      else{if(ch==='"')inQ=true;else if(ch===delim){out.push(cur);cur="";}else cur+=ch;}
-    }
-    out.push(cur);rows.push(out.map(s=>s.trim()));
-  }
-  return rows;
-}
-const soDig=x=>String(x||"").replace(/\D/g,"");
-
-const ARow=({emo,t,d,onClick,disabled,color})=><div onClick={disabled?undefined:onClick} style={{display:"flex",alignItems:"center",gap:12,background:S.card,border:`1px solid ${S.brd}`,borderRadius:11,padding:"13px 16px",cursor:disabled?"default":"pointer",opacity:disabled?.6:1}}>
-  <span style={{width:34,height:34,borderRadius:9,background:S.cl,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}}>{emo}</span>
-  <div style={{flex:1,minWidth:0}}>
-    <div style={{fontSize:13.5,fontWeight:600,color:color||S.txt}}>{t}</div>
-    {d&&<div style={{fontSize:11.5,color:S.td,marginTop:1}}>{d}</div>}
-  </div>
-  <span style={{color:S.td,fontSize:14,flexShrink:0}}>›</span>
-</div>;
-function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStatus,syncing,syncMsg,onSync,onLoadHistory,onSyncPull,onShareGPS,onShowDB,onShowEnd,onDeleteGPS,onSaveGPS,onClearVisits,onClearAllGPS,onLogout,doSync}){
-  const[gpsSearch,setGpsSearch]=useState("");const[histLoading,setHistLoading]=useState(false);const[shareLoading,setShareLoading]=useState(false);
-  const[gpsAddSearch,setGpsAddSearch]=useState("");const[gpsAddTarget,setGpsAddTarget]=useState(null);const[gpsAddLat,setGpsAddLat]=useState(null);const[gpsAddLng,setGpsAddLng]=useState(null);
-  const gpsResults=gpsSearch.trim().length>=2?orgs.filter(o=>{const q=gpsSearch.toLowerCase().replace(/[.\-\/]/g,"");return plocs[o.id]&&[o.name,o.nickname,o.cnpj?.replace(/[.\-\/]/g,"")].filter(Boolean).join(" ").toLowerCase().includes(q);}).slice(0,10):[];
-  const gpsAddResults=gpsAddSearch.trim().length>=2?orgs.filter(o=>{const q=gpsAddSearch.toLowerCase().replace(/[.\-\/]/g,"");return[o.name,o.nickname,o.cnpj?.replace(/[.\-\/]/g,"")].filter(Boolean).join(" ").toLowerCase().includes(q);}).slice(0,10):[];
-  const[tema,setTema]=useState(()=>sL("jc:theme","dark"));
-  const trocaTema=(t)=>{setTema(t);sS("jc:theme",t);document.documentElement.dataset.theme=t;};
-  const isAdmin=user?.id===743088;
-  const[sub,setSub]=useState("acoes"); // acoes | cadastros
-  const jaInstalado=window.matchMedia&&window.matchMedia("(display-mode: standalone)").matches;
-  const ehIOS=/iphone|ipad|ipod/i.test(navigator.userAgent);
-  const instalar=async()=>{
-    if(instEvt){try{instEvt.prompt();const r=await instEvt.userChoice;if(r?.outcome==="accepted")alert("Aplicativo instalado! Procure o ícone TeamCheck na tela inicial.");}catch{}}
-    else if(ehIOS)alert("No iPhone/iPad:\n1. Toque no botão Compartilhar (quadrado com seta) na barra do Safari\n2. Role e toque em \"Adicionar à Tela de Início\"\n3. Toque em \"Adicionar\"\n\nO TeamCheck vira um app com ícone próprio.");
-    else alert("No Android (Chrome): toque nos 3 pontinhos ⋮ e depois em \"Instalar aplicativo\" (ou \"Adicionar à tela inicial\").\nNo computador: ícone de instalação na barra de endereço.");
+function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
+  const loadedRef=useRef(false);
+  const[tasks,setTasks]=useState([]);const[lo,setLo]=useState(false);const[err,setErr]=useState("");const isAdmin=user?.id===743088;
+  const[view,setView]=useState("lista");// lista | calendario
+  const[calDay,setCalDay]=useState(todayLocal());// dia selecionado no calendário
+  const[filter,setFilter]=useState("pending");// pending | done
+  const[period,setPeriod]=useState("all");// all | week | today | custom
+  const[customFrom,setCustomFrom]=useState(()=>{const d=new Date();d.setDate(d.getDate()-30);return toLocalDate(d);});
+  const[customTo,setCustomTo]=useState(todayLocal);
+  const[userFilter,setUserFilter]=useState(()=>user?.id?String(user.id):"all");// v43: já abre no usuário logado
+  const[showAdd,setShowAdd]=useState(false);
+  const[showPart,setShowPart]=useState(false);const[pTxt,setPTxt]=useState("");const[pData,setPData]=useState(todayLocal());const[pHora,setPHora]=useState("09:00");const[pLo,setPLo]=useState(false);
+  const criarParticular=async()=>{if(!pTxt.trim()||!pData)return;setPLo(true);
+    try{
+      await fetch(`${DASH}/api/crm/atividades`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({tipo:"NOTA",texto:pTxt.trim(),origem:"particular",org_nome:"(Particular)",due_em:`${pData}T${pHora}:00-04:00`,user_id:user?.id,user_nome:user?.name})});
+      const u=gcalUrl({titulo:`🔒 ${pTxt.trim().slice(0,60)}`,detalhes:pTxt.trim(),inicio:`${pData}T${pHora}:00-04:00`});
+      if(u)window.open(u,"_blank","noopener");
+      setPTxt("");setShowPart(false);load();
+    }catch(e){alert("Erro: "+e.message);}
+    setPLo(false);};
+  const load=async()=>{setLo(true);setErr("");try{
+    // Fonte única = D1 (tarefas com prazo).
+    let mapped=[];
+    try{
+      const desde=new Date(Date.now()-90*86400000).toISOString().slice(0,10);
+      const r=await fetch(`${DASH}/api/crm/tarefas?desde=${desde}&limit=2000`,{headers:{"X-Session":token},cache:"no-store"});
+      if(r.ok){const d=await r.json();if(d&&d.ok&&Array.isArray(d.tarefas))mapped=d.tarefas;}
+    }catch(e){console.warn("tarefas D1:",e);}
+    setTasks(mapped);setErr(`${mapped.length} tarefas · atualizado ${fT(new Date())}`);
+  }catch(e){console.warn("agenda:",e);setErr("Erro: "+e.message);}setLo(false);};
+  useEffect(()=>{if(!visible)return;load();const iv=setInterval(()=>{load();},300000);return()=>clearInterval(iv);},[visible,bump]);// recarrega ao abrir e a cada mudança do CRM; auto-refresh 5min enquanto visível
+  const[adiando,setAdiando]=useState(null); // {key, date, time} — adiar tarefa
+  const adiarTarefa=async(t,date,time)=>{
+    const corpo=t.d1_id?{id:t.d1_id}:{agendor_id:t.id};
+    try{
+      const r=await fetch(`${DASH}/api/crm/tarefa-adiar`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({...corpo,due_em:`${date}T${time}:00-04:00`})});
+      const d=await r.json().catch(()=>({}));
+      if(!r.ok||!d.ok)throw new Error(d.erro||r.status);
+      setAdiando(null);setErr("Tarefa adiada!");await load();onCrmChange&&onCrmChange();
+    }catch(e){alert("Erro ao adiar: "+e.message);}
   };
-  return(<div>
-    {isAdmin&&<div style={{display:"flex",gap:5,background:S.cl,border:`1px solid ${S.brd}`,borderRadius:11,padding:4,marginBottom:16,maxWidth:420}}>
-      {[["acoes","⚙️ Ações & Sync"],["cadastros","🗂️ Cadastros"]].map(([id,l])=>
-        <button key={id} onClick={()=>setSub(id)} style={{flex:1,textAlign:"center",padding:"9px 6px",borderRadius:8,fontSize:13,fontWeight:sub===id?600:500,background:sub===id?"var(--card-solid)":"transparent",color:sub===id?S.pl:S.ts,boxShadow:sub===id?"0 1px 2px rgba(3,73,100,.14)":"none",border:"none",cursor:"pointer"}}>{l}</button>)}
-    </div>}
-    {isAdmin&&sub==="cadastros"?<ConfigCatalogos token={token}/>:<div>
-    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12,boxShadow:S.shadow}}>
-      <p style={{fontSize:13,fontWeight:700,color:S.txt,margin:"0 0 8px"}}>🎨 Tema</p>
-      <div style={{display:"flex",gap:8}}>
-        <button onClick={()=>trocaTema("dark")} style={{flex:1,padding:"10px",fontSize:13,fontWeight:tema==="dark"?700:400,background:tema==="dark"?S.pri:"transparent",color:tema==="dark"?"#fff":S.ts,border:`1px solid ${tema==="dark"?S.pri:S.brd}`,borderRadius:10}}>🌙 Escuro</button>
-        <button onClick={()=>trocaTema("light")} style={{flex:1,padding:"10px",fontSize:13,fontWeight:tema==="light"?700:400,background:tema==="light"?S.pri:"transparent",color:tema==="light"?"#fff":S.ts,border:`1px solid ${tema==="light"?S.pri:S.brd}`,borderRadius:10}}>☀️ Claro</button>
+  const markDone=async(t)=>{if(!confirm(`Finalizar "${t.text.slice(0,50)}..."?`))return;try{
+    // v24: conclui só no D1 (fonte de verdade). Usa d1_id se houver, senao o id (agendor_id legado).
+    const corpo=t.d1_id?{id:t.d1_id}:{agendor_id:t.id};
+    try{await fetch(`${DASH}/api/crm/tarefa-concluir`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(corpo)});}catch(e){console.warn("concluir D1:",e);}
+    setTasks(prev=>prev.map(x=>x.id===t.id?{...x,done:true,finished:new Date().toISOString()}:x));setErr("Finalizada!");onCrmChange&&onCrmChange();
+  }catch(e){console.warn("markDone:",e);alert("Erro: "+e.message);}};
+  // Filters
+  const today=todayLocal();const dow=new Date().getDay();const weekStart=toLocalDate(new Date(Date.now()-dow*86400000));const weekEnd=toLocalDate(new Date(Date.now()+(6-dow)*86400000));
+  // Casa a tarefa ao usuário selecionado (id do catálogo). Prioriza userName (o que o selo mostra); usa userId como reserva.
+  const norm=s=>(s||"").toLowerCase().trim();
+  const userMatch=(t,uid)=>{if(uid==="all"||uid==null)return true;const U=USERS.find(u=>String(u.id)===String(uid));const tn=norm(t.userName);if(tn&&U){const full=norm(U.n),first=norm(U.n.split(" ")[0]);return tn===full||tn.includes(first);}return t.userId!=null&&String(t.userId)===String(uid);};
+  const meWho=String(user.id);
+  const filtered=useMemo(()=>{const doneCutoff=toLocalDate(new Date(Date.now()-30*86400000));let list=tasks.filter(t=>filter==="pending"?!t.done:(t.done&&((t.finished||t.created||"").slice(0,10)>=doneCutoff)));
+    if(!isAdmin)list=list.filter(t=>userMatch(t,meWho));else if(userFilter!=="all")list=list.filter(t=>userMatch(t,userFilter));
+    if(period==="today")list=list.filter(t=>(t.due&&t.due.slice(0,10)===today)||(t.created&&toLocalDate(t.created)===today));
+    if(period==="week")list=list.filter(t=>{const d=t.due?t.due.slice(0,10):toLocalDate(t.created);return d>=weekStart&&d<=weekEnd;});
+    if(period==="custom")list=list.filter(t=>{const d=t.due?t.due.slice(0,10):toLocalDate(t.created);return d>=customFrom&&d<=customTo;});
+    return list.sort((a,b)=>(a.due||a.created||"9").localeCompare(b.due||b.created||"9"));
+  },[tasks,filter,period,today,weekStart,weekEnd,customFrom,customTo,userFilter,isAdmin,user.id]);
+  const overdue=filtered.filter(t=>!t.done&&t.due&&t.due.slice(0,10)<today);
+  const todayT=filtered.filter(t=>t.due&&t.due.slice(0,10)===today);
+  const futureT=filtered.filter(t=>!t.done&&t.due&&t.due.slice(0,10)>today);
+  const noDueT=filtered.filter(t=>!t.due);
+  const doneT=filtered.filter(t=>t.done);
+  // Calendário: quem contar para os pontinhos/lista respeita o filtro de equipe
+  const calWho=!isAdmin?meWho:userFilter;
+  const marks=useMemo(()=>{const m={};tasks.forEach(t=>{if(t.due&&!t.done&&userMatch(t,calWho)){const d=t.due.slice(0,10);if(m[d]!==S.dng)m[d]=t.due.slice(0,10)<today?S.dng:S.gold;}});return m;},[tasks,today,calWho]);
+  const dayTasks=useMemo(()=>tasks.filter(t=>{const d=t.due?t.due.slice(0,10):null;if(d!==calDay)return false;return userMatch(t,calWho);}).sort((a,b)=>(a.due||"").localeCompare(b.due||"")),[tasks,calDay,calWho]);
+  // Add task: search orgs
+  const renderTask=(t)=><div key={t.id} style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:13,padding:"14px 16px",marginBottom:11,display:"flex",gap:16,alignItems:"center"}}>
+    <div style={{flex:1,minWidth:0}}>
+      <div style={{display:"flex",gap:9,alignItems:"center",flexWrap:"wrap",marginBottom:5}}>
+        <span style={{fontSize:10,letterSpacing:".05em",textTransform:"uppercase",fontWeight:700,color:"#fff",background:t.origem==="particular"?S.gold:t.type==="Visita"?"var(--chrome)":t.type==="WhatsApp"?S.ok:t.type==="Ligação"||t.type==="LIGACAO"?S.cyan:S.purple,padding:"3px 8px",borderRadius:6}}>{t.origem==="particular"?"🔒 Particular":t.type}</span>
+        <span style={{fontSize:14,fontWeight:700,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.org}</span>
+        {isAdmin&&<span style={{fontSize:10,color:S.acc,background:S.acc+"18",border:`1px solid ${S.acc}44`,padding:"2px 7px",borderRadius:6,fontWeight:600}}>{t.userName?.split(" ")[0]}</span>}
       </div>
-      <p style={{fontSize:11,color:S.td,margin:"8px 0 0"}}>Mesmo sistema de temas do Dashboard. A escolha fica salva neste aparelho.</p>
+      <p style={{fontSize:12.5,color:S.ts,margin:0,lineHeight:1.5,wordBreak:"break-word"}}>{t.text}</p>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginTop:7,flexWrap:"wrap"}}>
+        <span className="mono" style={{fontSize:11.5,fontWeight:600,color:t.done?S.td:t.due&&t.due.slice(0,10)<today?S.dng:S.td,textDecoration:t.done?"line-through":"none"}}>{t.due?`Prazo ${fD(t.due)} ${fT(t.due)}`:`Criada ${fD(t.created)}`}</span>
+        {t.done&&t.finished&&<><span style={{width:3,height:3,borderRadius:"50%",background:S.td}}/><span className="mono" style={{fontSize:11.5,color:S.ok}}>Finalizada {fD(t.finished)}</span></>}
+        {!t.done&&t.due&&<a href={gcalUrl({titulo:`${t.type||"Tarefa"} — ${t.org||""}`,detalhes:t.text||"",inicio:t.due,local:t.org||""})||"#"} target="_blank" rel="noopener" title="Adicionar ao Google Agenda" style={{fontSize:11,fontWeight:600,color:S.pl,textDecoration:"none",border:`1px solid ${S.brd}`,borderRadius:6,padding:"2px 8px"}}>📅 Google Agenda</a>}
+        {!t.done&&<button onClick={()=>{const base=t.due?new Date(new Date(t.due).getTime()+86400000):new Date(Date.now()+86400000);const d=base.toISOString().slice(0,10);const hr=t.due?(t.due.slice(11,16)||"09:00"):"09:00";setAdiando(adiando&&adiando.key===t.id?null:{key:t.id,date:d,time:hr});}} title="Adiar esta tarefa" style={{fontSize:11,fontWeight:600,color:S.gold,background:"transparent",border:`1px solid ${S.gold}66`,borderRadius:6,padding:"2px 8px",cursor:"pointer"}}>⏩ Adiar</button>}
+      </div>
+      {adiando&&adiando.key===t.id&&<div style={{display:"flex",gap:8,alignItems:"center",marginTop:8,flexWrap:"wrap"}}>
+        <input type="date" value={adiando.date} onChange={e=>setAdiando(a=>({...a,date:e.target.value}))} style={{background:S.inp,border:`1px solid ${S.inpBdr}`,borderRadius:8,padding:"7px 9px",fontSize:12.5,color:S.txt,fontFamily:"inherit"}}/>
+        <input type="time" value={adiando.time} onChange={e=>setAdiando(a=>({...a,time:e.target.value}))} style={{background:S.inp,border:`1px solid ${S.inpBdr}`,borderRadius:8,padding:"7px 9px",fontSize:12.5,color:S.txt,fontFamily:"inherit"}}/>
+        <button onClick={()=>adiarTarefa(t,adiando.date,adiando.time)} style={{background:S.gold,border:"none",borderRadius:8,padding:"8px 14px",fontSize:12.5,fontWeight:700,color:"#fff",cursor:"pointer"}}>Adiar para esta data</button>
+        <button onClick={()=>setAdiando(null)} style={{background:"transparent",border:`1px solid ${S.brd}`,borderRadius:8,padding:"8px 10px",fontSize:12.5,color:S.ts,cursor:"pointer"}}>Cancelar</button>
+      </div>}
+      <div style={{display:"none"}}>
+      </div>
     </div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12,marginBottom:12}}>
-    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
-      <p style={{fontSize:14,fontWeight:700,margin:"0 0 6px",color:S.txt}}>{user?.name}</p>
-      {HOMES[user?.id]&&<p style={{fontSize:12,color:S.pl,margin:0}}>Casa: <b>{HOMES[user.id].label}</b></p>}
-      {getBase(dayBases,today,user?.id)&&<p style={{fontSize:12,color:S.ts,margin:"2px 0 0"}}>Base hoje: {getBase(dayBases,today,user?.id)?.label||"Casa"}{getEnd(dayBases,today,user?.id)!==getBase(dayBases,today,user?.id)?` → ${getEnd(dayBases,today,user?.id)?.label||"Casa"}`:""}</p>}
+    {/* Caixa de seleção: marca a tarefa como finalizada (padrão Dashboard) */}
+    <button onClick={()=>!t.done&&markDone(t)} title={t.done?"Tarefa finalizada":"Marcar como finalizada"} style={{display:"flex",alignItems:"center",gap:8,flexShrink:0,background:t.done?S.ok+"18":S.inp,border:`1px solid ${t.done?S.ok:S.inpBdr}`,borderRadius:8,padding:"8px 12px",cursor:t.done?"default":"pointer"}}>
+      <span style={{width:19,height:19,borderRadius:5,flexShrink:0,border:`1.6px solid ${t.done?S.ok:S.td}`,background:t.done?S.ok:"transparent",display:"flex",alignItems:"center",justifyContent:"center"}}>{t.done&&<Check size={13} color="#fff" strokeWidth={3}/>}</span>
+      <span style={{fontSize:12.5,fontWeight:600,color:t.done?S.ok:S.ts}}>{t.done?"Finalizada":"Finalizar"}</span>
+    </button>
+  </div>;
+  return(<div style={{display:visible?"block":"none"}}>
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:16,marginBottom:16,flexWrap:"wrap"}}>
+      <div>
+        <div style={{fontSize:16,fontWeight:700,color:S.txt}}>Agenda</div>
+        <div style={{fontSize:12,color:S.ts,marginTop:2}}>{err||`${filtered.length} tarefa(s)${filter==="pending"?" pendentes":" finalizadas"}`}</div>
+      </div>
+      <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",maxWidth:"100%"}}>
+        <div style={{minWidth:210}}><SegTabs items={[["lista","📋 Lista"],["calendario","🗓️ Calendário"]]} value={view} onChange={setView} size={12.5}/></div>
+        <button onClick={load} disabled={lo} style={{width:38,height:38,borderRadius:9,border:`1px solid ${S.inpBdr}`,background:S.inp,fontSize:14,padding:0}}>{lo?"…":"🔄"}</button>
+        <button onClick={()=>setShowAdd(true)} style={{display:"flex",alignItems:"center",gap:6,background:"var(--chrome)",color:"#fff",border:"none",borderRadius:8,padding:"9px 13px",fontSize:13,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>+ Nova tarefa</button>
+        {isAdmin&&<button onClick={()=>setShowPart(true)} title="Compromisso particular — só você vê; vai para o Google Agenda" style={{display:"flex",alignItems:"center",gap:6,background:S.gold,color:"#fff",border:"none",borderRadius:8,padding:"9px 13px",fontSize:13,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>🔒 Particular</button>}
+      </div>
     </div>
-    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
-      <p style={{fontSize:12.5,color:S.t2,margin:0}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
-      <p className="mono" style={{fontSize:11.5,color:syncStatus.startsWith?.("Erro")?S.dng:S.pl,margin:"6px 0 0"}}>Sync {syncStatus||"aguardando..."}</p>
-      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v41</p>
-    </div>
-    </div>
-    <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>
-    <div style={{display:"flex",flexDirection:"column",gap:9,marginBottom:16}}>
-      <ARow emo="⚡" t="Forçar sincronização" d="Baixa a carteira, o histórico e o estado da equipe/GPS" onClick={async()=>{setHistLoading(true);await onSync();await onLoadHistory();setHistLoading(false);onSyncPull();}} disabled={syncing||histLoading}/>
-      <ARow emo="📡" t={shareLoading?"Enviando GPS...":`Compartilhar ${Object.keys(plocs).length} GPS com equipe`} d="Publica as localizações salvas neste aparelho" onClick={async()=>{if(!confirm("Compartilhar GPS com equipe?"))return;setShareLoading(true);await onShareGPS();setShareLoading(false);}} disabled={shareLoading}/>
-      <ARow emo="🗺️" t="Definir jornada" d="Origem e destino do dia (casa, hotel...)" onClick={onShowDB}/>
-      <ARow emo="🏨" t="Fechar roteiro do dia" d="Define o ponto final e conclui o dia" onClick={onShowEnd}/>
-      <ARow emo={("Notification"in window&&Notification.permission==="granted")?"🔔":"🔕"} t={("Notification"in window&&Notification.permission==="granted")?"Notificações ativadas":"Ativar notificações"} d="Lembretes de tarefas agendadas" color={("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold} onClick={()=>{if(!("Notification"in window)){alert("Navegador nao suporta notificacoes");return;}Notification.requestPermission().then(p=>{if(p==="granted")alert("Notificacoes ativadas! Voce recebera lembretes de tarefas agendadas.");else alert("Notificacoes bloqueadas. Ative nas configuracoes do navegador.");});}}/>
-      <ARow emo="📲" t={jaInstalado?"Aplicativo instalado ✓":"Instalar aplicativo no celular"} d={jaInstalado?"Você já está usando o TeamCheck instalado":"Ícone próprio na tela inicial — funciona como app (Android e iPhone)"} color={jaInstalado?S.ok:undefined} onClick={jaInstalado?undefined:instalar} disabled={jaInstalado}/>
-
-      {/* Admin area (Jordan only) */}
-      {user?.id===743088&&<>
-        <div style={{borderTop:`1px solid ${S.brd}`,paddingTop:12,marginTop:4}}>
-          <p style={{fontSize:12,fontWeight:600,color:S.gold,margin:"0 0 8px"}}>⚙️ Administrador</p>
-        </div>
-        {/* GPS manual save */}
-        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginBottom:8}}>
-          <p style={{fontSize:12,fontWeight:500,margin:"0 0 6px"}}>📍 Salvar GPS de cliente</p>
-          <input value={gpsAddSearch} onChange={e=>{setGpsAddSearch(e.target.value);setGpsAddTarget(null);setGpsAddLat(null);setGpsAddLng(null);}} placeholder="Buscar cliente por nome, CNPJ..." style={{width:"100%",marginBottom:6,fontSize:12}}/>
-          {!gpsAddTarget&&gpsAddResults.length>0&&<div style={{maxHeight:160,overflowY:"auto"}}>
-            {gpsAddResults.map(o=><div key={o.id} onClick={()=>{setGpsAddTarget(o);if(plocs[o.id]){setGpsAddLat(plocs[o.id].lat);setGpsAddLng(plocs[o.id].lng);}}} style={{padding:"6px 0",borderBottom:`1px solid ${S.brd}`,cursor:"pointer"}}>
-              <p style={{fontSize:12,fontWeight:500,margin:0}}>{plocs[o.id]?"🟢 ":"⚪ "}{o.name}</p>
-              <p style={{fontSize:10,color:S.ts,margin:0}}>{o.cnpj||""} · {o.addr?.city_name||o.addr?.city||""}{plocs[o.id]?` · GPS: ${plocs[o.id].lat.toFixed(4)},${plocs[o.id].lng.toFixed(4)}`:""}</p>
-            </div>)}
-          </div>}
-          {gpsAddTarget&&<div style={{background:S.cl,borderRadius:8,padding:10,marginTop:4}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-              <p style={{fontSize:12,fontWeight:600,margin:0}}>{gpsAddTarget.name}</p>
-              <button onClick={()=>{setGpsAddTarget(null);setGpsAddLat(null);setGpsAddLng(null);}} style={{fontSize:10,padding:"2px 8px",color:S.td}}>✕</button>
-            </div>
-            <HotelGeoInput name={gpsAddTarget.addr?.city_name||gpsAddTarget.name} onNameChange={()=>{}} lat={gpsAddLat} lng={gpsAddLng} onCoordsChange={(la,ln)=>{setGpsAddLat(la);setGpsAddLng(ln);}} label="Buscar localização no Maps"/>
-            <button onClick={()=>{if(!gpsAddLat||!gpsAddLng){alert("Defina as coordenadas primeiro.");return;}if(confirm(`Salvar GPS de ${gpsAddTarget.name}?\n${gpsAddLat.toFixed(5)}, ${gpsAddLng.toFixed(5)}`)){onSaveGPS(gpsAddTarget.id,gpsAddLat,gpsAddLng);setGpsAddTarget(null);setGpsAddSearch("");setGpsAddLat(null);setGpsAddLng(null);}}} disabled={!gpsAddLat||!gpsAddLng} style={{width:"100%",marginTop:6,padding:8,fontSize:12,background:gpsAddLat?S.ok:S.cl,border:"none",fontWeight:600}}>💾 Salvar GPS</button>
-          </div>}
-        </div>
-        {/* GPS delete per client */}
-        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px"}}>
-          <p style={{fontSize:12,fontWeight:500,margin:"0 0 6px"}}>🗑️ Apagar GPS de cliente</p>
-          <input value={gpsSearch} onChange={e=>setGpsSearch(e.target.value)} placeholder="Buscar por nome, CNPJ..." style={{width:"100%",marginBottom:6,fontSize:12}}/>
-          {gpsResults.length>0&&<div style={{maxHeight:200,overflowY:"auto"}}>
-            {gpsResults.map(o=><div key={o.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:`1px solid ${S.brd}`}}>
-              <div style={{flex:1,minWidth:0}}>
-                <p style={{fontSize:12,fontWeight:500,margin:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.name}</p>
-                <p style={{fontSize:10,color:S.ts,margin:0}}>{o.cnpj||""} · GPS: {plocs[o.id]?.lat?.toFixed(4)},{plocs[o.id]?.lng?.toFixed(4)}</p>
-              </div>
-              <button onClick={()=>{if(confirm(`Apagar GPS de ${o.name}?`)){onDeleteGPS(o.id);setGpsSearch("");}}} style={{padding:"4px 10px",fontSize:10,background:S.dng+"22",border:`1px solid ${S.dng}`,color:S.dng,flexShrink:0}}>Apagar</button>
-            </div>)}
-          </div>}
-          {gpsSearch.trim().length>=2&&!gpsResults.length&&<p style={{fontSize:11,color:S.ts}}>Nenhum cliente com GPS encontrado</p>}
-        </div>
-        <button onClick={()=>{const dt=prompt("Data para limpar visitas (DD/MM/AAAA):");if(!dt)return;const[d,m,y]=dt.split("/");const target=`${y}-${m}-${d}`;const count=visits.filter(v=>v.checkinTime?.startsWith(target)).length;if(!count){alert("Nenhuma visita nessa data.");return;}if(confirm(`Tem certeza que deseja excluir ${count} visitas de ${dt}?\nEssa ação não pode ser desfeita.`))onClearVisits(target);}} style={{color:S.gold}}>🗓️ Limpar visitas (por data)</button>
-        <button onClick={async()=>{if(!confirm("Forçar reload completo?\nIsto vai limpar cache e re-sincronizar todos os dados.\nVocê não perderá nada.\n\nUsado para corrigir caracteres especiais corrompidos."))return;try{if("caches" in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister();}}catch{}localStorage.removeItem("jc:prefill");window.location.reload(true);}} style={{color:S.acc}}>♻️ Forçar reload (corrigir caracteres)</button>
-        <button onClick={()=>{if(confirm(`Tem certeza que deseja apagar TODOS os ${Object.keys(plocs).length} GPS salvos?\nEssa ação não pode ser desfeita.`))onClearAllGPS();}} style={{color:S.gold}}>📍 Limpar todos GPS PDVs</button>
-        {/* Bulk update grupos (empresas) — com modelo pré-preenchido */}
-        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginTop:8}}>
-          <p style={{fontSize:12,fontWeight:600,margin:"0 0 4px",color:S.txt}}>🏢 Atualizar grupos em massa</p>
-          <p style={{fontSize:10.5,color:S.ts,margin:"0 0 8px"}}>Baixe o modelo já preenchido com sua carteira, edite a coluna <b>Grupo</b> e reenvie. Colunas: CNPJ · Empresa · Grupo.</p>
-          <button onClick={()=>{const rows=[["CNPJ","Empresa","Grupo"]];[...allOrgs].sort((a,b)=>(a.name||a.nickname||"").localeCompare(b.name||b.nickname||"")).forEach(o=>rows.push([o.cnpj||"",o.name||o.nickname||"",(o.grupo||"").replace(/^Grupo:\s*/i,"").trim()]));csv(rows,`Jordan_Modelo_Grupos_${new Date().toISOString().slice(0,10)}.csv`);}} style={{width:"100%",marginBottom:8,padding:"9px",fontSize:12,fontWeight:600,background:S.pri+"18",border:`1px solid ${S.pri}66`,color:S.pl,borderRadius:9,cursor:"pointer"}}>📥 Baixar modelo (empresas)</button>
-          <input type="file" accept=".csv" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;const text=await file.text();const rows=parseCSV(text);const body=rows.slice(1).map(cols=>({cnpj:soDig(cols[0]),grupo:(cols[cols.length-1]||"").trim()})).filter(r=>r.cnpj&&r.grupo);if(!body.length){alert("CSV vazio ou inválido.\nUse o modelo baixado (CNPJ · Empresa · Grupo).");e.target.value="";return;}if(!confirm(`Atualizar grupos em ${body.length} clientes no cadastro (D1)?`)){e.target.value="";return;}let ok=0,fail=0,notfound=0;const log=[];for(const r of body){const org=allOrgs.find(o=>soDig(o.cnpj)===r.cnpj);if(!org){notfound++;log.push(`${r.cnpj}: não encontrado`);continue;}try{await fetch(`${DASH}/api/crm/cliente-upsert`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:org.id,cnpj:soDig(org.cnpj)||null,grupo:r.grupo})});ok++;log.push(`✅ ${(org.name||"").slice(0,30)} → ${r.grupo}`);}catch(x){fail++;log.push(`❌ ${(org.name||"").slice(0,30)}: ${x.message}`);}}alert(`Concluído!\n✅ ${ok} atualizados\n❌ ${fail} falharam\n⚠️ ${notfound} não encontrados\n\n${log.slice(0,20).join("\n")}${log.length>20?`\n... +${log.length-20} mais`:""}`);e.target.value="";if(ok)await doSync();}} style={{width:"100%",fontSize:11,padding:6}}/>
-        </div>
-        {/* Bulk update pessoas (contatos) — com modelo pré-preenchido */}
-        <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",marginTop:8}}>
-          <p style={{fontSize:12,fontWeight:600,margin:"0 0 4px",color:S.txt}}>👥 Atualizar pessoas em massa</p>
-          <p style={{fontSize:10.5,color:S.ts,margin:"0 0 8px"}}>Baixe o modelo com os contatos, edite e reenvie. Linhas com <b>ID</b> são atualizadas; linhas sem ID (com CNPJ) criam contato novo. Colunas: ID · Nome · Empresa · CNPJ · Cargo · Telefone · WhatsApp · Email.</p>
-          <button onClick={async()=>{try{const r=await fetch(`${DASH}/api/crm/contatos-todos`,{headers:{"X-Session":token},cache:"no-store"});const d=await r.json();const cts=(d&&d.contatos)||[];const rows=[["ID","Nome","Empresa","CNPJ","Cargo","Telefone","WhatsApp","Email"]];cts.forEach(c=>rows.push([c.id||"",c.nome||"",c.empresa||"",c.cnpj||"",c.cargo||"",c.telefone||"",c.whatsapp||"",c.email||""]));csv(rows,`Jordan_Modelo_Pessoas_${new Date().toISOString().slice(0,10)}.csv`);}catch(x){alert("Não consegui baixar os contatos: "+x.message);}}} style={{width:"100%",marginBottom:8,padding:"9px",fontSize:12,fontWeight:600,background:S.pri+"18",border:`1px solid ${S.pri}66`,color:S.pl,borderRadius:9,cursor:"pointer"}}>📥 Baixar modelo (pessoas)</button>
-          <input type="file" accept=".csv" onChange={async e=>{const file=e.target.files?.[0];if(!file)return;const text=await file.text();const rows=parseCSV(text);const hdr=(rows[0]||[]).map(h=>h.toLowerCase());const ix=n=>hdr.findIndex(h=>h.includes(n));const iId=ix("id"),iNome=ix("nome"),iCnpj=ix("cnpj"),iCargo=ix("cargo"),iTel=ix("telefone"),iWa=ix("whats"),iMail=ix("mail");const body=rows.slice(1).map(c=>({id:iId>=0?(c[iId]||"").trim():"",nome:iNome>=0?(c[iNome]||"").trim():"",cnpj:iCnpj>=0?soDig(c[iCnpj]):"",cargo:iCargo>=0?(c[iCargo]||"").trim():"",telefone:iTel>=0?(c[iTel]||"").trim():"",whatsapp:iWa>=0?(c[iWa]||"").trim():"",email:iMail>=0?(c[iMail]||"").trim():""})).filter(r=>r.id||(r.nome&&r.cnpj));if(!body.length){alert("CSV vazio ou inválido.\nUse o modelo baixado (Pessoas).");e.target.value="";return;}if(!confirm(`Processar ${body.length} contatos?\nCom ID = atualizar · sem ID = criar novo.`)){e.target.value="";return;}let upd=0,cri=0,fail=0,notfound=0;const log=[];for(const r of body){try{if(r.id){await fetch(`${DASH}/api/crm/contatos`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({id:r.id,nome:r.nome,cargo:r.cargo,telefone:r.telefone,whatsapp:r.whatsapp,email:r.email})});upd++;log.push(`✏️ ${r.nome.slice(0,28)}`);}else{const org=allOrgs.find(o=>soDig(o.cnpj)===r.cnpj);if(!org){notfound++;log.push(`⚠️ ${r.nome.slice(0,24)}: CNPJ ${r.cnpj} não achado`);continue;}await fetch(`${DASH}/api/crm/contatos`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({nome:r.nome,cargo:r.cargo,telefone:r.telefone,whatsapp:r.whatsapp,email:r.email,org_id:org.id,cnpj:r.cnpj||null})});cri++;log.push(`➕ ${r.nome.slice(0,28)} → ${(org.name||"").slice(0,20)}`);}}catch(x){fail++;log.push(`❌ ${r.nome.slice(0,24)}: ${x.message}`);}}alert(`Concluído!\n✏️ ${upd} atualizados\n➕ ${cri} criados\n❌ ${fail} falharam\n⚠️ ${notfound} sem CNPJ\n\n${log.slice(0,20).join("\n")}${log.length>20?`\n... +${log.length-20} mais`:""}`);e.target.value="";}} style={{width:"100%",fontSize:11,padding:6}}/>
-        </div>
+    {/* Barra de filtros (card padrão mockup) */}
+    <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"12px 14px",marginBottom:16,display:"flex",flexWrap:"wrap",gap:10,alignItems:"center"}}>
+      {view==="lista"&&<>
+        <div style={{minWidth:200}}><SegTabs items={[["pending","Pendentes"],["done","Finalizadas"]]} value={filter} onChange={setFilter} size={12.5}/></div>
+        <div style={{width:1,height:22,background:S.brd}}/>
+        {[["all","Todas"],["week","Semana"],["today","Hoje"],["custom","Definir"]].map(([k,l])=><Chip key={k} on={period===k} color="var(--chrome)" onClick={()=>setPeriod(k)}>{l}</Chip>)}
       </>}
-      <button onClick={()=>{if(confirm("Deseja realmente desconectar?\nVoce precisara inserir o token novamente."))onLogout();}} style={{color:S.dng,marginTop:8}}>🚪 Desconectar</button>
+      {isAdmin&&<><div style={{width:1,height:22,background:S.brd}}/>
+      {[["all","Todos"],...USERS.map(u=>[String(u.id),u.n.split(" ")[0]])].map(([k,l])=><Chip key={k} on={String(userFilter)===k} color={S.acc} onClick={()=>setUserFilter(k)}>{l}</Chip>)}</>}
+      {view==="lista"&&period==="custom"&&<div style={{display:"flex",gap:6,alignItems:"center",flexBasis:"100%"}}><DateField value={customFrom} onChange={setCustomFrom} today={today} placeholder="De" style={{flex:1}}/><span style={{color:S.td,fontSize:11}}>a</span><DateField value={customTo} onChange={setCustomTo} today={today} placeholder="Até" style={{flex:1}}/></div>}
     </div>
+    {/* ── VISÃO CALENDÁRIO ── */}
+    {view==="calendario"&&<div style={{display:"grid",gridTemplateColumns:"minmax(0,340px) 1fr",gap:16,alignItems:"start"}}>
+      <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 16px 14px"}}>
+        <MonthCalendar value={calDay} today={today} marks={marks} onSelect={setCalDay}/>
+        <div style={{display:"flex",gap:12,marginTop:12,paddingTop:10,borderTop:`1px solid ${S.cl}`,fontSize:11,color:S.ts}}>
+          <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:S.gold}}/>Pendente</span>
+          <span style={{display:"flex",alignItems:"center",gap:5}}><span style={{width:7,height:7,borderRadius:"50%",background:S.dng}}/>Atrasada</span>
+        </div>
+      </div>
+      <div>
+        <div style={{fontSize:14,fontWeight:700,color:S.txt,margin:"2px 4px 12px"}}>{fD(calDay+"T12:00")} · {dayTasks.length} tarefa(s)</div>
+        {dayTasks.length?dayTasks.map(renderTask):<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"2rem",textAlign:"center",color:S.ts,fontSize:13}}>Nenhuma tarefa neste dia.</div>}
+      </div>
+    </div>}
+    {view==="lista"&&<>
+    {lo&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando...</p>}
+    {!lo&&filter==="pending"&&<>{overdue.length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"0 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.dng}}>⚠️ Atrasadas ({overdue.length})</span></div>{overdue.map(renderTask)}</>}
+      {todayT.filter(t=>!t.done).length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"14px 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.gold}}>📌 Hoje ({todayT.filter(t=>!t.done).length})</span></div>{todayT.filter(t=>!t.done).map(renderTask)}</>}
+      {futureT.length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"14px 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.pl}}>🗓️ Próximas ({futureT.length})</span></div>{futureT.map(renderTask)}</>}</>}
+    {!lo&&filter==="done"&&<>{doneT.length?doneT.map(renderTask):<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma finalizada no período</p>}</>}
+    {!lo&&!filtered.length&&filter==="pending"&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma tarefa pendente</p>}
+    </>}
+    {/* Add Task Modal */}
+    <TarefaModal open={showAdd} onClose={()=>setShowAdd(false)} token={token} user={user} allOrgs={allOrgs} onCreated={()=>{load();onCrmChange&&onCrmChange();}}/>
+    {showPart&&<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:70,display:"flex",alignItems:"center",justifyContent:"center",padding:16}} onClick={()=>setShowPart(false)}>
+      <div onClick={e=>e.stopPropagation()} style={{background:"var(--card-solid)",border:`1px solid ${S.brd}`,borderRadius:16,padding:"1.3rem",width:"100%",maxWidth:420}}>
+        <p style={{fontWeight:700,fontSize:15,margin:"0 0 4px"}}>🔒 Compromisso particular</p>
+        <p style={{fontSize:11.5,color:S.ts,margin:"0 0 12px"}}>Só você vê. Ao criar, abre automaticamente no Google Agenda para confirmar.</p>
+        <textarea rows={3} autoFocus placeholder="Ex.: Dentista, banco, reunião da escola..." value={pTxt} onChange={e=>setPTxt(e.target.value)} style={{width:"100%",boxSizing:"border-box",marginBottom:8}}/>
+        <div style={{display:"flex",gap:8,marginBottom:12}}>
+          <DateField value={pData} onChange={d=>setPData(d||todayLocal())} today={todayLocal()} style={{flex:1}}/>
+          <input type="time" value={pHora} onChange={e=>setPHora(e.target.value)} style={{width:110}}/>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>setShowPart(false)} style={{flex:1}}>Cancelar</button>
+          <button onClick={criarParticular} disabled={pLo||!pTxt.trim()} style={{flex:2,background:S.gold,border:"none",fontWeight:700,color:"#fff"}}>{pLo?"...":"Criar + Google Agenda"}</button>
+        </div>
+      </div>
     </div>}
   </div>);}
 
-export { ConfigTab };
+export { AgendaTab };

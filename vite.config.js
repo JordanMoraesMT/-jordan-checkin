@@ -1,45 +1,53 @@
-import { defineConfig } from 'vite'
-import react from '@vitejs/plugin-react'
-import { VitePWA } from 'vite-plugin-pwa'
-
-export default defineConfig({
-  plugins: [
-    react(),
-    VitePWA({
-      registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'apple-touch-icon.png', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'],
-      manifest: {
-        name: 'TeamCheck — Jordan Representações',
-        short_name: 'TeamCheck',
-        description: 'CRM + Força de Vendas — Jordan Representações Comerciais',
-        lang: 'pt-BR',
-        theme_color: '#0F1B2D',
-        background_color: '#0F1B2D',
-        display: 'standalone',
-        orientation: 'portrait',
-        start_url: '/',
-        icons: [
-          { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },
-          { src: 'icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
-        ]
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        maximumFileSizeToCacheInBytes: 4194304,
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/router\.project-osrm\.org/,
-            handler: 'CacheFirst',
-            options: { cacheName: 'osrm-routes', expiration: { maxEntries: 200, maxAgeSeconds: 86400 } }
-          },
-          {
-            urlPattern: /^https:\/\/[abc]\.tile\.openstreetmap\.org/,
-            handler: 'CacheFirst',
-            options: { cacheName: 'osm-tiles', expiration: { maxEntries: 500, maxAgeSeconds: 604800 } }
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0578A6" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Jordan Check-in" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <title>Jordan Check-in</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      (function () {
+        function fill() {
+          var r = document.getElementById('root');
+          if (!r) return;
+          r.style.position = 'fixed';
+          r.style.top = '0';
+          r.style.left = '0';
+          r.style.right = '0';
+          r.style.bottom = '0';
+          r.style.width = '100%';
+          r.style.maxWidth = 'none';
+          r.style.margin = '0';
+          r.style.overflowY = 'auto';
+          r.style.overflowX = 'hidden';
+          r.style.webkitOverflowScrolling = 'touch';
+        }
+        function patchScroll() {
+          var r = document.getElementById('root');
+          if (r && !window.__sp) {
+            window.__sp = true;
+            window.scrollTo = function (a) {
+              try { if (typeof a === 'object') r.scrollTo(a); else r.scrollTop = 0; }
+              catch (e) { r.scrollTop = 0; }
+            };
           }
-        ]
-      }
-    })
-  ]
-})
+        }
+        window.addEventListener('load', function () {
+          fill();
+          patchScroll();
+          window.addEventListener('resize', fill);
+          window.addEventListener('orientationchange', function () { setTimeout(fill, 200); });
+        });
+      })();
+    </script>
+  </body>
+</html>

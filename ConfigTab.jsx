@@ -1,73 +1,239 @@
-// TeamCheck — aba RotasTab
+// TeamCheck — Gestão de catálogos (admin): usuários, segmentos, status de clientes, indústrias
 import { useState, useEffect, useMemo } from "react";
-import { LUNCH_START, LUNCH_END, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hourDec, roadKm, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord } from "../lib";
-import { Kpi, DateField } from "../components";
+import { S, cfgApi, API } from "../lib";
 
-function RotasTab({sel,setSel,visits,dayBases,user,plocs}){
-  const[routes,setRoutes]=useState([]);const[lo,setLo]=useState(false);
-  const startBase=getBase(dayBases,sel,user?.id);
-  const endBase=getEnd(dayBases,sel,user?.id);
-  // FIX: only real visits from current user
-  const dvAll=useMemo(()=>{
-    const t=new Date(sel+"T12:00:00").toDateString();
-    return visits.filter(v=>new Date(v.checkinTime).toDateString()===t&&v.checkoutTime&&(!v.taskType||v.taskType==="VISITA")&&(!v.userName||v.userName===user?.name))
-      .sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
-  },[visits,sel,user?.name]);
-  const dv=useMemo(()=>dvAll.filter(v=>!v.divergent),[dvAll]);
-  useEffect(()=>{if(!dv.length){setRoutes([]);return;}let c=false;setLo(true);(async()=>{const s=[];
-    const fc=getVCoord(dv[0],plocs);
-    // Start base → first PDV
-    if(startBase&&fc)s.push({f:startBase.label||"Base",t:dv[0].orgName,tp:"bs",...await roadKm(startBase.lat,startBase.lng,fc.lat,fc.lng)});
-    // Between PDVs — skip same orgId consecutive
-    for(let i=0;i<dv.length-1;i++){const a=dv[i],b=dv[i+1];
-      if(a.orgId===b.orgId)continue;
-      const ca=getVEndCoord(a,plocs),cb=getVCoord(b,plocs);
-      if(ca&&cb)s.push({f:a.orgName,t:b.orgName,tp:hourDec(a.checkoutTime)>=LUNCH_START&&hourDec(b.checkinTime)<=LUNCH_END+1?"lch":"tr",...await roadKm(ca.lat,ca.lng,cb.lat,cb.lng)});}
-    // Last PDV → end base
-    const last=dv[dv.length-1];const eb=endBase||startBase;
-    const lc=getVEndCoord(last,plocs);
-    if(eb&&lc)s.push({f:last.orgName,t:eb.label||"Base",tp:"be",...await roadKm(lc.lat,lc.lng,eb.lat,eb.lng)});
-    if(!c){setRoutes(s);setLo(false);}})();return()=>{c=true;};},[dv,startBase,endBase,plocs]);
-  const totKm=routes.reduce((s,r)=>s+r.km,0);
-  // FIX: Jornada = primeiro check-in ao último check-out
-  const workH=dv.length?mins(dv[0].checkinTime,dv[dv.length-1].checkoutTime):0;
-  const dayMarks=useMemo(()=>{const m={};visits.forEach(v=>{if(isRealVisit(v)&&(!v.userName||v.userName===user?.name))m[toLocalDate(v.checkinTime)]=S.acc;});return m;},[visits,user?.name]);// v41: pontinhos nos dias com visita
-  return(<div>
-    <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:16,flexWrap:"wrap"}}>
-      <DateField value={sel} onChange={d=>setSel(d||todayLocal())} today={todayLocal()} marks={dayMarks} placeholder="Escolher dia" style={{minWidth:220}}/>
-      {startBase&&<span style={{fontSize:12.5,color:S.ts}}>Origem: <b style={{color:S.t2}}>{startBase.label||"Casa"}</b>{endBase&&endBase!==startBase?<> · Destino: <b style={{color:S.t2}}>{endBase.label||"Casa"}</b></>:""}</span>}
-    </div>
-    {dv.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(150px,1fr))",gap:12,marginBottom:16}}>
-      <Kpi k="Km" v={totKm.toFixed(1)} u="km"/>
-      <Kpi k="Jornada" v={hrsMin(workH)}/>
-      <Kpi k="Visitas" v={dv.length}/>
-      <Kpi k="Trechos de base" v={routes.filter(r=>r.tp==="bs"||r.tp==="be").reduce((s,r)=>s+r.km,0).toFixed(1)} u="km"/>
-    </div>}
-    {lo&&<p style={{color:S.ts,textAlign:"center",padding:"1rem 0"}}>Calculando rotas...</p>}{!dvAll.length&&!lo&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma visita</p>}
-    {dvAll.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"18px 20px"}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:10,flexWrap:"wrap"}}>
-        <span style={{fontSize:14,fontWeight:600,color:S.txt}}>Roteiro do dia</span>
-        {startBase&&dv.length>0&&<a href={`https://www.google.com/maps/dir/${startBase.lat},${startBase.lng}/${dv.map(v=>`${v.lat},${v.lng}`).join("/")}/${(endBase||startBase).lat},${(endBase||startBase).lng}`} target="_blank" rel="noopener" style={{fontSize:12.5,fontWeight:500,color:S.pl,textDecoration:"none"}}>📍 Abrir no Google Maps</a>}
-      </div>
-      {routes.find(r=>r.tp==="bs")&&<div style={{fontSize:12,color:S.pl,fontWeight:600,padding:"6px 0 10px",borderBottom:`1px dashed ${S.brd}`,marginBottom:6}}>{startBase?.label||"Casa"} → 1º PDV · {routes.find(r=>r.tp==="bs").km.toFixed(1)} km</div>}
-      <div style={{position:"relative",paddingLeft:4}}>
-        <div style={{position:"absolute",left:15,top:16,bottom:16,width:2,background:S.brd}}/>
-        {dvAll.map((v,i)=>{const seg=routes.find(r=>r.tp!=="bs"&&r.tp!=="be"&&r.f===v.orgName);return(<div key={i}>
-          <div style={{position:"relative",display:"flex",alignItems:"center",gap:12,padding:"9px 2px",background:v.divergent?S.dng+"12":"transparent",borderRadius:8}}>
-            <div style={{position:"relative",zIndex:1,width:24,height:24,borderRadius:"50%",background:v.divergent?S.dng:"var(--chrome)",color:"#fff",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 0 0 3px var(--card-solid)"}}>{v.divergent?"!":i+1}</div>
-            <div style={{flex:1,minWidth:0}}>
-              <p style={{fontSize:13.5,fontWeight:600,margin:0,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.orgName}{v.divergent&&<span style={{fontSize:10,color:S.dng,marginLeft:6,fontWeight:500}}>(deslocado {v.divDist}m)</span>}</p>
-              <p className="mono" style={{fontSize:11,color:S.td,margin:"2px 0 0"}}>{fT(v.checkinTime)} → {fT(v.checkoutTime)} · {hrsMin(mins(v.checkinTime,v.checkoutTime))}{v.divergent?" · não contabilizada":""}</p>
-            </div>
-            {seg&&<span className="mono" style={{fontSize:12,fontWeight:600,color:seg.tp==="lch"?S.gold:S.t2,flexShrink:0}}>{seg.tp==="lch"?"🍽 ":""}{seg.km.toFixed(1)} km</span>}
+const TIPOS = [
+  { id: "usuario",   l: "Usuários",   emo: "👤", temEmail: true,  temCor: false },
+  { id: "segmento",  l: "Segmentos",  emo: "🏷️", temEmail: false, temCor: false },
+  { id: "status",    l: "Status de clientes", emo: "🔖", temEmail: false, temCor: true },
+  { id: "industria", l: "Indústrias", emo: "🏭", temEmail: false, temCor: true },
+  { id: "cargo",     l: "Cargos",     emo: "💼", temEmail: false, temCor: false },
+  { id: "canal",     l: "Canais",     emo: "🛒", temEmail: false, temCor: false },
+  { id: "cargo_industria", l: "Cargos da indústria", emo: "🏭", temEmail: false, temCor: false },
+];
+const PALETA = ["#0AAEE8","#12C265","#8B5CF6","#06B6D4","#FFB020","#FF4D8D","#FB4B3A","#06C281"];
+
+function ConfigCatalogos({ token }) {
+  const [tab, setTab] = useState("usuario");
+  const [itens, setItens] = useState([]);
+  const [lo, setLo] = useState(false);
+  const [err, setErr] = useState("");
+  const [novo, setNovo] = useState(false);
+  const [edit, setEdit] = useState(null); // item em edição
+  const [form, setForm] = useState({ nome: "", email: "", cor: PALETA[0], admin: false });
+  const [convLo, setConvLo] = useState(null); // id do item convidando
+  const [delIt, setDelIt] = useState(null);   // item pedindo confirmação de exclusão
+  const [delTxt, setDelTxt] = useState("");   // texto digitado na confirmação
+  const [delAcesso, setDelAcesso] = useState(false); // remover o login junto (usuários)
+  const [delLo, setDelLo] = useState(false);
+
+  // Convite por e-mail: cria o acesso (login) no Worker e envia e-mail com código para definir a senha
+  const convidar = async (it) => {
+    let ex = {}; try { ex = it.extra ? JSON.parse(it.extra) : {}; } catch {}
+    const email = (ex.email || "").trim().toLowerCase();
+    if (!email) { alert("Este usuário não tem e-mail cadastrado. Edite e informe o e-mail primeiro."); return; }
+    if (!confirm(`Enviar convite de acesso para ${email}?\nO usuário receberá um e-mail com código para criar a própria senha.`)) return;
+    setConvLo(it.id);
+    try {
+      const r = await fetch(`${API}/admin/convidar`, { method: "POST", headers: { "X-Session": token, "Content-Type": "application/json" }, body: JSON.stringify({ email, nome: it.nome, admin: !!ex.admin, catId: it.id, userId: it.agendor_id || null }) });
+      const d = await r.json().catch(() => ({}));
+      if (r.ok && d.ok) { alert(`Convite enviado para ${email}!\nO usuário deve abrir o TeamCheck → "Primeiro acesso / tenho um código" e criar a senha.`); await carregar(); }
+      else alert("Não foi possível convidar: " + (d.error || r.status));
+    } catch (e) { alert("Erro de conexão: " + e.message); }
+    setConvLo(null);
+  };
+
+  const meta = useMemo(() => TIPOS.find(t => t.id === tab), [tab]);
+
+  const carregar = async () => {
+    setLo(true); setErr("");
+    try {
+      const r = await cfgApi(token, "GET");
+      setItens(Array.isArray(r?.itens) ? r.itens : (Array.isArray(r) ? r : []));
+    } catch (e) {
+      setErr("Não foi possível carregar os catálogos. Verifique a rota /api/config no Worker.");
+      setItens([]);
+    }
+    setLo(false);
+  };
+  useEffect(() => { if (token) carregar(); }, [token]);
+
+  const doTipo = itens.filter(i => i.tipo === tab).sort((a, b) => (a.ordem || 0) - (b.ordem || 0));
+
+  const abrirNovo = () => { setForm({ nome: "", email: "", cor: PALETA[0], admin: false }); setEdit(null); setNovo(true); };
+  const abrirEdit = (it) => {
+    let ex = {}; try { ex = it.extra ? JSON.parse(it.extra) : {}; } catch {}
+    setForm({ nome: it.nome || "", email: ex.email || "", cor: it.cor || PALETA[0], admin: !!ex.admin });
+    setEdit(it); setNovo(true);
+  };
+
+  const salvar = async () => {
+    if (!form.nome.trim()) { alert("Informe o nome."); return; }
+    const extra = {};
+    if (meta.temEmail) { extra.email = form.email || null; extra.admin = form.admin ? 1 : 0; }
+    const body = {
+      op: edit ? "update" : "create",
+      id: edit?.id,
+      tipo: tab,
+      nome: form.nome.trim(),
+      cor: meta.temCor ? form.cor : null,
+      extra: Object.keys(extra).length ? JSON.stringify(extra) : null,
+    };
+    try {
+      await cfgApi(token, "POST", body);
+      setNovo(false); setEdit(null);
+      await carregar();
+    } catch (e) { alert("Erro ao salvar: " + (e.body || e.message)); }
+  };
+
+  const excluir = async () => {
+    const it = delIt; if (!it) return;
+    if (delTxt.trim().toUpperCase() !== "EXCLUIR") { alert('Digite EXCLUIR para confirmar.'); return; }
+    let ex = {}; try { ex = it.extra ? JSON.parse(it.extra) : {}; } catch {}
+    setDelLo(true);
+    try {
+      await cfgApi(token, "POST", { op: "delete", id: it.id, email: ex.email || null, removerAcesso: delAcesso });
+      setDelIt(null); setDelTxt(""); setDelAcesso(false);
+      await carregar();
+    } catch (e) {
+      let msg = e.body || e.message;
+      try { const j = JSON.parse(e.body); if (j.error) msg = j.error; } catch {}
+      alert(msg);
+    }
+    setDelLo(false);
+  };
+
+  const alternarAtivo = async (it) => {
+    try { await cfgApi(token, "POST", { op: "toggle", id: it.id, ativo: it.ativo ? 0 : 1 }); await carregar(); }
+    catch (e) { alert("Erro: " + (e.body || e.message)); }
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, marginBottom: 16, flexWrap: "wrap" }}>
+        <div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: S.txt }}>Cadastros do sistema</div>
+          <div style={{ fontSize: 12, color: S.ts, marginTop: 2 }}>
+            {err || "Usuários, segmentos, status, canais, indústrias e cargos — a base do CRM"}
           </div>
-        </div>);})}
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={carregar} disabled={lo} style={{ width: 38, height: 38, borderRadius: 9, border: `1px solid ${S.inpBdr}`, background: S.inp, fontSize: 14, padding: 0 }}>{lo ? "…" : "🔄"}</button>
+          <button onClick={abrirNovo} style={{ display: "flex", alignItems: "center", gap: 7, background: "var(--chrome)", color: "#fff", border: "none", borderRadius: 8, padding: "9px 16px", fontSize: 13, fontWeight: 500, cursor: "pointer" }}>+ Adicionar</button>
+        </div>
       </div>
-      {routes.find(r=>r.tp==="be")&&<div style={{fontSize:12,color:S.pl,fontWeight:600,padding:"10px 0 6px",borderTop:`1px dashed ${S.brd}`,marginTop:6}}>Último → {endBase?.label||"Casa"} · {routes.find(r=>r.tp==="be").km.toFixed(1)} km</div>}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",background:S.cl,borderRadius:10,padding:"12px 16px",marginTop:10}}>
-        <span style={{fontSize:13,fontWeight:600,color:S.t2}}>Total percorrido</span>
-        <span className="mono" style={{fontSize:18,fontWeight:700,color:S.txt}}>{totKm.toFixed(1)} km</span>
-      </div>
-    </div>}</div>);}
 
-export { RotasTab };
+      {/* Abas dos tipos (segmentado padrão) */}
+      <div style={{ display: "flex", gap: 5, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 11, padding: 4, marginBottom: 16, flexWrap: "wrap" }}>
+        {TIPOS.map(t => (
+          <button key={t.id} onClick={() => { setTab(t.id); setNovo(false); }} style={{ flex: "1 1 120px", textAlign: "center", padding: "9px 6px", borderRadius: 8, fontSize: 13, fontWeight: tab === t.id ? 600 : 500, background: tab === t.id ? "var(--card-solid)" : "transparent", color: tab === t.id ? S.pl : S.ts, boxShadow: tab === t.id ? "0 1px 2px rgba(3,73,100,.14)" : "none", border: "none", cursor: "pointer" }}>
+            {t.emo} {t.l}
+          </button>
+        ))}
+      </div>
+
+      {/* Formulário novo/editar */}
+      {novo && (
+        <div style={{ background: S.card, border: `1px solid ${S.pri}55`, borderRadius: 14, padding: "16px 18px", marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 600, color: S.txt, marginBottom: 12 }}>{edit ? "Editar" : "Novo"} — {meta.l.replace(/s$/, "")}</div>
+          <div style={{ display: "grid", gridTemplateColumns: meta.temEmail ? "1fr 1fr" : "1fr", gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 11, color: S.ts, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>Nome</label>
+              <input value={form.nome} onChange={e => setForm(f => ({ ...f, nome: e.target.value }))} style={{ width: "100%", marginTop: 4 }} autoFocus />
+            </div>
+            {meta.temEmail && (
+              <div>
+                <label style={{ fontSize: 11, color: S.ts, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>E-mail (login)</label>
+                <input value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} style={{ width: "100%", marginTop: 4 }} />
+              </div>
+            )}
+          </div>
+          {meta.temEmail && (
+            <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 12, fontSize: 13, color: S.t2, cursor: "pointer" }}>
+              <input type="checkbox" checked={form.admin} onChange={e => setForm(f => ({ ...f, admin: e.target.checked }))} style={{ width: "auto" }} />
+              Administrador (vê comissões, equipe e edita metas)
+            </label>
+          )}
+          {meta.temCor && (
+            <div style={{ marginTop: 12 }}>
+              <label style={{ fontSize: 11, color: S.ts, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".05em" }}>Cor</label>
+              <div style={{ display: "flex", gap: 8, marginTop: 6, flexWrap: "wrap" }}>
+                {PALETA.map(c => (
+                  <button key={c} onClick={() => setForm(f => ({ ...f, cor: c }))} style={{ width: 30, height: 30, borderRadius: 8, background: c, border: form.cor === c ? "3px solid var(--t1)" : `1px solid ${S.brd}`, cursor: "pointer", padding: 0 }} />
+                ))}
+              </div>
+            </div>
+          )}
+          <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+            <button onClick={() => { setNovo(false); setEdit(null); }} style={{ flex: 1, padding: 10, borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.t2, fontSize: 13 }}>Cancelar</button>
+            <button onClick={salvar} style={{ flex: 2, padding: 10, borderRadius: 8, border: "none", background: S.acc, color: "#fff", fontSize: 13, fontWeight: 600 }}>{edit ? "Salvar alterações" : "Adicionar"}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Lista */}
+      {lo && <p style={{ color: S.ts, textAlign: "center", padding: "2rem 0" }}>Carregando…</p>}
+      {!lo && !doTipo.length && !err && <p style={{ color: S.ts, textAlign: "center", padding: "2rem 0" }}>Nenhum item cadastrado ainda.</p>}
+      <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+        {doTipo.map(it => {
+          let ex = {}; try { ex = it.extra ? JSON.parse(it.extra) : {}; } catch {}
+          return (
+            <div key={it.id} style={{ display: "flex", alignItems: "center", gap: 12, background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, padding: "12px 16px", opacity: it.ativo ? 1 : 0.5 }}>
+              {meta.temCor && <span style={{ width: 14, height: 14, borderRadius: 4, background: it.cor || S.td, flexShrink: 0 }} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: S.txt, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  {it.nome}
+                  {ex.admin ? <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 5, background: S.gold + "33", color: S.gold, fontWeight: 700 }}>ADMIN</span> : null}
+                  {!it.ativo && <span style={{ fontSize: 9, padding: "2px 6px", borderRadius: 5, background: S.td + "33", color: S.td, fontWeight: 700 }}>INATIVO</span>}
+                </div>
+                <div style={{ fontSize: 11.5, color: S.td, marginTop: 2 }}>
+                  {ex.email ? ex.email + " · " : ""}{it.agendor_id ? `ID origem #${it.agendor_id}` : "cadastro próprio"}
+                </div>
+              </div>
+              {meta.temEmail && <button onClick={() => convidar(it)} disabled={convLo === it.id} title="Enviar convite de acesso por e-mail" style={{ height: 32, borderRadius: 8, border: `1px solid ${S.acc}55`, background: S.inp, color: S.acc, cursor: "pointer", fontSize: 12, fontWeight: 600, padding: "0 10px" }}>{convLo === it.id ? "..." : "✉️ Convidar"}</button>}
+              <button onClick={() => abrirEdit(it)} title="Editar" style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: S.inp, cursor: "pointer", fontSize: 13, padding: 0 }}>✏️</button>
+              <button onClick={() => alternarAtivo(it)} title={it.ativo ? "Desativar" : "Reativar"} style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${it.ativo ? S.dng : S.acc}55`, background: S.inp, color: it.ativo ? S.dng : S.acc, cursor: "pointer", fontSize: 14, padding: 0 }}>{it.ativo ? "⏻" : "↻"}</button>
+              <button onClick={() => { setDelIt(it); setDelTxt(""); setDelAcesso(false); }} title="Excluir de vez" style={{ width: 32, height: 32, borderRadius: 8, border: `1px solid ${S.dng}55`, background: S.dng + "12", color: S.dng, cursor: "pointer", fontSize: 13, padding: 0 }}>🗑️</button>
+            </div>
+          );
+        })}
+      </div>
+
+      {delIt && (() => { let ex = {}; try { ex = delIt.extra ? JSON.parse(delIt.extra) : {}; } catch {}
+        return (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 60, padding: 16 }}>
+          <div style={{ background: S.cardSolid, borderRadius: 16, padding: 22, width: "100%", maxWidth: 440, border: `1px solid ${S.dng}55` }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: S.dng, marginBottom: 6 }}>Excluir de vez?</div>
+            <p style={{ fontSize: 13, color: S.txt, margin: "0 0 8px", lineHeight: 1.5 }}>
+              Você vai apagar <b>{delIt.nome}</b> de <b>{meta.l}</b>. Isso <b>não tem volta</b>.
+            </p>
+            <p style={{ fontSize: 11.5, color: S.ts, margin: "0 0 12px", lineHeight: 1.5 }}>
+              Se o item ainda estiver em uso por algum cliente, contato ou venda, a exclusão será recusada —
+              nesse caso use <b>⏻ Desativar</b>, que esconde das listas e preserva o histórico.
+            </p>
+            {meta.temEmail && ex.email && (
+              <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, fontSize: 12.5, color: S.t2, cursor: "pointer" }}>
+                <input type="checkbox" checked={delAcesso} onChange={e => setDelAcesso(e.target.checked)} />
+                Remover também o acesso de login ({ex.email})
+              </label>
+            )}
+            <label style={{ fontSize: 11.5, color: S.ts }}>Digite <b>EXCLUIR</b> para confirmar</label>
+            <input value={delTxt} onChange={e => setDelTxt(e.target.value)} placeholder="EXCLUIR" autoFocus style={{ width: "100%", marginTop: 4 }} />
+            <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
+              <button onClick={() => { setDelIt(null); setDelTxt(""); }} style={{ flex: 1 }}>Cancelar</button>
+              <button onClick={excluir} disabled={delLo || delTxt.trim().toUpperCase() !== "EXCLUIR"} style={{ flex: 1, background: delTxt.trim().toUpperCase() === "EXCLUIR" ? S.dng : S.cl, border: "none", color: "#fff", fontWeight: 600 }}>{delLo ? "..." : "Excluir"}</button>
+            </div>
+          </div>
+        </div>); })()}
+
+      <p style={{ fontSize: 11, color: S.td, marginTop: 16, lineHeight: 1.6 }}>
+        Estes cadastros vivem no banco do TeamCheck (D1) e são a base de catálogos do CRM.
+        <b> ⏻ Desativar</b> preserva o histórico (nada é apagado) e some das listas; <b>🗑️ Excluir</b> apaga de vez,
+        e só funciona se ninguém mais estiver usando o item. Itens com "ID origem #" vieram da importação inicial.
+        Em Usuários, o botão ✉️ Convidar cria o acesso de login e envia um e-mail com código para o próprio usuário definir a senha (vale por 48 horas). Empresas com segmento <b>Indústria</b> usam a lista <b>Cargos da indústria</b> — os cargos de PDV não aparecem para elas.
+      </p>
+    </div>
+  );
+}
+
+export { ConfigCatalogos };
