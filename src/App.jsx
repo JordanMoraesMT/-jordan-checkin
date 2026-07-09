@@ -1,7 +1,7 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact } from "lucide-react";
-import { API, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
+import { API, USERS, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
 import { Login, Banner, NoteModal, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 const RelatorioTab=lazy(()=>import("./tabs/RelatorioTab").then(m=>({default:m.RelatorioTab})));// recharts só carrega ao abrir o Relatório
@@ -170,7 +170,14 @@ export default function App(){
 
   const ensureBase=()=>{const t=todayLocal();const k=user.id+"_"+t;if(!dayBases[k]||(!dayBases[k].start&&!dayBases[k].lat))setShowDB(true);};
   // (derivados de filtro de PDV movidos para PdvsTab)
-  const usersList=useMemo(()=>{const m={};orgs.forEach(o=>{if(o.ownerId&&o.owner)m[o.ownerId]=o.owner;});return Object.entries(m).map(([id,n])=>({id:parseInt(id),n}));},[orgs]);
+  // Responsáveis = cadastro de Usuários (config_catalogo). Antes vinha de o.ownerId dos clientes,
+  // que o Worker devolve sempre nulo — a lista nascia vazia e o dropdown ficava sem nomes.
+  const usersList=useMemo(()=>{
+    const m={};
+    (USERS||[]).forEach(u=>{if(u.id&&u.n)m[u.id]=u.n;});
+    orgs.forEach(o=>{if(o.ownerId&&o.owner)m[o.ownerId]=o.owner;}); // reserva
+    return Object.entries(m).map(([id,n])=>({id:parseInt(id),n})).sort((a,b)=>a.n.localeCompare(b.n));
+  },[orgs,syncing]);
 
   // (lastVisits/visitsByOrg/fo/proximidade/toggleCat movidos para PdvsTab)
   // Grava atividade no CRM próprio (D1) em segundo plano — nunca bloqueia o fluxo.
@@ -332,7 +339,7 @@ export default function App(){
       onFound={(org)=>{setTab("pdvs");setFocusReq({id:org.id||null,name:org.name||org.nickname,t:Date.now()});}}
       onNewClient={(cnpj,rfData)=>{sS("jc:prefill",{cnpj,rfData});setNewClient(true);}}
       onCancel={()=>setSearchAdd(false)}/>}
-    {newClient&&<NewClientModal token={token} allOrgs={allOrgs} onSave={org=>{setOrgs(p=>[org,...p]);setAllOrgs(p=>[org,...p]);setNewClient(false);}} onCancel={()=>setNewClient(false)}/>}
+    {newClient&&<NewClientModal token={token} user={user} users={usersList} allOrgs={allOrgs} onSave={org=>{setOrgs(p=>[org,...p]);setAllOrgs(p=>[org,...p]);setNewClient(false);}} onCancel={()=>setNewClient(false)}/>}
     {personTarget&&<PeopleModal org={personTarget} token={token} onClose={()=>setPersonTarget(null)}/>}
     {editTarget&&<EditModal org={editTarget} token={token} users={usersList} allOrgs={allOrgs} onSave={u=>{setOrgs(p=>p.map(o=>o.id===u.id?u:o));setAllOrgs(p=>p.map(o=>o.id===u.id?u:o));setEditTarget(null);}} onClose={()=>setEditTarget(null)}/>}
     {divTarget&&<DivergentModal org={divTarget.org} dist={divTarget.dist} onAction={handleDivAction} onCancel={()=>setDivTarget(null)}/>}
