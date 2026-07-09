@@ -9,6 +9,7 @@ const TIPOS = [
   { id: "industria", l: "Indústrias", emo: "🏭", temEmail: false, temCor: true },
   { id: "cargo",     l: "Cargos",     emo: "💼", temEmail: false, temCor: false },
   { id: "canal",     l: "Canais",     emo: "🛒", temEmail: false, temCor: false },
+  { id: "cargo_industria", l: "Cargos da indústria", emo: "🏭", temEmail: false, temCor: false },
 ];
 const PALETA = ["#0AAEE8","#12C265","#8B5CF6","#06B6D4","#FFB020","#FF4D8D","#FB4B3A","#06C281"];
 
@@ -229,7 +230,7 @@ function ConfigCatalogos({ token }) {
         Estes cadastros vivem no banco do TeamCheck (D1) e são a base de catálogos do CRM.
         <b> ⏻ Desativar</b> preserva o histórico (nada é apagado) e some das listas; <b>🗑️ Excluir</b> apaga de vez,
         e só funciona se ninguém mais estiver usando o item. Itens com "ID origem #" vieram da importação inicial.
-        Em Usuários, o botão ✉️ Convidar cria o acesso de login e envia um e-mail com código para o próprio usuário definir a senha (vale por 48 horas).
+        Em Usuários, o botão ✉️ Convidar cria o acesso de login e envia um e-mail com código para o próprio usuário definir a senha (vale por 48 horas). Empresas com segmento <b>Indústria</b> usam a lista <b>Cargos da indústria</b> — os cargos de PDV não aparecem para elas.
       </p>
     </div>
   );
