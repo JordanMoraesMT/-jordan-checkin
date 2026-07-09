@@ -63,7 +63,10 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
     try{await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:np})});}catch(e){}
     setGpsRec("");onSyncPull&&onSyncPull();alert(`${ids.length} localização(ões) recuperadas! Abra o Mapa para conferir.`);
   };
-  // ── Extensão do WhatsApp: grava a pasta pronta no computador (sem zip, sem descompactar) ──
+  // ── Extensão do WhatsApp ──
+  // Instalação com 1 clique só existe via Chrome Web Store (o Chrome bloqueia instalação automática
+  // por site). Assim que a extensão for publicada (modo "Não listado"), cole o link dela aqui:
+  const EXT_STORE_URL=""; // ex.: "https://chromewebstore.google.com/detail/abcdefghijklmnop"
   const EXT_ARQS=["manifest.json","background.js","content.js","panel.css","icon128.png"];
   const[extMsg,setExtMsg]=useState("");
   const baixarExtensao=async()=>{
@@ -128,7 +131,9 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
       <ARow emo={("Notification"in window&&Notification.permission==="granted")?"🔔":"🔕"} t={("Notification"in window&&Notification.permission==="granted")?"Notificações ativadas":"Ativar notificações"} d="Lembretes de tarefas agendadas" color={("Notification"in window&&Notification.permission==="granted")?S.ok:S.gold} onClick={()=>{if(!("Notification"in window)){alert("Navegador nao suporta notificacoes");return;}Notification.requestPermission().then(p=>{if(p==="granted")alert("Notificacoes ativadas! Voce recebera lembretes de tarefas agendadas.");else alert("Notificacoes bloqueadas. Ative nas configuracoes do navegador.");});}}/>
       {user?.role==="admin"&&<ARow emo="🛰️" t={gpsRec||"Recuperar GPS das visitas"} d="Reconstrói a localização de clientes (Sinop, Sorriso, Lucas, Nova Mutum...) a partir das coordenadas das visitas antigas" onClick={gpsRec?undefined:recuperaGps} disabled={!!gpsRec}/>}
       <ARow emo="📲" t={jaInstalado?"Aplicativo instalado ✓":"Instalar aplicativo no celular"} d={jaInstalado?"Você já está usando o TeamCheck instalado":"Ícone próprio na tela inicial — funciona como app (Android e iPhone)"} color={jaInstalado?S.ok:undefined} onClick={jaInstalado?undefined:instalar} disabled={jaInstalado}/>
-      <ARow emo="🧩" t={extMsg||"Baixar extensão do WhatsApp"} d="Grava a pasta pronta no seu computador (sem zip, sem descompactar). Depois é só 'Carregar sem compactação' no Chrome." color={S.gold} onClick={extMsg?undefined:baixarExtensao} disabled={!!extMsg}/>
+      {EXT_STORE_URL
+        ? <ARow emo="🧩" t="Instalar extensão do WhatsApp" d="1 clique: abre a Chrome Web Store e é só tocar em 'Usar no Chrome'." color={S.gold} onClick={()=>window.open(EXT_STORE_URL,"_blank")}/>
+        : <ARow emo="🧩" t={extMsg||"Baixar extensão do WhatsApp"} d="Grava a pasta pronta no seu computador (sem zip, sem descompactar). Depois é só 'Carregar sem compactação' no Chrome." color={S.gold} onClick={extMsg?undefined:baixarExtensao} disabled={!!extMsg}/>}
       </div>
 
       {/* Admin area (Jordan only) */}

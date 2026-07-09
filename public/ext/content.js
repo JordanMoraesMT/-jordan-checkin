@@ -7,6 +7,14 @@
   const DASH = "https://dashboard.jordanmt.com";
   const TC = "https://teamcheck.jordanmt.com";
   let session = null, aberto = true, contatos = null, ultimaChave = "", bootOk = false;
+  let chaveAtual = ""; // chave da conversa aberta (telefone ou "n:"+nome)
+
+  // ── 📌 fixação: lembra qual contato é o certo para cada conversa (fica salvo no navegador) ──
+  const FIXKEY = "tcxFix";
+  const fixAll = () => new Promise(r => { try { chrome.storage.local.get(FIXKEY, d => r((d && d[FIXKEY]) || {})); } catch (e) { r({}); } });
+  async function fixGet(ch) { if (!ch) return null; const m = await fixAll(); return m[ch] || null; }
+  async function fixSet(ch, dados) { if (!ch) return; const m = await fixAll(); m[ch] = dados; return new Promise(r => { try { chrome.storage.local.set({ [FIXKEY]: m }, r); } catch (e) { r(); } }); }
+  async function fixDel(ch) { if (!ch) return; const m = await fixAll(); delete m[ch]; return new Promise(r => { try { chrome.storage.local.set({ [FIXKEY]: m }, r); } catch (e) { r(); } }); }
 
   const $ = (s, r) => (r || document).querySelector(s);
   const $$ = (s, r) => Array.from((r || document).querySelectorAll(s));
@@ -177,6 +185,8 @@
   async function renderFicha(achados, origem, telCtx) {
     pushView("ficha:" + (achados[0] && achados[0].id), () => renderFicha(achados, origem, telCtx));
     const pessoa = achados[0];
+    const _fx = await fixGet(chaveAtual);
+    const fixadoAqui = !!(_fx && pessoa.id && _fx.id === pessoa.id);
     const vistos = new Set(), empresas = [];
     for (const c of achados) {
       const chave = String(c.org_id || c.cnpj || c.empresa || "");
@@ -217,6 +227,7 @@
       <div class="tcx-ficha">
         ${btnVoltarHtml()}
         ${origem ? `<p class="tcx-data" style="margin:0 0 8px">${esc(origem)}</p>` : ""}
+        ${fixadoAqui ? `<div class="tcx-msg" style="text-align:left;padding:6px 10px;margin:0 0 8px;background:rgba(200,150,78,.12);border-radius:8px;font-size:11.5px">📌 <b>${esc(pessoa.nome || "")}</b> está fixado como o cliente desta conversa. <button id="tcx-unfix" style="background:none;border:none;color:#C8964E;font-weight:700;cursor:pointer;padding:0;font-size:11.5px;text-decoration:underline">Desfazer</button></div>` : (chaveAtual ? `<button class="tcx-mini" id="tcx-fix" title="Da próxima vez que esta conversa abrir, vou direto para esta ficha">📌 Fixar ${esc((pessoa.nome || "este cliente").split(" ")[0])} como o cliente desta conversa</button>` : "")}
         <div class="tcx-bloco">
           <p class="tcx-bt">Contato</p>
           <p class="tcx-nome" style="font-size:15px;margin:0 0 2px">${esc(pessoa.nome || "")}</p>
@@ -251,6 +262,8 @@
     const g = $("#tcx-ger", corpo); if (g) g.onclick = () => telaGerenciar(telCtx);
     const ag = $("#tcx-agendar", corpo); if (ag) ag.onclick = () => telaAgendar(pessoa, () => renderFicha(achados, origem, telCtx));
     const v = $("#tcx-vinc", corpo); if (v) v.onclick = () => telaVincular(pessoa, () => { contatos = null; telCtx ? mostraFichaTel(telCtx) : renderFicha(achados, origem, telCtx); });
+    const fx = $("#tcx-fix", corpo); if (fx) fx.onclick = async () => { await fixSet(chaveAtual, { id: pessoa.id, nome: pessoa.nome || "" }); renderFicha(achados, origem, telCtx); };
+    const ufx = $("#tcx-unfix", corpo); if (ufx) ufx.onclick = async () => { await fixDel(chaveAtual); renderFicha(achados, origem, telCtx); };
   }
 
   // agrupa registros por PESSOA (nome normalizado)
@@ -340,7 +353,11 @@
         <button class="tcx-sec" id="tcx-cad-g">➕ Cadastrar novo contato com este número</button>
         <button class="tcx-sec" id="tcx-volta">‹ Voltar</button>
       </div>`;
-    $$(".tcx-pessoa-btn", corpo).forEach(b => b.onclick = () => mostraFichaContato(achados[Number(b.dataset.i)], ""));
+    $$(".tcx-pessoa-btn", corpo).forEach(b => b.onclick = async () => {
+      const c = achados[Number(b.dataset.i)];
+      if (chaveAtual && c.id) await fixSet(chaveAtual, { id: c.id, nome: c.nome || "" });
+      mostraFichaContato(c, chaveAtual ? "📌 Salvo para esta conversa" : "");
+    });
     $$(".tcx-del", corpo).forEach(b => b.onclick = async () => {
       const c = achados[Number(b.dataset.del)];
       if (!confirm(`Excluir "${c.nome}"${c.empresa ? " (" + c.empresa + ")" : ""} do CRM?`)) return;
@@ -486,8 +503,8 @@
   }
 
   // busca manual (🔍)
-  async function telaBusca(inicial, aviso) {
-    pushView("busca:" + (inicial || ""), () => telaBusca(inicial, aviso));
+  async function telaBusca(inicial, aviso, fixarChave) {
+    pushView("busca:" + (inicial || ""), () => telaBusca(inicial, aviso, fixarChave));
     corpo.innerHTML = `
       <div class="tcx-ficha">
         ${aviso ? `<div class="tcx-msg" style="text-align:left;padding:0 0 8px">${aviso}</div>` : ""}
@@ -513,7 +530,11 @@
           <span class="tcx-opt-sub">${esc(c.empresa || "")}</span>
         </button>`).join("");
       res.insertAdjacentHTML("beforeend", `<button class="tcx-sec" id="tcx-cad-l">➕ Nenhum é o certo — cadastrar novo contato</button>`);
-      $$("button[data-i]", res).forEach(b => b.onclick = () => mostraFichaContato(cands[Number(b.dataset.i)], "Busca: " + termo));
+      $$("button[data-i]", res).forEach(b => b.onclick = async () => {
+        const c = cands[Number(b.dataset.i)];
+        if (fixarChave && c.id) await fixSet(fixarChave, { id: c.id, nome: c.nome || "" }); // escolheu = fica salvo
+        mostraFichaContato(c, fixarChave ? "📌 Salvo para esta conversa" : "Busca: " + termo);
+      });
       const cl = $("#tcx-cad-l", res); if (cl) cl.onclick = () => telaNovoContato(termo, dig(termo).length >= 8 ? termo : (telefoneDoChat() || ""));
     };
     go.onclick = roda;
@@ -529,8 +550,18 @@
     const chave = tel || ("n:" + nome);
     if (!tel && !nome) { if (forca || !ultimaChave) msg("Abra uma conversa para ver a ficha do cliente."); ultimaChave = ""; return; }
     if (chave === ultimaChave && !forca) return;
-    ultimaChave = chave;
+    ultimaChave = chave; chaveAtual = chave;
     pilha.length = 0; // conversa mudou → zera o histórico do Voltar
+    // 📌 escolha salva? vai direto — sem perguntar de novo
+    const fx = await fixGet(chave);
+    if (fx && fx.id) {
+      try {
+        const cts0 = await carregaContatos();
+        const c0 = cts0.find(x => x.id === fx.id);
+        if (c0) return mostraFichaContato(c0, "📌 Fixado para esta conversa");
+        await fixDel(chave); // contato foi excluído do CRM → limpa e segue o fluxo normal
+      } catch (e) { if (e.status === 401) { if (await trata401()) return atualiza(true); return; } }
+    }
     if (tel) return mostraFichaTel(tel);
     if (dig(nome).length >= 10) return mostraFichaTel(dig(nome));
     msg(`Procurando <b>${esc(nome)}</b> no CRM…`);
@@ -543,7 +574,7 @@
     if (cands.length === 1 || tels.size === 1) return mostraFichaContato(cands[0], "Conversa: " + nome);
     // vários — reusar a lista da busca
     corpo.innerHTML = "";
-    telaBusca(nome, `Conversa: <b>${esc(nome)}</b> — escolha o cliente:`);
+    telaBusca(nome, `Conversa: <b>${esc(nome)}</b> — escolha o cliente <span style="opacity:.75">(a escolha fica salva)</span>:`, chave);
   }
 
   const obs = new MutationObserver(() => { clearTimeout(obs._t); obs._t = setTimeout(() => { if (bootOk) atualiza(false); }, 600); });
