@@ -726,7 +726,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   const carregaFeed = async () => { setLd(true); setErro("");
     try {
       const desde = new Date(Date.now() - fDias * 86400000).toISOString().slice(0, 10);
-      const ps = new URLSearchParams({ limit: "1000", desde });
+      const ps = new URLSearchParams({ limit: "1000", desde, ocultarExcluidos: "1" });
       const d = await crm(token, "/api/crm/atividades?" + ps.toString());
       setFeed(d.atividades || []);
     } catch (e) { setErro(e.message); }
