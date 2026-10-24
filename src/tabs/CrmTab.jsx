@@ -2,7 +2,7 @@
 // CRM próprio: histórico de atividades, contatos, fotos/arquivos da loja e GPS.
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset } from "lucide-react";
+import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal } from "lucide-react";
 import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
@@ -587,7 +587,14 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const [fCat, setFCat] = useState(arr(p0.fCat)); const [fResp, setFResp] = useState(() => p0.fResp !== undefined ? arr(p0.fResp) : (user?.name ? [user.name] : []));/* v43: pré-seleção do usuário */
   const [fRfv, setFRfv] = useState(arr(p0.fRfv)); const [fGrp, setFGrp] = useState(arr(p0.fGrp)); const [fSr, setFSr] = useState(arr(p0.fSr)); const [fCid, setFCid] = useState(arr(p0.fCid)); // v41: Grupo no lugar da Curva ABC
   const [fCanal, setFCanal] = useState(arr(p0.fCanal)); // v64: canal de venda
-  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal]);
+  const [fCtt, setFCtt] = useState(arr(p0.fCtt)); // v85: com/sem pessoa de contato
+  const [filtAberto, setFiltAberto] = useState(false);
+  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt]);
+  // v85: quem tem pessoa de contato (carrega só quando o filtro de contato é usado)
+  const [cttSet, setCttSet] = useState(null);
+  useEffect(() => { if (!fCtt.length || cttSet || !token) return; let vivo = true;
+    crm(token, "/api/crm/contatos-todos?limit=5000").then(d => { if (!vivo) return; const ids = new Set(), cn = new Set(); (d.contatos || []).forEach(c => { if (c.org_id) ids.add(Number(c.org_id)); const k = soDig(c.cnpj); if (k) cn.add(k); }); setCttSet({ ids, cn }); }).catch(() => setCttSet({ ids: new Set(), cn: new Set() }));
+    return () => { vivo = false; }; }, [fCtt, cttSet, token]);
   const [ordem, setOrdem] = useState(1); // 1 = A→Z, -1 = Z→A
   const [vc, setVc] = useState(60);
   const resps = useMemo(() => { const s = new Set(USERS.map(u => u.n)); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
@@ -603,10 +610,12 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     if (fCanal.length) l = l.filter(o => fCanal.includes(o.canal || "Presencial"));
     if (fCid.length) l = l.filter(o => fCid.includes(o.addr?.city_name || o.addr?.city));
     if (fGrp.length) l = l.filter(o => fGrp.includes(((o.grupo || "").replace("Grupo: ", "")).trim()));
+    if (fCtt.length && cttSet) { const tem = o => cttSet.ids.has(Number(o.id)) || (soDig(o.cnpj) && cttSet.cn.has(soDig(o.cnpj)));
+      l = l.filter(o => (fCtt.includes("Com pessoa de contato") && tem(o)) || (fCtt.includes("Sem pessoa de contato") && !tem(o))); }
     if (fRfv.length || fSr.length) l = l.filter(o => { const r = rfvDe(o); if (!r) return false;
       if (fRfv.length && !fRfv.includes(r.rfv)) return false; if (fSr.length && !fSr.includes(r.status)) return false; return true; });
     return [...l].sort((a, b) => ordem * (a.nickname || a.name || "").localeCompare(b.nickname || b.name || ""));
-  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, ordem, rfv]);
+  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, fCtt, cttSet, ordem, rfv]);
   const th = { textAlign: "left", padding: "10px 10px", fontSize: 12.5, fontWeight: 600, color: S.t2, whiteSpace: "nowrap", borderBottom: `1px solid ${S.brd}`, position: "sticky", top: 0, background: S.cardSolid, zIndex: 1 };
   const td = { padding: "10px 10px", fontSize: 13, color: S.txt, borderBottom: `1px solid ${S.brd}`, whiteSpace: "nowrap", verticalAlign: "middle" };
 
@@ -691,24 +700,33 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       <p style={{ margin: 0, fontSize: 12.5, color: S.ts }}>Exibindo <b style={{ color: S.txt }}>{Math.min(vc, lista.length)}</b> de <b style={{ color: S.txt }}>{lista.length}</b> empresas</p>
       <button onClick={onNovaEmpresa} style={{ display: "flex", alignItems: "center", gap: 5, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}><Plus size={14}/>Adicionar empresa</button>
     </div>
-    <div style={{ position: "relative", marginBottom: 8 }}>
-      <Search size={15} color={S.td} style={{ position: "absolute", left: 12, top: 12 }} />
-      <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Buscar por nome, CNPJ, bairro, cidade, e-mail ou telefone..." style={{ ...inp, paddingLeft: 34 }} />
+    {/* v85: busca + "Filtros · N" + etiquetas — mesmo padrão de PDVs e Análise */}
+    <div style={{ display: "flex", alignItems: "center", gap: 10, background: S.card, border: `1px solid ${S.brd}`, borderRadius: 8, padding: "0 12px", height: 46, marginBottom: 10 }}>
+      <Search size={17} strokeWidth={1.8} color="var(--t3)" style={{ flexShrink: 0 }} />
+      <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Nome, CNPJ, bairro, cidade, e-mail ou telefone" aria-label="Buscar empresa" style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", padding: 0, fontSize: 15 }} />
+      {q && <button onClick={() => { setQ(""); setVc(60); }} aria-label="Limpar busca" style={{ border: "none", padding: 4, color: S.ts, display: "flex", background: "transparent" }}><X size={16} /></button>}
     </div>
-    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-      <MultiSelect values={fCat} onChange={v => { setFCat(v); setVc(60); }} placeholder="Categoria" allLabel="todas" style={{ flex: 1 }} colorFor={c => CC[c] || S.pri} options={[...CATS, "Excluido"]} />
-      <MultiSelect values={fResp} onChange={v => { setFResp(v); setVc(60); }} placeholder="Responsável" allLabel="todos" style={{ flex: 1 }} options={resps} />
-    </div>
-    <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-      <MultiSelect values={fRfv} onChange={v => { setFRfv(v); setVc(60); }} placeholder="Classe RFV" allLabel="todas" style={{ flex: 1 }} options={["Campeão", "Leal", "Em Crescimento", "Em Risco", "Inativo"]} />
-      <MultiSelect values={fGrp} onChange={v => { setFGrp(v); setVc(60); }} placeholder="Grupo" allLabel="todos" style={{ flex: 1 }} options={gruposE} />
-    </div>
-    <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
-      <MultiSelect values={fSr} onChange={v => { setFSr(v); setVc(60); }} placeholder="Status Recompra" allLabel="todos" style={{ flex: 1 }} options={["Em Dia", "Momento de Recompra", "Atrasado"]} />
-      <MultiSelect values={fCid} onChange={v => { setFCid(v); setVc(60); }} placeholder="Cidade" allLabel="todas" style={{ flex: 1 }} options={cidades} />
-      <MultiSelect values={fCanal} onChange={v => { setFCanal(v); setVc(60); }} placeholder="Canal" allLabel="todos" style={{ flex: 1 }} options={CANAIS} />
-      <button onClick={() => { setFCat([]); setFResp([]); setFRfv([]); setFGrp([]); setFSr([]); setFCid([]); setFCanal([]); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
-    </div>
+    {(() => { const grupos = [[fCat, setFCat], [fResp, setFResp], [fCid, setFCid], [fCanal, setFCanal], [fGrp, setFGrp], [fRfv, setFRfv], [fSr, setFSr], [fCtt, setFCtt]];
+      const chips = grupos.flatMap(([vals, set]) => vals.map(v => ({ k: v, l: v, tira: () => { set(vals.filter(x => x !== v)); setVc(60); } })));
+      const limpar = () => { grupos.forEach(([, set]) => set([])); setVc(60); };
+      return (<>
+        <div style={{ display: "flex", gap: 6, alignItems: "center", overflowX: "auto", paddingBottom: 2, marginBottom: filtAberto ? 10 : 8 }}>
+          <button onClick={() => setFiltAberto(v => !v)} aria-expanded={filtAberto} style={{ flexShrink: 0, height: 36, padding: "0 12px", borderRadius: 18, display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, border: `1px solid ${filtAberto || chips.length ? S.txt : S.inpBdr}`, background: filtAberto || chips.length ? S.txt : "transparent", color: filtAberto || chips.length ? S.bg : S.txt, cursor: "pointer" }}><SlidersHorizontal size={14} strokeWidth={2} />Filtros{chips.length ? ` · ${chips.length}` : ""}</button>
+          {chips.map(c => <button key={c.k} onClick={c.tira} title="Remover filtro" style={{ flexShrink: 0, height: 36, padding: "0 10px 0 12px", borderRadius: 18, display: "flex", alignItems: "center", gap: 6, fontSize: 13, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.txt, whiteSpace: "nowrap", cursor: "pointer" }}>{c.l}<X size={12} strokeWidth={2.2} color="var(--t3)" /></button>)}
+          {chips.length > 1 && <button onClick={limpar} style={{ flexShrink: 0, height: 36, padding: "0 8px", border: "none", background: "transparent", color: S.ts, fontSize: 13, cursor: "pointer" }}>Limpar</button>}
+        </div>
+        {filtAberto && <div style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10, padding: 12, marginBottom: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 8 }}>
+          <MultiSelect values={fCat} onChange={v => { setFCat(v); setVc(60); }} placeholder="Categoria" allLabel="Todas" colorFor={c => CC[c] || S.pri} options={[...CATS, "Excluido"]} />
+          <MultiSelect values={fResp} onChange={v => { setFResp(v); setVc(60); }} placeholder="Responsável" allLabel="Todos" options={resps} />
+          <MultiSelect values={fCid} onChange={v => { setFCid(v); setVc(60); }} placeholder="Cidade" allLabel="Todas" options={cidades} />
+          <MultiSelect values={fCanal} onChange={v => { setFCanal(v); setVc(60); }} placeholder="Canal" allLabel="Todos" options={CANAIS} />
+          <MultiSelect values={fGrp} onChange={v => { setFGrp(v); setVc(60); }} placeholder="Grupo" allLabel="Todos" options={gruposE} />
+          <MultiSelect values={fRfv} onChange={v => { setFRfv(v); setVc(60); }} placeholder="Classe RFV" allLabel="Todas" options={["Campeão", "Leal", "Em Crescimento", "Em Risco", "Inativo"]} />
+          <MultiSelect values={fSr} onChange={v => { setFSr(v); setVc(60); }} placeholder="Recompra" allLabel="Todos" options={["Em Dia", "Momento de Recompra", "Atrasado"]} />
+          <MultiSelect values={fCtt} onChange={v => { setFCtt(v); setVc(60); }} placeholder="Contato" allLabel="Todos" options={["Sem pessoa de contato", "Com pessoa de contato"]} />
+        </div>}
+        {fCtt.length > 0 && !cttSet && <p style={{ fontSize: 12, color: S.ts, margin: "0 0 8px" }}>Carregando contatos…</p>}
+      </>); })()}
     <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10 }}>
       <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
         <thead><tr>

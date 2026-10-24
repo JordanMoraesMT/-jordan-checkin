@@ -217,7 +217,7 @@ export default function App(){
     const m={};((d&&d.atividades)||[]).forEach(a=>{const t=String(a.texto||"");if(a.origem==="tarefa"&&!a.concluida&&t.startsWith(PEND_PREFIXO)&&a.org_id){(m[a.org_id]=m[a.org_id]||[]).push(t.slice(PEND_PREFIXO.length));}});setPendMapa(m);}catch(e){console.warn("pendências:",e);}};
   useEffect(()=>{if(token&&user)carregaPend();},[token,user,crmBump]);// eslint-disable-line
   // v79: veredito da análise para o usuário (balão "perto daqui" e cartão da semana) — carrega em segundo plano
-  const[vereditos,setVereditos]=useState(null);const[semana,setSemana]=useState(null);
+  const[vereditos,setVereditos]=useState(null);const[semana,setSemana]=useState(null);const[atrasados,setAtrasados]=useState(null);
   const semanaChave=(()=>{const d=new Date();const dia=(d.getDay()+6)%7;d.setDate(d.getDate()-dia);return d.toISOString().slice(0,10);})();
   const[semanaFechada,setSemanaFechada]=useState(()=>sL("jc:semanaFechada","")===semanaChave);
   useEffect(()=>{if(!token||!user||!allOrgs.length||!rfvMap)return;let vivo=true;const t=setTimeout(async()=>{try{
@@ -230,8 +230,13 @@ export default function App(){
       const m={};A.linhas.forEach(l=>{m[l.id]=l.veredito;});setVereditos(m);
       const ordC={A:0,B:1,C:2,"Sem compra":3};
       const sem=A.linhas.filter(l=>l.veredito==="Rentável visitar").sort((a,b)=>(ordC[a.classe]-ordC[b.classe])||((b.diasSem??9999)-(a.diasSem??9999)));setSemana(sem);
+      // v85: clientes FORTES (classe A/B) acima do intervalo máximo sem visita de ninguém da equipe
+      const dEq=l=>{const u=ue[l.id];return u?Math.round((Date.parse(hoje+"T12:00:00Z")-Date.parse(u+"T12:00:00Z"))/86400000):null;};
+      const atr=A.linhas.filter(l=>(l.classe==="A"||l.classe==="B")&&l.veredito!=="Atender a distância").map(l=>({...l,dEq:dEq(l)})).filter(l=>l.dEq==null||l.dEq>l.max).sort((a,b)=>(ordC[a.classe]-ordC[b.classe])||((b.dEq??9999)-(a.dEq??9999)));setAtrasados(atr);
+      const idsAtr=new Set(atr.map(l=>l.id));
+      const itensEmail=[...atr.map(l=>({nome:"⚠ "+l.nome,local:["importante e atrasado",l.bairro,l.cidade].filter(Boolean).join(" · "),dias:l.dEq})),...sem.filter(l=>!idsAtr.has(l.id)).map(l=>({nome:l.nome,local:[l.bairro,l.cidade].filter(Boolean).join(" · "),dias:l.diasSem}))];
       // guarda a lista (só nomes, local e dias — nada de valores) para o e-mail de segunda-feira (worker v7)
-      try{fetch(`${API}?sync=semana_${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:{gerado:hoje,total:sem.length,itens:sem.slice(0,15).map(l=>({nome:l.nome,local:[l.bairro,l.cidade].filter(Boolean).join(" · "),dias:l.diasSem}))}})}).catch(()=>{});}catch{}
+      try{fetch(`${API}?sync=semana_${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:{gerado:hoje,total:itensEmail.length,atrasados:atr.length,itens:itensEmail.slice(0,15)}})}).catch(()=>{});}catch{}
     }catch(e){console.warn("análise em segundo plano:",e);}},6000);return()=>{vivo=false;clearTimeout(t);};},[token,user,allOrgs.length,!!rfvMap]);// eslint-disable-line
   const quickAction=(org)=>{if(!org)return;const cn=(org.cnpj||"").replace(/\D/g,"");setRemTarget({org,pend:[],lo:true});
     pendenciasDe(token,org.id,cn).then(pl=>setRemTarget(t=>t&&t.org.id===org.id?{...t,pend:pl,lo:false}:t)).catch(()=>setRemTarget(t=>t?{...t,lo:false}:t));};
@@ -384,16 +389,21 @@ export default function App(){
           <span style={{fontSize:13,fontWeight:600,color:S.gold,whiteSpace:"nowrap"}}>Ir ao cliente</span>
         </button>}
       </section>}
-      {tab==="pdvs"&&!semanaFechada&&semana&&semana.length>0&&<section aria-label="Valem visita esta semana" style={{border:`1px solid ${S.brd}`,borderRadius:10,background:S.card,padding:"12px 14px",marginBottom:12}}>
+      {tab==="pdvs"&&!semanaFechada&&((semana&&semana.length>0)||(atrasados&&atrasados.length>0))&&<section aria-label="Valem visita esta semana" style={{border:`1px solid ${atrasados&&atrasados.length?S.gold+"88":S.brd}`,borderRadius:10,background:S.card,padding:"12px 14px",marginBottom:12}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
           <div style={{flex:1,minWidth:0}}>
-            <p style={{margin:0,fontSize:15,fontWeight:700,color:S.txt}}>Valem visita esta semana: {semana.length}</p>
-            <p style={{margin:"3px 0 0",fontSize:13,color:S.t2,lineHeight:1.45}}>{semana.slice(0,5).map(l=>l.nome).join(" · ")}{semana.length>5?` e mais ${semana.length-5}`:""}</p>
+            {atrasados&&atrasados.length>0&&<div style={{marginBottom:semana&&semana.length?10:0}}>
+              <p style={{margin:0,fontSize:15,fontWeight:700,color:S.gold}}>Clientes importantes sem visita: {atrasados.length}</p>
+              <p style={{margin:"3px 0 0",fontSize:13,color:S.t2,lineHeight:1.45}}>{atrasados.slice(0,5).map(l=>`${l.nome} (${l.dEq==null?"nunca visitado":l.dEq+"d"})`).join(" · ")}{atrasados.length>5?` e mais ${atrasados.length-5}`:""}</p>
+              <p style={{margin:"3px 0 0",fontSize:11.5,color:S.ts}}>Classe A ou B acima do intervalo máximo ({[...new Map(atrasados.map(l=>[l.classe,l.max])).entries()].sort().map(([c,m])=>`${c}: ${m} dias`).join(" · ")}), contando visitas de toda a equipe.</p>
+            </div>}
+            {semana&&semana.length>0&&<><p style={{margin:0,fontSize:15,fontWeight:700,color:S.txt}}>Valem visita esta semana: {semana.length}</p>
+            <p style={{margin:"3px 0 0",fontSize:13,color:S.t2,lineHeight:1.45}}>{semana.slice(0,5).map(l=>l.nome).join(" · ")}{semana.length>5?` e mais ${semana.length-5}`:""}</p></>}
           </div>
           <button onClick={()=>{sS("jc:semanaFechada",semanaChave);setSemanaFechada(true);}} aria-label="Dispensar esta semana" style={{width:36,height:36,border:"none",background:"transparent",color:S.ts,fontSize:18,flexShrink:0}}>×</button>
         </div>
         <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
-          <button onClick={()=>{const K=`jc:rotaPlan:${user?.id||"x"}`;const p=sL(K,{});const ids=semana.filter(l=>plocs[l.id]).slice(0,30).map(l=>l.id);sS(K,{...p,owner:[user.name],sel:ids,plano:null});try{localStorage.setItem("jc:rotasModo","planejar");}catch{}setTab("rotas");}} style={{height:40,padding:"0 14px",fontSize:13.5,fontWeight:600,background:S.pri,border:"none",color:"#fff"}}>Planejar rota com eles</button>
+          <button onClick={()=>{const K=`jc:rotaPlan:${user?.id||"x"}`;const p=sL(K,{});const ids=[...new Set([...(atrasados||[]),...(semana||[])].filter(l=>plocs[l.id]).map(l=>l.id))].slice(0,30);sS(K,{...p,owner:[user.name],sel:ids,plano:null});try{localStorage.setItem("jc:rotasModo","planejar");}catch{}setTab("rotas");}} style={{height:40,padding:"0 14px",fontSize:13.5,fontWeight:600,background:S.pri,border:"none",color:"#fff"}}>Planejar rota com eles</button>
           <button onClick={()=>setTab("analise")} style={{height:40,padding:"0 14px",fontSize:13.5}}>Ver a lista</button>
         </div>
       </section>}
@@ -436,7 +446,7 @@ export default function App(){
     {/* BOTTOM NAV — só no celular (agilidade de campo); no desktop a navegação é a sidebar */}
     {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=>{const act=navAtivo(t.id);return <button key={t.id} onClick={()=>{if(t.id==="mapa")setMapaLigado(true);setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:act?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:act?700:400,color:act?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={act?2.2:1.6}/>{t.l}</button>;})}</div></div>}
 
-    {coTarget&&<NoteModal org={coTarget} pendencias={active&&coTarget.id===active.orgId?pendAtivas:[]} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
+    {coTarget&&<NoteModal token={token} org={coTarget} pendencias={active&&coTarget.id===active.orgId?pendAtivas:[]} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
     {sugestao&&sugestao.itens[sugestao.i]&&(()=>{const x=sugestao.itens[sugestao.i];const o=x.org;const g=plocs[o.id];return(<div role="status" aria-live="polite" style={{position:"fixed",left:12,right:12,bottom:mob?88:24,zIndex:55,display:"flex",justifyContent:"center",pointerEvents:"none"}}>
       <div style={{pointerEvents:"auto",width:"100%",maxWidth:460,background:S.cardSolid,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",boxShadow:"0 10px 30px rgba(0,0,0,.35)"}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
@@ -454,7 +464,7 @@ export default function App(){
           <button onClick={()=>{sS("jc:semSugestao",todayLocal());setSugestao(null);}} style={{flex:"1 1 100px",height:40,fontSize:12.5,border:"none",color:S.ts}}>Não sugerir hoje</button>
         </div>
       </div></div>);})()}
-    {remTarget&&<NoteModal remoto org={remTarget.org} pendencias={remTarget.pend} carregandoPend={remTarget.lo} onSave={remoteSave} onCancel={()=>setRemTarget(null)}/>}
+    {remTarget&&<NoteModal remoto token={token} org={remTarget.org} pendencias={remTarget.pend} carregandoPend={remTarget.lo} onSave={remoteSave} onCancel={()=>setRemTarget(null)}/>}
     {pendAlerta&&<PendenciasAlerta dados={pendAlerta} onClose={()=>setPendAlerta(null)}/>}
     {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const n={...p,[k]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
     {showEndDay&&<DayEndModal user={user} onSave={b=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const cur=p[k]||{};const n={...p,[k]:{...cur,end:b}};sS("jc:dayBases",n);return n;});setShowEndDay(false);}} onCancel={()=>setShowEndDay(false)}/>}
