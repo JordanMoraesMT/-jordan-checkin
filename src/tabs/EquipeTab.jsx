@@ -1,9 +1,9 @@
 // TeamCheck — aba EquipeTab (unificada com o Relatório: mesma base de visitas check-in/out)
-import { useState, useMemo } from "react";
-import { toLocalDate, todayLocal, USERS, HOMES, S, fT, fD, mins, hrsMin, hav, csv, getBase, getVCoord, getVEndCoord } from "../lib";
+import { useState, useMemo, useEffect } from "react";
+import { toLocalDate, todayLocal, USERS, HOMES, S, fT, fD, fD1, mins, hrsMin, hav, csv, getBase, getVCoord, getVEndCoord, DASH } from "../lib";
 import { Kpi, DateField, SearchSelect } from "../components";
 
-function EquipeTab({sel,setSel,plocs,dayBases,user,visits}){
+function EquipeTab({sel,setSel,plocs,dayBases,user,visits,token,bump}){
   // Usuário selecionado (dinâmico via catálogo). Default: 1º que não seja o admin logado.
   const[uid,setUid]=useState(()=>{const outros=USERS.filter(u=>String(u.id)!==String(user?.id));return String((outros[0]||USERS[0]||{id:743347}).id);});
   const selUser=useMemo(()=>USERS.find(u=>String(u.id)===String(uid))||{n:"—",id:uid},[uid]);
@@ -43,11 +43,26 @@ function EquipeTab({sel,setSel,plocs,dayBases,user,visits}){
   const firstCheckin=dayVisits.length?fT(dayVisits[0].checkinTime):"-";
   const withGps=dayVisits.filter(v=>getVCoord(v,plocs)).length;
 
+  // v74: atendimentos a distância (sem check-in) = atividades registradas no app (origem "teamcheck"),
+  // exceto notas. Dia em Cuiabá (UTC−4) → janela UTC 04:00 → 04:00 do dia seguinte (o D1 grava em UTC).
+  const[remotos,setRemotos]=useState([]);const[ldR,setLdR]=useState(false);const[erroR,setErroR]=useState("");
+  useEffect(()=>{if(!token||!sel)return;let vivo=true;setLdR(true);setErroR("");
+    const d0=new Date(sel+"T04:00:00Z"),d1=new Date(d0.getTime()+86400000);const f=d=>d.toISOString().slice(0,19).replace("T"," ");
+    fetch(`${DASH}/api/crm/atividades?desde=${encodeURIComponent(f(d0))}&ate=${encodeURIComponent(f(d1))}&limit=2000`,{headers:{"X-Session":token},cache:"no-store"})
+      .then(r=>r.json()).then(d=>{if(vivo)setRemotos((d&&d.atividades)||[]);}).catch(e=>{if(vivo)setErroR(String(e.message||e));}).finally(()=>{if(vivo)setLdR(false);});
+    return()=>{vivo=false;};},[token,sel,bump]);
+  const doUser=a=>String(a.user_id||"")===String(uid)||nrm(a.user_nome)===nrm(selUser.n);
+  const remDia=useMemo(()=>remotos.filter(a=>doUser(a)&&a.origem==="teamcheck"&&a.tipo!=="NOTA").sort((a,b)=>String(a.criado_em).localeCompare(String(b.criado_em))),[remotos,uid,selUser.n]);
+  const resolvDia=useMemo(()=>remotos.filter(a=>doUser(a)&&(a.origem==="teamcheck"||a.origem==="checkout")).reduce((n,a)=>n+((String(a.texto||"").match(/✓ Pendência resolvida/g)||[]).length),0),[remotos,uid,selUser.n]);
+  const tarefasCriadas=useMemo(()=>remotos.filter(a=>doUser(a)&&a.origem==="tarefa").length,[remotos,uid,selUser.n]);
+  const porTipo=useMemo(()=>{const m={};remDia.forEach(a=>{m[a.tipo]=(m[a.tipo]||0)+1;});return m;},[remDia]);
+  const TL={LIGACAO:"Ligação",WHATSAPP:"WhatsApp",EMAIL:"E-mail",REUNIAO:"Reunião",PROPOSTA:"Proposta",VISITA:"Visita"};
+
   return(<div>
     <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:16,marginBottom:16,flexWrap:"wrap"}}>
       <div>
-        <div style={{fontSize:16,fontWeight:700,color:S.txt}}>Produtividade — {selUser.n}</div>
-        <div style={{fontSize:12,color:S.ts,marginTop:2}}>{dayVisits.length} visita(s) · base check-in/check-out (igual ao Relatório)</div>
+        <div style={{fontSize:20,fontWeight:700,letterSpacing:"-.3px",color:S.txt}}>Produtividade — {selUser.n}</div>
+        <div style={{fontSize:13,color:S.t2,marginTop:2}}>{dayVisits.length} visita(s) em campo · {remDia.length} atendimento(s) a distância</div>
       </div>
       <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
         <SearchSelect value={String(uid)} onChange={setUid} placeholder="Usuário" style={{width:190}} options={USERS.map(u=>[String(u.id),u.n])}/>
@@ -62,8 +77,8 @@ function EquipeTab({sel,setSel,plocs,dayBases,user,visits}){
       <Kpi k="Km estimado" v={km?km.toFixed(1):"-"} u={km?"km":""}/>
       <Kpi k="Com GPS" v={`${withGps}/${dayVisits.length}`}/>
     </div>}
-    {dayVisits.length>0&&<button onClick={()=>{const rows=[["Data","Check-in","Check-out","Cliente","Observação","GPS"]];dayVisits.forEach(v=>rows.push([fD(v.checkinTime),fT(v.checkinTime),v.checkoutTime?fT(v.checkoutTime):"-",v.orgName||"",(v.note||"").slice(0,120),getVCoord(v,plocs)?"Sim":"Nao"]));rows.push([],["Km estimado",km?km.toFixed(1):"-"],["Jornada",hrsMin(workH)],["Visitas",dayVisits.length]);csv(rows,`${first.toLowerCase()}-${sel}.csv`);}} style={{width:"100%",marginBottom:16,padding:10,fontSize:12.5,fontWeight:500,background:"transparent",border:`1px solid ${S.inpBdr}`,color:S.pl,borderRadius:8}}>📊 Exportar relatório de {first}</button>}
-    {!dayVisits.length&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma visita registrada nesta data</p>}
+    {dayVisits.length>0&&<button onClick={()=>{const rows=[["Data","Check-in","Check-out","Cliente","Observação","GPS"]];dayVisits.forEach(v=>rows.push([fD(v.checkinTime),fT(v.checkinTime),v.checkoutTime?fT(v.checkoutTime):"-",v.orgName||"",(v.note||"").slice(0,120),getVCoord(v,plocs)?"Sim":"Nao"]));rows.push([],["Km estimado",km?km.toFixed(1):"-"],["Jornada",hrsMin(workH)],["Visitas",dayVisits.length]);csv(rows,`${first.toLowerCase()}-${sel}.csv`);}} style={{width:"100%",marginBottom:16,padding:10,fontSize:12.5,fontWeight:500,background:"transparent",border:`1px solid ${S.inpBdr}`,color:S.pl,borderRadius:8}}>Exportar relatório de {first}</button>}
+    {!dayVisits.length&&<p style={{color:S.ts,fontSize:14,padding:"8px 0 16px",margin:0}}>Nenhuma visita em campo nesta data.</p>}
     {dayVisits.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"18px 20px"}}>
       <div style={{fontSize:14,fontWeight:600,color:S.txt,marginBottom:12}}>Rota do dia</div>
       <div style={{position:"relative",paddingLeft:4}}>
@@ -80,6 +95,37 @@ function EquipeTab({sel,setSel,plocs,dayBases,user,visits}){
         </div>)}
       </div>
     </div>}
+
+    <section aria-label="Atendimentos a distância" style={{marginTop:20}}>
+      <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:10}}>
+        <h2 style={{margin:0,fontSize:16,fontWeight:700,color:S.txt}}>Escritório — atendimentos a distância</h2>
+        <span style={{fontSize:12.5,color:S.ts}}>sem check-in · ligação, WhatsApp, e-mail, reunião, proposta</span>
+      </div>
+      {ldR&&<p style={{fontSize:13,color:S.ts,margin:"0 0 10px"}}>Carregando…</p>}
+      {erroR&&<p style={{fontSize:13,color:S.dng,margin:"0 0 10px"}}>Não consegui ler os atendimentos: {erroR}</p>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(140px,1fr))",gap:12,marginBottom:14}}>
+        <Kpi k="Atendimentos" v={remDia.length}/>
+        <Kpi k="Ligações" v={porTipo.LIGACAO||0}/>
+        <Kpi k="WhatsApp" v={porTipo.WHATSAPP||0}/>
+        <Kpi k="E-mail / outros" v={remDia.length-(porTipo.LIGACAO||0)-(porTipo.WHATSAPP||0)}/>
+        <Kpi k="Pendências resolvidas" v={resolvDia}/>
+        <Kpi k="Tarefas criadas" v={tarefasCriadas}/>
+        <Kpi k="1º → último" v={remDia.length?`${fT(fD1iso(remDia[0].criado_em))}–${fT(fD1iso(remDia[remDia.length-1].criado_em))}`:"-"}/>
+      </div>
+      {!ldR&&!remDia.length&&<p style={{color:S.ts,fontSize:14,margin:0}}>Nenhum atendimento a distância registrado nesta data.</p>}
+      {remDia.length>0&&<div style={{border:`1px solid ${S.brd}`,borderRadius:10,background:S.card}}>
+        {remDia.map((a,i)=><div key={a.id} style={{display:"grid",gridTemplateColumns:"52px minmax(0,1fr)",gap:"0 10px",padding:"10px 12px",borderTop:i?`1px solid ${S.brd}`:"none"}}>
+          <span className="num" style={{fontSize:12,color:S.ts,paddingTop:2}}>{fT(fD1iso(a.criado_em))}</span>
+          <div style={{minWidth:0}}>
+            <p style={{margin:0,fontSize:14,color:S.txt}}><b style={{fontWeight:600}}>{a.org_nome||"—"}</b><span style={{color:S.ts}}> · {TL[a.tipo]||a.tipo}</span></p>
+            {a.texto&&<p style={{margin:"2px 0 0",fontSize:13,color:S.t2,lineHeight:1.45,whiteSpace:"pre-wrap",wordBreak:"break-word"}}>{String(a.texto).slice(0,220)}</p>}
+          </div>
+        </div>)}
+      </div>}
+    </section>
   </div>);}
+
+// datas do D1 ("YYYY-MM-DD HH:MM:SS", UTC sem fuso) → ISO com Z (Safari não lê o formato com espaço)
+const fD1iso=s=>{const t=String(s||"");return /[zZ]$|[+-]\d\d:\d\d$/.test(t)?t:t.replace(" ","T")+"Z";};
 
 export { EquipeTab };

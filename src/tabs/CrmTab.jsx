@@ -2,19 +2,19 @@
 // CRM próprio: histórico de atividades, contatos, fotos/arquivos da loja e GPS.
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check } from "lucide-react";
+import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset } from "lucide-react";
 import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
 const DASH = "https://dashboard.jordanmt.com";
 const TIPOS = [
-  { id: "NOTA",     l: "Nota",     I: StickyNote,    c: "#8B5CF6" },
-  { id: "VISITA",   l: "Visita",   I: MapPin,        c: "#12C265" },
-  { id: "LIGACAO",  l: "Ligação",  I: PhoneCall,     c: "#0AAEE8" },
-  { id: "WHATSAPP", l: "WhatsApp", I: MessageCircle, c: "#25D366" },
-  { id: "EMAIL",    l: "E-mail",   I: Mail,          c: "#F59E0B" },
-  { id: "REUNIAO",  l: "Reunião",  I: Handshake,     c: "#FF4D8D" },
-  { id: "PROPOSTA", l: "Proposta", I: FileText,      c: "#FFB020" },
+  { id: "NOTA",     l: "Nota",     I: StickyNote,    c: "#8C80C4" },
+  { id: "VISITA",   l: "Visita",   I: MapPin,        c: "#2A9D8F" },
+  { id: "LIGACAO",  l: "Ligação",  I: PhoneCall,     c: "#168ABF" },
+  { id: "WHATSAPP", l: "WhatsApp", I: MessageCircle, c: "#4FA872" },
+  { id: "EMAIL",    l: "E-mail",   I: Mail,          c: "#B98A4A" },
+  { id: "REUNIAO",  l: "Reunião",  I: Handshake,     c: "#B5718E" },
+  { id: "PROPOSTA", l: "Proposta", I: FileText,      c: "#C8964E" },
 ];
 const tipoDe = (id) => TIPOS.find(t => t.id === id) || TIPOS[0];
 const soDig = (x) => String(x || "").replace(/\D/g, "");
@@ -72,45 +72,46 @@ function comprime(file) {
   });
 }
 
-const Crd = ({ children, style }) => <div style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 14, padding: "12px 14px", marginBottom: 10, boxShadow: S.shadow, ...style }}>{children}</div>;
-const Chip = ({ on, onClick, children, color }) => <button onClick={onClick} style={{ border: `1px solid ${on ? (color || S.pri) : S.brd}`, background: on ? (color || S.pri) : S.card, color: on ? "#fff" : S.ts, borderRadius: 20, padding: "5px 12px", fontSize: 12, fontWeight: on ? 700 : 400, cursor: "pointer", whiteSpace: "nowrap" }}>{children}</button>;
-const inp = { width: "100%", boxSizing: "border-box", background: "var(--inp)", border: `1px solid ${S.brd}`, borderRadius: 10, padding: "10px 12px", fontSize: 14, color: S.txt };
+const Crd = ({ children, style }) => <div style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "12px 14px", marginBottom: 10, ...style }}>{children}</div>;
+const Chip = ({ on, onClick, children }) => <button type="button" aria-pressed={!!on} onClick={onClick} style={{ border: `1px solid ${on ? S.txt : S.inpBdr}`, background: on ? S.txt : "transparent", color: on ? S.bg : S.t2, borderRadius: 18, height: 36, padding: "0 13px", fontSize: 13, fontWeight: on ? 600 : 400, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>{children}</button>;
+const inp = { width: "100%", boxSizing: "border-box", background: "var(--inp)", border: `1px solid ${S.inpBdr}`, borderRadius: 8, padding: "10px 12px", fontSize: 15, color: S.txt };
 
 // ─────────────────────────────────────────────────────────────
 //  Card de atividade (timeline — mesmo desenho do início do Agendor)
 // ─────────────────────────────────────────────────────────────
 function AtvCard({ a, onOrg, onDel, canDel, onFinish }) {
+  // v74: linha do histórico — tipo + quando + quem + texto; sem faixa de cabeçalho
   const t = tipoDe(a.tipo);
   const isTask = a.origem === "tarefa"; const done = !!a.concluida;
   const atrasada = isTask && !done && a.due_em && a.due_em.slice(0, 10) < todayLocal();
-  return (<Crd style={{ padding: 0, overflow: "hidden" }}>
-    <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: S.cl, borderBottom: `1px solid ${S.brd}` }}>
-      <div style={{ width: 28, height: 28, borderRadius: "50%", background: t.c + "22", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}><t.I size={15} color={t.c} /></div>
-      <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: S.txt, letterSpacing: 0.4 }}>{t.l.toUpperCase()}{a.origem === "checkout" && <span style={{ fontWeight: 400, color: S.ts }}> · check-out</span>}{isTask && <span style={{ fontWeight: 700, color: done ? S.ok : atrasada ? S.dng : S.gold, marginLeft: 6, fontSize: 10 }}>· {done ? "TAREFA OK" : "TAREFA"}</span>}</p>
-      <p style={{ margin: "0 0 0 auto", fontSize: 11, color: S.ts, display: "flex", alignItems: "center", gap: 4 }}><Clock size={11} />{fDH(a.criado_em)}</p>
-      {canDel && <button onClick={() => onDel(a)} style={{ background: "transparent", border: "none", padding: 2, cursor: "pointer" }}><Trash2 size={14} color={S.td} /></button>}
+  const remoto = a.origem === "teamcheck" && a.tipo !== "NOTA";
+  return (<Crd style={{ padding: "11px 12px" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+      <t.I size={15} color={t.c} style={{ flexShrink: 0 }} />
+      <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: S.txt, flex: 1, minWidth: 0 }}>{t.l}
+        {a.origem === "checkout" && <span style={{ fontWeight: 400, color: S.ts }}> · check-out</span>}
+        {remoto && <span style={{ fontWeight: 400, color: S.ts }}> · a distância</span>}
+        {isTask && <span style={{ fontWeight: 600, color: done ? S.ok : atrasada ? S.dng : S.gold }}> · {done ? "tarefa feita" : atrasada ? "tarefa atrasada" : "tarefa"}</span>}
+        <span style={{ fontWeight: 400, color: S.ts }}> · {(a.user_nome || "—").split(" ")[0]}</span></p>
+      <span className="num" style={{ fontSize: 11.5, color: S.ts, flexShrink: 0 }}>{fDH(a.criado_em)}</span>
+      {canDel && <button onClick={() => onDel(a)} aria-label="Excluir atividade" style={{ background: "transparent", border: "none", padding: 4, cursor: "pointer", display: "flex" }}><Trash2 size={14} color="var(--t4)" /></button>}
     </div>
-    <div style={{ padding: "10px 12px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-        <p style={{ margin: 0, fontSize: 12, color: S.ts }}>{a.user_nome || "—"}</p>
-        {a.org_nome && <button onClick={() => onOrg && onOrg(a)} style={{ background: "transparent", border: "none", padding: 0, cursor: onOrg ? "pointer" : "default", display: "flex", alignItems: "center", gap: 4, color: S.pri, fontSize: 12, fontWeight: 600, textAlign: "right" }}><Building2 size={12} />{a.org_nome}</button>}
-      </div>
-      <p style={{ margin: 0, fontSize: 13.5, color: S.txt, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{a.texto}</p>
-      {isTask && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-        {a.due_em ? <span style={{ fontSize: 11.5, fontFamily: "monospace", color: done ? S.ts : atrasada ? S.dng : S.gold }}>Prazo {fD(a.due_em)} {fT(a.due_em)}</span> : <span />}
-        <button onClick={() => !done && onFinish && onFinish(a)} disabled={done || !onFinish} title={done ? "Tarefa finalizada" : "Marcar como finalizada"} style={{ display: "flex", alignItems: "center", gap: 8, background: done ? S.ok + "18" : S.inp, border: `1px solid ${done ? S.ok : S.inpBdr}`, borderRadius: 8, padding: "7px 12px", cursor: done ? "default" : (onFinish ? "pointer" : "default") }}>
-          <span style={{ width: 17, height: 17, borderRadius: 5, border: `1.5px solid ${done ? S.ok : S.inpBdr}`, background: done ? S.ok : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>{done && <Check size={12} color="#fff" strokeWidth={3} />}</span>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: done ? S.ok : S.ts }}>{done ? "Finalizada" : "Finalizar"}</span>
-        </button>
-      </div>}
-    </div>
+    {a.org_nome && onOrg && <button onClick={() => onOrg(a)} style={{ background: "transparent", border: "none", padding: 0, margin: "4px 0 0 23px", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, color: S.pl, fontSize: 13, fontWeight: 600, textAlign: "left" }}><Building2 size={12} />{a.org_nome}</button>}
+    <p style={{ margin: "5px 0 0 23px", fontSize: 14.5, color: S.txt, lineHeight: 1.45, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{a.texto}</p>
+    {isTask && <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, margin: "10px 0 0 23px", flexWrap: "wrap" }}>
+      {a.due_em ? <span className="num" style={{ fontSize: 12, color: done ? S.ts : atrasada ? S.dng : S.gold }}>prazo {fD(a.due_em)} {fT(a.due_em)}</span> : <span />}
+      <button onClick={() => !done && onFinish && onFinish(a)} disabled={done || !onFinish} title={done ? "Tarefa finalizada" : "Marcar como finalizada"} style={{ display: "flex", alignItems: "center", gap: 8, height: 38, background: "transparent", border: `1px solid ${done ? S.ok : S.inpBdr}`, borderRadius: 8, padding: "0 12px", cursor: done ? "default" : (onFinish ? "pointer" : "default") }}>
+        <span style={{ width: 17, height: 17, borderRadius: 5, border: `1.5px solid ${done ? S.ok : S.inpBdr}`, background: done ? S.ok : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>{done && <Check size={12} color="#fff" strokeWidth={3} />}</span>
+        <span style={{ fontSize: 13.5, fontWeight: 600, color: done ? S.ok : S.t2 }}>{done ? "Finalizada" : "Finalizar"}</span>
+      </button>
+    </div>}
   </Crd>);
 }
 
 // ─────────────────────────────────────────────────────────────
 //  Tela do cliente — cabeçalho + Histórico | Contatos | Fotos | Dados
 // ─────────────────────────────────────────────────────────────
-function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange, backLabel }) {
+function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange, backLabel, onRemoto }) {
   const [sub, setSub] = useState("hist");
   const [info, setInfo] = useState(null);           // /api/crm/cliente
   const [atvs, setAtvs] = useState([]); const [ldA, setLdA] = useState(false);
@@ -229,14 +230,14 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const blocoLote = (l, naAbaFotos) => { const fotos = l.itens.filter(a => a.tipo === "foto"), outros = l.itens.filter(a => a.tipo !== "foto");
     const pl = (n, s) => `${n} ${s}${n > 1 ? "s" : ""}`;
     const tit = fotos.length && outros.length ? `${pl(fotos.length, "foto")} e ${pl(outros.length, "arquivo")}` : fotos.length ? `${pl(fotos.length, "foto")} da loja` : pl(outros.length, "arquivo");
-    return (<Crd key={"lote" + l.id} style={{ padding: 0, overflow: "hidden" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: S.cl, borderBottom: `1px solid ${S.brd}` }}>
-        <div style={{ width: 28, height: 28, borderRadius: "50%", background: S.pri + "22", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fotos.length ? <Camera size={15} color={S.pri} /> : <Paperclip size={15} color={S.pri} />}</div>
-        <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: S.txt, letterSpacing: 0.4 }}>{tit.toUpperCase()}</p>
-        <p style={{ margin: "0 0 0 auto", fontSize: 11, color: S.ts, display: "flex", alignItems: "center", gap: 4 }}><Clock size={11} />{fDH(l.ini)}</p>
+    return (<Crd key={"lote" + l.id} style={{ padding: "11px 12px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        {fotos.length ? <Camera size={15} color={S.pl} style={{ flexShrink: 0 }} /> : <Paperclip size={15} color={S.pl} style={{ flexShrink: 0 }} />}
+        <p style={{ margin: 0, fontSize: 13.5, fontWeight: 600, color: S.txt, flex: 1, minWidth: 0 }}>{tit.charAt(0).toUpperCase() + tit.slice(1)}<span style={{ fontWeight: 400, color: S.ts }}> · {(l.user || "—").split(" ")[0]}</span></p>
+        <span className="num" style={{ fontSize: 11.5, color: S.ts, flexShrink: 0 }}>{fDH(l.ini)}</span>
       </div>
-      <div style={{ padding: "10px 12px" }}>
-        <p style={{ margin: "0 0 8px", fontSize: 12, color: S.ts }}>{l.user || "—"}{!naAbaFotos && <button onClick={() => setSub("arq")} style={{ marginLeft: 8, background: "transparent", border: "none", padding: 0, color: S.pri, fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>ver em Fotos & Arquivos ›</button>}</p>
+      <div style={{ padding: "8px 0 0 23px" }}>
+        {!naAbaFotos && <button onClick={() => setSub("arq")} style={{ background: "transparent", border: "none", padding: 0, margin: "0 0 8px", color: S.pl, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>Ver em Fotos e arquivos</button>}
         {fotos.length > 0 && <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
           {fotos.map(a => <div key={a.id} style={{ flexShrink: 0, width: naAbaFotos ? 130 : 104 }}>
             <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: `1px solid ${S.brd}`, background: S.cl, width: naAbaFotos ? 130 : 104, height: naAbaFotos ? 130 : 104 }}>
@@ -288,7 +289,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const RFVC = { "Campeão": S.gold, "Leal": S.ok, "Em Crescimento": S.pri, "Em Risco": "#E76F51", "Inativo": S.td };
   const SRC_ = { "Em Dia": S.ok, "Momento de Recompra": S.gold, "Atrasado": S.dng };
   const ultimaVisita = useMemo(() => (visits || []).filter(v => v.orgId === org.id && v.checkoutTime).sort((a, b) => b.checkinTime.localeCompare(a.checkinTime))[0], [visits, org.id]);
-  const subs = [["hist", "Histórico"], ["ctt", "Contatos"], ["arq", "Fotos & Arquivos"], ["dados", "Dados"]];
+  const subs = [["hist", "Histórico"], ["ctt", "Contatos"], ["arq", "Fotos e arquivos"], ["dados", "Dados"]];
   const infoContato = (
     <Crd>
       <p style={{ margin: "0 0 8px", fontSize: 12.5, fontWeight: 800, color: S.txt }}>Informações para contato</p>
@@ -300,88 +301,108 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       {!org.phone && !org.email && !(org.addr?.street||org.addr?.city_name) && <p style={{margin:0, fontSize:12, color:S.td}}>Sem contato no cadastro — use Editar para preencher.</p>}
     </Crd>);
 
+  const PEND_PFX = "📌 Próxima visita: ";
+  const pendAbertas = useMemo(() => atvs.filter(a => a.origem === "tarefa" && !a.concluida).map(a => { const t = String(a.texto || ""); const px = t.startsWith(PEND_PFX); return { ...a, proxima: px, txt: px ? t.slice(PEND_PFX.length) : t }; })
+    .sort((a, b) => (b.proxima - a.proxima) || String(a.due_em || "9").localeCompare(String(b.due_em || "9"))), [atvs]);
+  const finalizar = async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setAtvs(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } };
+  const diasDe = (iso) => { const d = new Date(iso); return isNaN(d) ? null : Math.max(0, Math.floor((Date.now() - d) / 86400000)); };
+  const dVis = ultimaVisita ? diasDe(ultimaVisita.checkinTime) : null;
+  const fato = (k, v, sub, cor) => <div style={{ padding: "12px 0" }}><dt style={{ fontSize: 12.5, color: S.t2 }}>{k}</dt><dd style={{ margin: "3px 0 0", fontSize: 19, fontWeight: 600, color: cor || S.txt }}>{v}</dd>{sub && <dd className="num" style={{ margin: "2px 0 0", fontSize: 11.5, color: S.ts }}>{sub}</dd>}</div>;
+  const btnSec = { height: 44, borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.txt, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14, cursor: "pointer", padding: "0 12px" };
+
   return (<div>
-    <button onClick={onBack} style={{ display: "flex", alignItems: "center", gap: 6, background: "transparent", border: "none", color: S.pri, fontSize: 13, fontWeight: 700, padding: "2px 0 10px", cursor: "pointer" }}><ArrowLeft size={16} />{backLabel || "Voltar ao CRM"}</button>
+    <button onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "transparent", border: "none", color: S.pl, fontSize: 14, fontWeight: 600, height: 40, padding: "0 4px 0 0", cursor: "pointer" }}><ArrowLeft size={16} />{backLabel || "Voltar ao CRM"}</button>
 
-    {/* Cabeçalho do cliente */}
-    <Crd>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-        <div style={{ minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 17, fontWeight: 800, color: S.txt, lineHeight: 1.2 }}>{org.nickname || org.name}</p>
-          {(org.ranking||0)>0 && <p style={{ margin: "2px 0 0", fontSize: 12, color: S.gold, letterSpacing: 1 }}>{"★".repeat(org.ranking)}{"☆".repeat(Math.max(0,5-org.ranking))}</p>}
-          {org.legalName && <p style={{ margin: "2px 0 0", fontSize: 11.5, color: S.ts }}>{org.legalName}</p>}
-          <p style={{ margin: "4px 0 0", fontSize: 12, color: S.ts, display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
-            <MapPin size={12} />{org.addr?.city_name || org.addr?.city || "—"}{org.addr?.state ? "/" + org.addr.state : ""}
-            {org.sector && <span>· {org.sector}</span>}{org.owner && <span>· Resp.: {org.owner}</span>}
-            {org.products && <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", verticalAlign: "middle" }}>{String(org.products).split(",").map(m => m.trim()).filter(Boolean).map(m => <span key={m} style={{ fontSize: 9.5, fontWeight: 700, color: S.gold, border: `1px solid ${S.gold}55`, padding: "1px 7px", borderRadius: 6 }}>{m}</span>)}</span>}
-          </p>
-          {org.cnpj && <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.td }}>CNPJ {fCnpj(org.cnpj)}</p>}
+    {/* Cabeçalho do cliente — v74: sem cartão, hierarquia por tipografia */}
+    <header style={{ padding: "6px 0 14px" }}>
+      <p style={{ margin: 0, fontSize: 12.5, color: S.t2, display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+        {org.cat && <span style={{ color: catCor, fontWeight: 600 }}>{org.cat}</span>}{org.sector && <span>· {org.sector}</span>}{org.owner && <span>· resp. {org.owner.split(" ")[0]}</span>}
+        {(org.ranking || 0) > 0 && <span style={{ color: S.gold }} aria-label={`${org.ranking} de 5`}>· {"★".repeat(org.ranking)}</span>}
+      </p>
+      <h1 style={{ margin: "4px 0 0", fontSize: 26, fontWeight: 700, letterSpacing: "-.4px", lineHeight: 1.12, color: S.txt }}>{org.nickname || org.name}</h1>
+      {org.legalName && org.legalName !== (org.nickname || org.name) && <p style={{ margin: "3px 0 0", fontSize: 13, color: S.t2 }}>{org.legalName}</p>}
+      <p style={{ margin: "4px 0 0", fontSize: 14, color: S.t2 }}>{[org.addr?.district, [org.addr?.city_name || org.addr?.city, org.addr?.state].filter(Boolean).join("/")].filter(Boolean).join(" · ") || "—"}</p>
+      <p className="num" style={{ margin: "3px 0 0", fontSize: 12, color: S.ts }}>{org.cnpj ? "CNPJ " + fCnpj(org.cnpj) : "sem CNPJ"}{org.products ? <span style={{ fontFamily: "Archivo, sans-serif" }}> · {String(org.products).split(",").map(m => m.trim()).filter(Boolean).join(", ")}</span> : null}</p>
+    </header>
+
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8, marginBottom: 8 }}>
+      {onRemoto && <button onClick={() => onRemoto(org)} style={{ ...btnSec, background: S.pri, border: "none", color: "#fff", fontWeight: 600 }}><Headset size={16} />Atender a distância</button>}
+      <button onClick={() => setAgTask(v => !v)} aria-expanded={agTask} style={btnSec}><Calendar size={15} />Agendar tarefa</button>
+    </div>
+    <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
+      {cnpjN && <button onClick={() => window.open(`${DASH}/?cliente=${cnpjN}`, "_blank", "noopener")} style={{ ...btnSec, height: 40, fontSize: 13.5 }}><BarChart3 size={15} />Dashboard</button>}
+      <button onClick={() => onEdit && onEdit(org)} style={{ ...btnSec, height: 40, fontSize: 13.5 }}><Pencil size={14} />Editar</button>
+      <button onClick={() => onPerson && onPerson(org)} style={{ ...btnSec, height: 40, fontSize: 13.5 }}><Users2 size={14} />Pessoas</button>
+    </div>
+
+    <dl style={{ margin: "8px 0 0", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(140px,1fr))", columnGap: 16, borderTop: `1px solid ${S.brd}`, borderBottom: `1px solid ${S.brd}` }}>
+      {fato("Última compra", rfvInfo && rfvInfo.dias != null ? `${rfvInfo.dias} dias` : "—", rfvInfo && rfvInfo.ultima ? fD(rfvInfo.ultima + "T12:00") : "sem compra no histórico")}
+      {fato("Última visita", dVis != null ? (dVis === 0 ? "hoje" : `${dVis} dias`) : "nunca", ultimaVisita ? `${fD(ultimaVisita.checkinTime)} · ${(ultimaVisita.userName || "").split(" ")[0] || "—"}` : "sem check-in registrado", dVis == null ? S.dng : null)}
+      {fato("Classe RFV", rfvInfo ? rfvInfo.rfv : "—", null, rfvInfo ? RFVC[rfvInfo.rfv] : null)}
+      {fato("Recompra", rfvInfo && rfvInfo.status ? rfvInfo.status : "—", null, rfvInfo ? SRC_[rfvInfo.status] : null)}
+    </dl>
+
+    {pendAbertas.length > 0 && <section aria-label="Pendências" style={{ marginTop: 14, border: `1px solid ${S.gold}55`, background: S.gold + "12", borderRadius: 10, padding: "10px 12px" }}>
+      <p style={{ margin: "0 0 4px", fontSize: 12.5, fontWeight: 600, color: S.gold }}>{pendAbertas.length === 1 ? "1 pendência aberta" : `${pendAbertas.length} pendências abertas`}</p>
+      {pendAbertas.slice(0, 4).map(x => <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", borderTop: `1px solid ${S.gold}22` }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ margin: 0, fontSize: 14.5, fontWeight: 600, color: S.txt }}>{x.txt}</p>
+          <p className="num" style={{ margin: "1px 0 0", fontSize: 11.5, color: S.ts }}>{x.proxima ? "próxima visita" : `tarefa${x.due_em ? " · prazo " + fD(x.due_em) : ""}`} · {(x.user_nome || "—").split(" ")[0]}</p>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "flex-end", flexShrink: 0 }}>
-          {org.cat && <span style={{ background: catCor + "22", color: catCor, border: `1px solid ${catCor}55`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>{org.cat}</span>}
-          {rfvInfo && <span style={{ background: (RFVC[rfvInfo.rfv] || S.ts) + "18", color: RFVC[rfvInfo.rfv] || S.ts, border: `1px solid ${(RFVC[rfvInfo.rfv] || S.ts)}55`, borderRadius: 20, padding: "3px 10px", fontSize: 11, fontWeight: 700, whiteSpace: "nowrap" }}>RFV: {rfvInfo.rfv}</span>}
-          {rfvInfo && rfvInfo.status && <span style={{ fontSize: 10, color: SRC_[rfvInfo.status] || S.ts, whiteSpace: "nowrap" }}>{rfvInfo.status}</span>}
-          <button onClick={() => setAgTask(v=>!v)} style={{ display:"flex", alignItems:"center", gap:5, background:S.pri, color:"#fff", border:"none", borderRadius:20, padding:"5px 11px", fontSize:11, fontWeight:700, cursor:"pointer" }}><Calendar size={13}/>Agendar tarefa</button>
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" }}>
-        {cnpjN && <button onClick={() => window.open(`${DASH}/?cliente=${cnpjN}`, "_blank", "noopener")} style={{ flex: 1, minWidth: 120, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "9px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><BarChart3 size={15} />Dashboard</button>}
-        <button onClick={() => onEdit && onEdit(org)} style={{ flex: 1, minWidth: 100, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.card, color: S.txt, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "9px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Pencil size={14} />Editar</button>
-        <button onClick={() => onPerson && onPerson(org)} style={{ flex: 1, minWidth: 100, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.card, color: S.txt, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "9px 10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Users2 size={14} />Pessoas</button>
-      </div>
-    </Crd>
+        <button onClick={() => finalizar(x)} style={{ height: 38, padding: "0 12px", fontSize: 13, fontWeight: 600, border: `1px solid ${S.gold}77`, background: "transparent", color: S.txt, flexShrink: 0 }}>Resolver</button>
+      </div>)}
+      {pendAbertas.length > 4 && <p style={{ margin: "4px 0 0", fontSize: 12, color: S.ts }}>+{pendAbertas.length - 4} no histórico</p>}
+    </section>}
 
-    {/* GPS */}
-    <Crd style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-      <Navigation size={18} color={gpsAtual ? S.acc : S.td} />
-      <div style={{ flex: 1, minWidth: 150 }}>
-        <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: S.txt }}>GPS do PDV</p>
-        <p style={{ margin: 0, fontSize: 11.5, color: S.ts }}>{gpsAtual ? `${(+gpsAtual.lat).toFixed(6)}, ${(+gpsAtual.lng).toFixed(6)}${gpsD1?.atualizado_em ? " · " + fDH(gpsD1.atualizado_em) : gpsKV ? " · do app" : ""}` : "sem coordenada registrada"}</p>
-      </div>
-      {gpsAtual && <button onClick={() => window.open(`https://www.google.com/maps?q=${gpsAtual.lat},${gpsAtual.lng}`, "_blank", "noopener")} style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, color: S.pri, cursor: "pointer" }}>Maps</button>}
-      <button onClick={salvaGPS} style={{ background: S.acc, border: "none", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, color: "#fff", cursor: "pointer" }}>Salvar GPS atual</button>
-    </Crd>
+    {/* GPS — uma linha */}
+    <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "10px 0", borderBottom: `1px solid ${S.brd}` }}>
+      <Navigation size={16} color={gpsAtual ? S.acc : S.td} />
+      <p className="num" style={{ flex: 1, minWidth: 160, margin: 0, fontSize: 12, color: S.ts }}>{gpsAtual ? `GPS ${(+gpsAtual.lat).toFixed(5)}, ${(+gpsAtual.lng).toFixed(5)}${gpsD1?.atualizado_em ? " · " + fDH(gpsD1.atualizado_em) : gpsKV ? " · do app" : ""}` : "GPS do PDV não registrado"}</p>
+      {gpsAtual && <button onClick={() => window.open(`https://www.google.com/maps?q=${gpsAtual.lat},${gpsAtual.lng}`, "_blank", "noopener")} style={{ height: 36, padding: "0 10px", fontSize: 13, border: "none", color: S.pl, fontWeight: 600 }}>Maps</button>}
+      <button onClick={salvaGPS} style={{ height: 36, padding: "0 10px", fontSize: 13, border: "none", color: S.pl, fontWeight: 600 }}>{gpsAtual ? "Atualizar GPS" : "Salvar GPS aqui"}</button>
+    </div>
 
-    {msg && <p style={{ fontSize: 12, color: S.dng, margin: "0 0 8px" }}>{msg}</p>}
+    {msg && <p style={{ fontSize: 12.5, color: S.dng, margin: "8px 0" }}>{msg}</p>}
 
-    {/* Sub-abas */}
-    <div style={{ display: "flex", gap: 3, marginBottom: 12, background: S.cl, borderRadius: 8, padding: 3 }}>
-    {agTask && <Crd style={{ borderColor: S.pri + "66" }}>
-      <p style={{ margin: "0 0 8px", fontSize: 12.5, fontWeight: 800, color: S.txt }}>Agendar tarefa</p>
-      <div style={{ display: "flex", gap: 6, marginBottom: 8, flexWrap: "wrap" }}>
-        {TIPOS.filter(x=>x.id!=="NOTA").map(x => <Chip key={x.id} on={agTipo===x.id} color={x.c} onClick={()=>setAgTipo(x.id)}>{x.l}</Chip>)}
+    {agTask && <Crd style={{ marginTop: 12 }}>
+      <p style={{ margin: "0 0 10px", fontSize: 15, fontWeight: 700, color: S.txt }}>Agendar tarefa</p>
+      <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+        {TIPOS.filter(x=>x.id!=="NOTA").map(x => <Chip key={x.id} on={agTipo===x.id} onClick={()=>setAgTipo(x.id)}>{x.l}</Chip>)}
       </div>
-      <textarea value={agTxt} onChange={e=>setAgTxt(e.target.value)} placeholder="Descrição da tarefa..." rows={2} style={{ ...inp, resize: "vertical", marginBottom: 8 }}/>
-      <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+      <textarea value={agTxt} onChange={e=>setAgTxt(e.target.value)} placeholder="Descrição da tarefa" rows={2} style={{ ...inp, resize: "vertical", marginBottom: 8 }}/>
+      <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
         <DateField value={agData} onChange={setAgData} today={todayLocal()} placeholder="Data" style={{ flex: 2 }}/>
-        <input type="time" value={agHora} onChange={e=>setAgHora(e.target.value)} style={{ ...inp, flex: 1 }}/>
+        <input type="time" value={agHora} onChange={e=>setAgHora(e.target.value)} className="num" style={{ ...inp, flex: 1 }}/>
       </div>
-      <p style={{ margin: "0 0 5px", fontSize: 11, color: S.ts, fontWeight: 600 }}>Responsável(eis)</p>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>{USERS.map(u => { const on = agUsers.includes(String(u.id)); return <button key={u.id} type="button" onClick={() => setAgUsers(p => on ? p.filter(x => x !== String(u.id)) : [...p, String(u.id)])} style={{ padding: "6px 12px", borderRadius: 20, fontSize: 12, fontWeight: on ? 700 : 500, border: on ? "none" : `1px solid ${S.brd}`, background: on ? S.acc : S.card, color: on ? "#fff" : S.ts, cursor: "pointer" }}>{u.n.split(" ")[0]}</button>; })}</div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <button onClick={salvaTarefa} disabled={agLo} style={{ flex: 1, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "10px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{agLo ? "Salvando..." : "Agendar"}</button>
-        <button onClick={()=>setAgTask(false)} style={{ background: "transparent", color: S.dng, border: `1px solid ${S.dng}55`, borderRadius: 10, padding: "10px 14px", fontSize: 13, cursor: "pointer" }}>Cancelar</button>
+      <p style={{ margin: "0 0 6px", fontSize: 12.5, color: S.t2 }}>Responsável(eis)</p>
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>{USERS.map(u => { const on = agUsers.includes(String(u.id)); return <Chip key={u.id} on={on} onClick={() => setAgUsers(p => on ? p.filter(x => x !== String(u.id)) : [...p, String(u.id)])}>{u.n.split(" ")[0]}</Chip>; })}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 8 }}>
+        <button onClick={()=>setAgTask(false)} style={{ height: 44, fontSize: 14 }}>Cancelar</button>
+        <button onClick={salvaTarefa} disabled={agLo} style={{ height: 44, background: S.pri, color: "#fff", border: "none", fontSize: 14, fontWeight: 600 }}>{agLo ? "Salvando..." : "Agendar"}</button>
       </div>
     </Crd>}
-      {subs.map(([id, l]) => <button key={id} onClick={() => setSub(id)} style={{ flex: 1, border: "none", background: sub === id ? S.pri : "transparent", borderRadius: 6, padding: "8px 2px", fontSize: 11.5, fontWeight: sub === id ? 700 : 400, color: sub === id ? "#fff" : S.ts, cursor: "pointer" }}>{l}</button>)}
+
+    {/* Sub-abas — sublinhado */}
+    <div role="tablist" aria-label="Seções da ficha" style={{ display: "flex", gap: 20, margin: "14px 0 12px", borderBottom: `1px solid ${S.brd}`, overflowX: "auto" }}>
+      {subs.map(([id, l]) => <button key={id} role="tab" aria-selected={sub === id} onClick={() => setSub(id)} style={{ flexShrink: 0, height: 44, padding: 0, border: "none", borderRadius: 0, borderBottom: `2px solid ${sub === id ? S.txt : "transparent"}`, marginBottom: -1, background: "transparent", fontSize: 14, fontWeight: sub === id ? 600 : 400, color: sub === id ? S.txt : S.ts, cursor: "pointer" }}>{l}</button>)}
     </div>
 
     {/* ── HISTÓRICO ── */}
     {sub === "hist" && <div>
       <Crd>
-        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6 }}>{TIPOS.map(t => <Chip key={t.id} on={nTipo === t.id} color={t.c} onClick={() => setNTipo(t.id)}>{t.l}</Chip>)}</div>
-        <textarea value={nTxt} onChange={e => setNTxt(e.target.value)} rows={3} placeholder="Escreva a atividade / observação..." style={{ ...inp, resize: "vertical", marginTop: 4 }} />
+        <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6 }}>{TIPOS.map(t => <Chip key={t.id} on={nTipo === t.id} onClick={() => setNTipo(t.id)}>{t.l}</Chip>)}</div>
+        <textarea value={nTxt} onChange={e => setNTxt(e.target.value)} rows={3} placeholder="Escreva uma nota ou registro" style={{ ...inp, resize: "vertical", marginTop: 4 }} />
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-          <span style={{ fontSize: 11, color: S.ts, fontWeight: 600, marginRight: 2 }}>Responsável:</span>
-          {USERS.map(u => { const on = nUsers.includes(String(u.id)); return <button key={u.id} type="button" onClick={() => setNUsers(p => on ? p.filter(x => x !== String(u.id)) : [...p, String(u.id)])} style={{ padding: "5px 11px", borderRadius: 20, fontSize: 11.5, fontWeight: on ? 700 : 500, border: on ? "none" : `1px solid ${S.brd}`, background: on ? S.acc : S.card, color: on ? "#fff" : S.ts, cursor: "pointer" }}>{u.n.split(" ")[0]}</button>; })}
+          <span style={{ fontSize: 12.5, color: S.t2, marginRight: 2 }}>Responsável</span>
+          {USERS.map(u => { const on = nUsers.includes(String(u.id)); return <Chip key={u.id} on={on} onClick={() => setNUsers(p => on ? p.filter(x => x !== String(u.id)) : [...p, String(u.id)])}>{u.n.split(" ")[0]}</Chip>; })}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-          <button onClick={salvaAtv} disabled={salvando || !nTxt.trim() || !nUsers.length} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: nTxt.trim() ? S.acc : S.cl, color: nTxt.trim() ? "#fff" : S.td, border: "none", borderRadius: 10, padding: "9px 16px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Send size={14} />{salvando ? "Salvando..." : "Registrar"}</button>
+          <button onClick={salvaAtv} disabled={salvando || !nTxt.trim() || !nUsers.length} style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6, background: nTxt.trim() ? S.pri : S.cl, color: nTxt.trim() ? "#fff" : S.td, border: "none", borderRadius: 8, height: 42, padding: "0 16px", fontSize: 14, fontWeight: 600, cursor: "pointer" }}><Send size={14} />{salvando ? "Salvando..." : "Registrar"}</button>
         </div>
       </Crd>
       {ldA && <p style={{ fontSize: 12, color: S.ts }}>Carregando histórico...</p>}
       {!ldA && !ldF && !linhaTempo.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Nenhuma atividade registrada ainda.</p></Crd>}
-      {linhaTempo.map(({ k, a, l }) => l ? blocoLote(l, false) : <AtvCard key={k} a={a} onFinish={async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setAtvs(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } }} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={delAtv} />)}
+      {linhaTempo.map(({ k, a, l }) => l ? blocoLote(l, false) : <AtvCard key={k} a={a} onFinish={finalizar} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={delAtv} />)}
     </div>}
 
     {/* ── CONTATOS ── */}
@@ -742,7 +763,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
 // ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl, pessoasQ }) {
+export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl, pessoasQ, onRemoto }) {
   // secao controlada pelo menu lateral do App: inicio | empresas | pessoas
   const [sel, setSel] = useState(null);
   // Abrir a ficha de um cliente vindo de outra tela (ex.: clique no card em PDVs)
@@ -792,7 +813,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   };
 
   if (!visible) return null;
-  if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
+  if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
 
   return (<div>
     {secao === "empresas" && <EmpresasView token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}

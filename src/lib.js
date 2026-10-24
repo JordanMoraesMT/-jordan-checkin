@@ -30,7 +30,7 @@ const RGC={O:[-15.601,-56.115],N:[-15.565,-56.080],L:[-15.610,-56.060],S:[-15.65
 function geoEstimate(o){const b=(o.addr?.district||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9 ]/g,"");for(const[k,r]of Object.entries(BRG)){if(b.includes(k))return RGC[r];}const c=o.addr?.city_name||o.addr?.city||"";return CITY_GEO[c]||null;}
 // Paleta espelhada do Dashboard (theme.js, tema claro): acentos C.pri/C.green/C.gold/C.red,
 // superfícies --bg/--card/--alt/--bdr, textos --t1/--t3, chrome #0578A6/#036690 e sombra de card.
-const S={bg:"var(--bg)",card:"var(--card)",cardSolid:"var(--card-solid)",cl:"var(--alt)",pri:"#0AAEE8",pl:"var(--link)",acc:"#12C265",gold:"#FFB020",dng:"#FB4B3A",purple:"#8B5CF6",cyan:"#06B6D4",txt:"var(--t1)",t2:"var(--t2)",ts:"var(--t3)",td:"var(--t4)",brd:"var(--bdr)",inp:"var(--inp)",inpBdr:"var(--inp-bdr)",ok:"#12C265",
+const S={bg:"var(--bg)",card:"var(--card)",cardSolid:"var(--card-solid)",cl:"var(--alt)",pri:"#168ABF",pl:"var(--link)",acc:"#2A9D8F",gold:"#C8964E",dng:"#E06B57",purple:"#8B5CF6",cyan:"#06B6D4",txt:"var(--t1)",t2:"var(--t2)",ts:"var(--t3)",td:"var(--t4)",brd:"var(--bdr)",inp:"var(--inp)",inpBdr:"var(--inp-bdr)",ok:"#2A9D8F",
   chrome:"var(--chrome)",chromeTop:"var(--chrome-top)",chromeFg:"var(--chrome-fg)",chromeFg2:"var(--nav-fg)",chromeBdr:"var(--chrome-bdr)",
   nav:"var(--nav-fg)",navGrp:"var(--nav-grp)",navActive:"var(--nav-active-bg)",navActiveFg:"var(--nav-active-fg)",navFg:"var(--nav-fg)",navHover:"var(--nav-hover)",
   shadow:"var(--card-shadow)",track:"var(--track)",seam:"var(--seam-shadow)",contentShadow:"var(--content-shadow)",mono:"'IBM Plex Mono',ui-monospace,monospace"};

@@ -1,6 +1,6 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
-import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact } from "lucide-react";
+import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight } from "lucide-react";
 import { API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
 import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
@@ -163,8 +163,9 @@ export default function App(){
         if(r.ok){const d=await r.json();if(d&&d.ok&&Array.isArray(d.atividades))raw.push(...d.atividades);}
       }
     }catch(e){console.warn("historico D1:",e);}
-    // visita REGISTRADA = tipo Visita sem prazo (com prazo = visita agendada)
-    const apiVisits=raw.filter(t=>!t.due_em);
+    // visita REGISTRADA = tipo Visita sem prazo (com prazo = visita agendada).
+    // v74: tarefas nunca são visitas — a pendência "📌 Próxima visita" é VISITA sem prazo e entrava como visita.
+    const apiVisits=raw.filter(t=>!t.due_em&&t.origem!=="tarefa");
     const seen=new Set();const deduped=[];
     for(const t of apiVisits){const key=(t.org_id||"")+"|"+(t.user_id||"")+"|"+toLocalDate((t.criado_em||"").replace(" ","T")+"Z");if(seen.has(key))continue;seen.add(key);deduped.push(t);}
     // criado_em do D1 é UTC "YYYY-MM-DD HH:MM:SS" SEM fuso — anexar Z para o fT/toLocalDate converterem certo (fix 13:11→09:11)
@@ -202,7 +203,19 @@ export default function App(){
   },[active?.orgId,active?.checkinTime,token]);// eslint-disable-line
   const crmLog=(payload)=>{try{fetch(`${DASH_CRM}/api/crm/atividades`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(payload)}).catch(()=>{});}catch{}};
   const crmGps=(orgId,cnpj,g)=>{try{fetch(`${DASH_CRM}/api/crm/gps`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:orgId,cnpj:cnpj||null,lat:g.lat,lng:g.lng,precisao:g.acc})}).catch(()=>{});}catch{}};
-  const quickAction=async(org,type)=>{const note=prompt(`Registrar ${type==="WHATSAPP"?"WhatsApp":"Ligacao"} com ${org.name}:`);if(!note?.trim())return;try{crmLog({org_id:org.id,cnpj:(org.cnpj||"").replace(/\D/g,"")||null,org_nome:org.nickname||org.name,tipo:type,texto:note});alert("Registrado!");}catch(e){alert("Erro: "+e.message);}};
+  // v74: atendimento a distância (sem check-in) — mesma janela do check-out, conferindo as pendências do cliente.
+  // Grava como atividade do app (origem "teamcheck") com o tipo do contato; a Equipe conta como produtividade de escritório.
+  const[remTarget,setRemTarget]=useState(null);
+  const quickAction=(org)=>{if(!org)return;const cn=(org.cnpj||"").replace(/\D/g,"");setRemTarget({org,pend:[],lo:true});
+    pendenciasDe(token,org.id,cn).then(pl=>setRemTarget(t=>t&&t.org.id===org.id?{...t,pend:pl,lo:false}:t)).catch(()=>setRemTarget(t=>t?{...t,lo:false}:t));};
+  const remoteSave=(note,type,next,sale,extra)=>{const t=remTarget;if(!t)return;const o=t.org;const cn=(o.cnpj||"").replace(/\D/g,"")||null;const nome=o.nickname||o.name;
+    const resolv=(extra?.resolvidas)||[],novas=(extra?.novas)||[];const quem={user_id:user?.id||null,user_nome:user?.name||null};
+    crmLog({org_id:o.id,cnpj:cn,org_nome:nome,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:"")+resolv.map(x=>`\n✓ Pendência resolvida: ${x.txt}`).join(""),origem:"teamcheck",...quem});
+    novas.forEach(tx=>crmLog({org_id:o.id,cnpj:cn,org_nome:nome,tipo:"VISITA",texto:PEND_PREFIXO+tx,origem:"tarefa",...quem}));
+    resolv.forEach(x=>{try{fetch(`${DASH_CRM}/api/crm/tarefa-concluir`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({id:x.id})}).catch(()=>{});}catch{}});
+    if(next?.nextDate&&next?.nextDesc){const nt=(next.nextType||"LIGACAO").toUpperCase();crmLog({org_id:o.id,cnpj:cn,org_nome:nome,tipo:nt,texto:next.nextDesc,origem:"tarefa",due_em:`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`,...quem});}
+    setRemTarget(null);setTimeout(()=>setCrmBump(b=>b+1),800);
+    const m=["Atendimento registrado."];if(resolv.length)m.push(`${resolv.length} pendência(s) resolvida(s).`);if(novas.length)m.push(`${novas.length} pendência(s) nova(s) para o próximo atendimento.`);if(next?.nextDate)m.push("Próximo contato agendado.");setTimeout(()=>alert(m.join("\n")),100);};
 
   const checkin=async(org)=>{ensureBase();if(org.cat==="Online - B2B"&&!confirm(`${org.name} e Online/B2B.\nRegistrar visita?`))return;if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\nContinuar?`))return;if(org.cat==="Excluido"&&!confirm(`${org.name} esta Excluido.\nContinuar?`))return;setLdId(org.id);setGeoErr("");try{const g=await gps();if(plocs[org.id]&&!plocs[org.id].geo){const d=hav(plocs[org.id].lat,plocs[org.id].lng,g.lat,g.lng)*1000;if(d>800&&(g.acc==null||g.acc<=120)){setDivTarget({org,dist:Math.round(d),geo:g});setLdId(null);return;}else if(d>800){/* GPS impreciso: não bloqueia, mas corrige a posição salva */const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);crmGps(org.id,(org.cnpj||"").replace(/\D/g,""),g);}}else{/* sem GPS OU só geocodificado por endereço: o check-in real assume a localização */const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);crmGps(org.id,(org.cnpj||"").replace(/\D/g,""),g);}const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}catch{setGeoErr("GPS indisponivel.");}setLdId(null);};
   const handleDivAction=(action,type)=>{if(!divTarget)return;const{org,geo}=divTarget;if(action==="checkin"){const v={orgId:org.id,orgName:org.name,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:geo.lat,lng:geo.lng,accuracy:geo.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}else if(action==="remote"&&type)setCoTarget({...org,remoteType:type});setDivTarget(null);};
@@ -254,7 +267,7 @@ export default function App(){
     {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true}]:[]),{id:"relatorio",I:BarChart3,l:"Relatório"}]},
     {grp:"SISTEMA",itens:[{id:"config",I:Settings,l:"Configurações"}]},
   ];
-  const TITULOS={pdvs:["PDVS","Pontos de venda"],crm_inicio:["CRM","Feed de atividades"],crm_empresas:["EMPRESAS","Carteira de clientes"],crm_pessoas:["PESSOAS","Contatos"],mapa:["MAPA","Clientes no mapa"],rotas:["ROTAS","Roteiro do dia"],relatorio:["RELATÓRIO","Período, jornada & km"],equipe:["EQUIPE","Produtividade"],agenda:["AGENDA","Tarefas & follow-ups"],config:["CONFIGURAÇÕES","Sistema"]};
+  const TITULOS={pdvs:["PDVs","Pontos de venda"],crm_inicio:["CRM","Feed de atividades"],crm_empresas:["Empresas","Carteira de clientes"],crm_pessoas:["Pessoas","Contatos"],mapa:["Mapa","Clientes no mapa"],rotas:["Rotas","Roteiro do dia"],relatorio:["Relatório","Período, jornada e km"],equipe:["Equipe","Produtividade"],agenda:["Agenda","Tarefas e retornos"],config:["Configurações","Sistema"]};
   // Bottom nav (mobile): CRM entra como atalho único (→ Início); Empresas/Pessoas ficam na gaveta lateral
   const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"mapa",I:MapPin,l:"Mapa"},{id:"crm_inicio",I:BookUser,l:"CRM"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
   const tabs=isAdmin?[...baseTabs.slice(0,4),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(4)]:baseTabs;
@@ -263,7 +276,7 @@ export default function App(){
   const sair=()=>{setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);clearSSOCookie();};
   const dataHoje=fD(new Date());
 
-  return(<div style={{display:"flex",height:"100vh",overflow:"hidden",background:S.chrome,color:S.txt,fontFamily:"'Roboto',sans-serif"}}>
+  return(<div style={{display:"flex",height:"100vh",overflow:"hidden",background:S.chrome,color:S.txt,fontFamily:"'Archivo',system-ui,sans-serif"}}>
     {/* SIDEBAR — mesma estrutura do Dashboard (grupos + itens); no mobile vira gaveta */}
     {mob&&navOpen&&<div onClick={()=>setNavOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:49}}/>}
     <div style={{width:navOpen?230:0,minWidth:navOpen?230:0,transition:"all .25s",overflow:"hidden",background:S.chrome,borderRight:`1px solid ${S.chromeBdr}`,position:mob?"fixed":"relative",top:0,left:0,height:"100vh",zIndex:mob?50:1,display:"flex",flexDirection:"column",boxShadow:mob&&navOpen?"0 0 40px rgba(0,0,0,.5)":"none"}}>
@@ -277,17 +290,17 @@ export default function App(){
       <div style={{flex:1,overflowY:"auto",padding:"0 8px 18px"}}>
         {NAVG.map((g,gi)=>(
           <div key={gi} style={{marginBottom:10}}>
-            <div style={{fontSize:9,color:S.navGrp,textTransform:"uppercase",letterSpacing:1.5,padding:"10px 10px 5px",fontWeight:600,whiteSpace:"nowrap"}}>{g.grp}</div>
+            <div style={{fontSize:11.5,color:S.navGrp,padding:"10px 10px 5px",fontWeight:500,whiteSpace:"nowrap"}}>{g.grp==="CRM"?"CRM":g.grp.charAt(0)+g.grp.slice(1).toLowerCase()}</div>
             {g.itens.map(it=>{const act=tab===it.id;return(
-              <div key={it.id} className="navit" onClick={()=>irPara(it.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:8,cursor:"pointer",marginBottom:2,background:act?S.navActive:"transparent",color:act?S.navActiveFg:S.nav,fontSize:12,fontWeight:act?600:400,whiteSpace:"nowrap"}}>
+              <div key={it.id} className="navit" onClick={()=>irPara(it.id)} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 10px",borderRadius:6,cursor:"pointer",marginBottom:1,background:act?S.navActive:"transparent",color:act?S.navActiveFg:S.nav,fontSize:14,fontWeight:act?600:400,whiteSpace:"nowrap"}}>
                 <it.I size={16} strokeWidth={act?2.2:1.7} style={{flexShrink:0}}/>
                 <span style={{flex:1}}>{it.l}</span>
-                {it.admin&&<span style={{fontSize:8,padding:"1px 5px",borderRadius:4,background:S.gold+"33",color:S.gold}}>admin</span>}
+                {it.admin&&<span style={{fontSize:10.5,color:S.navGrp}}>admin</span>}
               </div>);})}
           </div>))}
       </div>
       <div style={{padding:"12px 18px 16px",borderTop:`1px solid ${S.chromeBdr}`,whiteSpace:"nowrap"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:S.nav}}><span style={{width:7,height:7,borderRadius:"50%",background:syncStatus.startsWith?.("Erro")?S.dng:"#3FBFD4",boxShadow:"0 0 0 3px rgba(63,191,212,.22)",flexShrink:0}}/>{syncing?syncMsg:(syncStatus?syncStatus.split("|")[0].trim():"Sync —")}</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,fontSize:11,color:S.nav}}><span style={{width:7,height:7,borderRadius:"50%",background:syncStatus.startsWith?.("Erro")?S.dng:S.ok,flexShrink:0}}/>{syncing?syncMsg:(syncStatus?syncStatus.split("|")[0].trim():"Sync —")}</div>
         <div style={{fontSize:10,color:S.navGrp,marginTop:4}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</div>
       </div>
     </div>
@@ -295,16 +308,16 @@ export default function App(){
     {/* COLUNA PRINCIPAL */}
     <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",height:"100vh",background:S.chrome}}>
       {/* HEADER — gradiente chrome, idêntico ao Dashboard */}
-      <div style={{height:60,flexShrink:0,background:`linear-gradient(135deg,${S.chromeTop},${S.chrome})`,borderBottom:`1px solid ${S.chromeBdr}`,display:"flex",alignItems:"center",gap:mob?8:14,padding:mob?"0 12px":"0 24px",zIndex:10}}>
-        <button onClick={()=>setNavOpen(o=>!o)} style={{background:"none",border:`1px solid ${S.chromeBdr}`,color:S.chromeFg,borderRadius:6,width:32,height:32,minWidth:32,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>☰</button>
+      <div style={{height:60,flexShrink:0,background:S.chrome,borderBottom:`1px solid ${S.chromeBdr}`,display:"flex",alignItems:"center",gap:mob?8:14,padding:mob?"0 12px":"0 24px",zIndex:10}}>
+        <button onClick={()=>setNavOpen(o=>!o)} aria-label="Menu" style={{background:"none",border:"none",color:S.chromeFg,borderRadius:6,width:40,height:40,minWidth:40,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}><Menu size={20} strokeWidth={1.8}/></button>
         {!mob&&<JordanLogo color={S.chromeFg} height={34}/>}
         <div style={{flex:1,minWidth:0,display:"flex",alignItems:"baseline",gap:8,overflow:"hidden"}}>
-          <span style={{fontSize:mob?15:17,fontWeight:700,letterSpacing:".12em",color:S.chromeFg,whiteSpace:"nowrap"}}>{(TITULOS[tab]||["TEAMCHECK"])[0]}</span>
-          {!mob&&<span style={{fontSize:11,color:S.navGrp,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(TITULOS[tab]||[])[1]||""}</span>}
+          <span style={{fontSize:mob?18:19,fontWeight:700,letterSpacing:"-.2px",color:S.chromeFg,whiteSpace:"nowrap"}}>{(TITULOS[tab]||["TEAMCHECK"])[0]}</span>
+          {!mob&&<span style={{fontSize:13,color:S.navGrp,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(TITULOS[tab]||[])[1]||""}</span>}
         </div>
-        <button onClick={()=>setSearchAdd(true)} title="Adicionar / buscar cliente" style={{width:34,height:34,minWidth:34,borderRadius:9,border:"none",background:S.acc,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",boxShadow:`0 2px 10px ${S.acc}44`,padding:0}}><Plus size={18} strokeWidth={2.4} color="#fff"/></button>
-        <button onClick={async()=>{await doSync();await loadHistory();syncVisitLoad();}} disabled={syncing} title="Sincronizar" style={{width:34,height:34,minWidth:34,borderRadius:9,border:`1px solid ${S.chromeBdr}`,background:"rgba(255,255,255,.06)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0}}><RefreshCw size={16} strokeWidth={2} color="var(--chrome-fg)" className={syncing?"spin":""}/></button>
-        <button onClick={trocarTema} title={tema==="dark"?"Mudar para tema claro":"Mudar para tema escuro"} style={{width:34,height:34,minWidth:34,borderRadius:9,border:`1px solid ${S.chromeBdr}`,background:"none",color:S.chromeFg,cursor:"pointer",fontSize:15,display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>{tema==="dark"?"☀️":"🌙"}</button>
+        <button onClick={()=>setSearchAdd(true)} title="Adicionar / buscar cliente" aria-label="Novo cliente" style={{width:40,height:40,minWidth:40,borderRadius:8,border:"none",background:S.pri,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0}}><Plus size={19} strokeWidth={2.2} color="#fff"/></button>
+        <button onClick={async()=>{await doSync();await loadHistory();syncVisitLoad();}} disabled={syncing} title="Sincronizar" aria-label="Sincronizar" style={{width:40,height:40,minWidth:40,borderRadius:8,border:`1px solid ${S.chromeBdr}`,background:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0}}><RefreshCw size={17} strokeWidth={1.8} color="var(--chrome-fg)" className={syncing?"spin":""}/></button>
+        <button onClick={trocarTema} title={tema==="dark"?"Mudar para tema claro":"Mudar para tema escuro"} aria-label="Trocar tema" style={{width:40,height:40,minWidth:40,borderRadius:8,border:`1px solid ${S.chromeBdr}`,background:"none",color:S.chromeFg,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",padding:0}}>{tema==="dark"?<Sun size={17} strokeWidth={1.8}/>:<Moon size={17} strokeWidth={1.8}/>}</button>
         {!mob&&<div style={{textAlign:"right",lineHeight:1.25}}>
           <div style={{fontSize:13,fontWeight:600,color:S.chromeFg}}>{user?.name}</div>
           <div style={{fontSize:11,color:S.navGrp}}>{dataHoje}</div>
@@ -312,28 +325,45 @@ export default function App(){
         {!mob&&<button onClick={sair} style={{padding:"7px 15px",borderRadius:8,border:`1px solid ${S.chromeBdr}`,background:"transparent",color:S.chromeFg,fontSize:12.5,fontWeight:500,cursor:"pointer"}}>Sair</button>}
       </div>
 
-      {/* CONTEÚDO — recorte com sombra interna + efeitos Cyber Tech Premium (.jc-main) */}
-      <div className="jc-main" style={{flex:1,overflowY:"auto",borderRadius:"22px 0 0 0",boxShadow:`inset 0 18px 28px -22px ${S.seam},inset 18px 0 28px -22px ${S.seam}`,padding:mob?"16px 14px 96px":"22px 26px 42px"}}>
-      {novaVersao&&<div onClick={atualizarApp} style={{background:S.pri+"22",border:`1px solid ${S.pri}`,borderRadius:12,padding:"10px 14px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:15}}>🔄</span><p style={{fontSize:13,color:S.pl,margin:0,flex:1}}><b>Nova versão do app disponível.</b> Toque para atualizar.</p><span style={{fontSize:11,color:S.pl,fontWeight:700,whiteSpace:"nowrap"}}>Atualizar →</span></div>}
-      {active&&tab!=="config"&&<Banner v={active} orgs={orgs} onClick={()=>{setTab("pdvs");setFocusReq({id:active.orgId,name:active.orgName,t:Date.now()});}}/>}
-      {active&&tab!=="config"&&pendAtivas.length>0&&<div onClick={()=>setPendAlerta({org:active.orgName,itens:pendAtivas})} style={{cursor:"pointer",background:S.gold+"18",border:`1px solid ${S.gold}66`,borderRadius:12,padding:"10px 14px",marginBottom:10}}>
-        <p style={{fontSize:13,color:S.gold,margin:0,fontWeight:700}}>📌 {pendAtivas.length} pendência(s) neste cliente</p>
-        <p style={{fontSize:11.5,color:S.t2,margin:"3px 0 0"}}>{pendAtivas.slice(0,3).map(x=>x.txt).join(" · ")}{pendAtivas.length>3?" …":""}</p>
-      </div>}
-      {teamActive&&tab!=="config"&&isAdmin&&<div onClick={()=>{setTab("pdvs");setFocusReq({id:teamActive.orgId,name:teamActive.orgName,t:Date.now()});}} title="Ir ao cliente" style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,borderRadius:"50%",background:S.gold,animation:"pulse 2s infinite",flexShrink:0}}/><p style={{fontSize:13,color:S.gold,margin:0,flex:1,minWidth:0}}>Alisson em atendimento: <b>{teamActive.orgName}</b></p><span style={{fontSize:11,color:S.gold,fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>Ir ao cliente →</span></div><p style={{fontSize:11,color:S.ts,margin:"3px 0 0 16px"}}>Desde {fT(teamActive.checkinTime)} — {hrsMin(mins(teamActive.checkinTime,new Date()))}</p></div>}
+      {/* CONTEÚDO — v74: superfície lisa, largura máx. nas telas de lista */}
+      <div className="jc-main" style={{flex:1,overflowY:"auto",padding:mob?"14px 14px 96px":"22px 28px 42px"}}><div style={{maxWidth:tab==="pdvs"||tab.startsWith("crm")?980:"none",margin:"0 auto"}}>
+      {novaVersao&&<button onClick={atualizarApp} style={{width:"100%",display:"flex",alignItems:"center",gap:10,textAlign:"left",background:S.card,border:`1px solid ${S.pri}`,borderRadius:10,padding:"10px 12px",marginBottom:10,minHeight:44}}><RefreshCw size={16} strokeWidth={1.9} color={S.pl}/><span style={{fontSize:14,color:S.txt,flex:1}}>Saiu uma versão nova do app.</span><span style={{fontSize:13,color:S.pl,fontWeight:600,whiteSpace:"nowrap"}}>Atualizar</span></button>}
+      {/* v74: um bloco só para quem está em atendimento agora (você, pendências do cliente e a equipe) */}
+      {tab!=="config"&&(active||(teamActive&&isAdmin))&&<section aria-label="Em atendimento agora" style={{border:`1px solid ${S.brd}`,borderRadius:10,overflow:"hidden",marginBottom:12,background:S.card}}>
+        {active&&<button onClick={()=>{setTab("pdvs");setFocusReq({id:active.orgId,name:active.orgName,t:Date.now()});}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 12px",minHeight:48,border:"none",borderRadius:0,background:"transparent",textAlign:"left"}}>
+          <span style={{width:8,height:8,borderRadius:4,background:S.ok,flexShrink:0}}/>
+          <span style={{display:"flex",flexDirection:"column",flex:1,minWidth:0}}>
+            <span style={{fontSize:14.5,fontWeight:600,color:S.txt,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Você · {(orgs.find(x=>x.id===active.orgId)?.name)||active.orgName}</span>
+            <span className="num" style={{fontSize:11.5,color:S.ts}}>check-in {fT(active.checkinTime)} · {hrsMin(mins(active.checkinTime,new Date()))}</span>
+          </span>
+          <span style={{fontSize:13,fontWeight:600,color:S.pl,whiteSpace:"nowrap"}}>Ir ao cliente</span>
+        </button>}
+        {active&&pendAtivas.length>0&&<button onClick={()=>setPendAlerta({org:active.orgName,itens:pendAtivas})} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",minHeight:44,border:"none",borderTop:`1px solid ${S.brd}`,borderRadius:0,background:S.gold+"14",textAlign:"left"}}>
+          <span style={{fontSize:12.5,fontWeight:600,color:S.gold,whiteSpace:"nowrap"}}>{pendAtivas.length===1?"1 pendência":`${pendAtivas.length} pendências`}</span>
+          <span style={{fontSize:13,color:S.txt,flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{pendAtivas.slice(0,3).map(x=>x.txt).join(" · ")}</span>
+          <ChevronRight size={15} color="var(--t3)"/>
+        </button>}
+        {teamActive&&isAdmin&&<button onClick={()=>{setTab("pdvs");setFocusReq({id:teamActive.orgId,name:teamActive.orgName,t:Date.now()});}} title="Ir ao cliente" style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 12px",minHeight:48,border:"none",borderTop:active?`1px solid ${S.brd}`:"none",borderRadius:0,background:"transparent",textAlign:"left"}}>
+          <span style={{width:8,height:8,borderRadius:4,background:S.gold,flexShrink:0}}/>
+          <span style={{display:"flex",flexDirection:"column",flex:1,minWidth:0}}>
+            <span style={{fontSize:14.5,fontWeight:500,color:S.txt,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>Alisson · {teamActive.orgName}</span>
+            <span className="num" style={{fontSize:11.5,color:S.ts}}>desde {fT(teamActive.checkinTime)} · {hrsMin(mins(teamActive.checkinTime,new Date()))}</span>
+          </span>
+          <span style={{fontSize:13,fontWeight:600,color:S.gold,whiteSpace:"nowrap"}}>Ir ao cliente</span>
+        </button>}
+      </section>}
+      {mAlert&&!active&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13.5,color:S.gold,margin:0}}>Bom dia — nenhuma atividade iniciada ainda.</p></div>}
+      {prevDay&&<div style={{background:S.dng+"18",border:`1px solid ${S.dng}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.dng,margin:"0 0 8px"}}>Visita aberta de {fD(prevDay.checkinTime)} — {prevDay.orgName}</p><div style={{display:"flex",gap:8}}><button onClick={()=>{const c=new Date(prevDay.checkinTime);c.setHours(18);setVisits(p=>[{...prevDay,checkoutTime:c.toISOString(),note:"Auto 18h",taskType:"VISITA",synced:false},...p]);setActive(null);setPrevDay(null);}} style={{flex:1,fontSize:12,background:S.dng,border:"none",color:"#fff"}}>Fechar 18h</button><button onClick={()=>setCoTarget({id:prevDay.orgId,name:prevDay.orgName})} style={{flex:1,fontSize:12}}>Com obs.</button></div></div>}
+      {longVisit&&!prevDay&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.gold,margin:"0 0 6px"}}>Visita aberta há mais de 2h — {active?.orgName}</p><button onClick={()=>setCoTarget({id:active.orgId,name:active.orgName})} style={{width:"100%",fontSize:12,borderColor:S.gold,color:S.gold}}>Fazer check-out</button></div>}
 
-      {mAlert&&!active&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.gold,margin:0}}>⏰ Bom dia! Atividades ainda nao iniciadas.</p></div>}
-      {prevDay&&<div style={{background:S.dng+"18",border:`1px solid ${S.dng}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.dng,margin:"0 0 8px"}}>⚠️ Visita aberta de {fD(prevDay.checkinTime)} — {prevDay.orgName}</p><div style={{display:"flex",gap:8}}><button onClick={()=>{const c=new Date(prevDay.checkinTime);c.setHours(18);setVisits(p=>[{...prevDay,checkoutTime:c.toISOString(),note:"Auto 18h",taskType:"VISITA",synced:false},...p]);setActive(null);setPrevDay(null);}} style={{flex:1,fontSize:12,background:S.dng,border:"none",color:"#fff"}}>Fechar 18h</button><button onClick={()=>setCoTarget({id:prevDay.orgId,name:prevDay.orgName})} style={{flex:1,fontSize:12}}>Com obs.</button></div></div>}
-      {longVisit&&!prevDay&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.gold,margin:"0 0 6px"}}>⏰ Visita ativa ha mais de 2h — {active?.orgName}</p><button onClick={()=>setCoTarget({id:active.orgId,name:active.orgName})} style={{width:"100%",fontSize:12,borderColor:S.gold,color:S.gold}}>Fazer check-out</button></div>}
-
-      {canCloseRoute&&tab!=="config"&&<div style={{background:S.acc+"18",border:`1px solid ${S.acc}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.acc,margin:"0 0 8px"}}>✅ {todayVisits.length} visita(s) hoje — Fechar roteiro?</p><button onClick={()=>setShowEndDay(true)} style={{width:"100%",padding:10,fontSize:13,background:S.acc,border:"none",fontWeight:600,borderRadius:8,color:"#fff"}}>🏨 Fechar Roteiro do Dia</button></div>}
+      {canCloseRoute&&tab!=="config"&&<div style={{background:S.acc+"18",border:`1px solid ${S.acc}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.acc,margin:"0 0 8px"}}>{todayVisits.length} visita(s) hoje — fechar o roteiro?</p><button onClick={()=>setShowEndDay(true)} style={{width:"100%",padding:10,fontSize:13,background:S.acc,border:"none",fontWeight:600,borderRadius:8,color:"#fff"}}>Fechar roteiro do dia</button></div>}
 
       <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}} focusReq={focusReq} rfv={rfvMap} excl={exclOrgs}/>
-      <CrmTab visible={tab.startsWith("crm")} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs} pessoasQ={pessoaQ0}/>
+      <CrmTab visible={tab.startsWith("crm")} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs} pessoasQ={pessoaQ0} onRemoto={quickAction}/>
       <Suspense fallback={null}>{mapaLigado&&<MapaTab visible={tab==="mapa"} orgs={orgs} plocs={plocs} user={user} rfv={rfvMap} excl={exclOrgs} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}</Suspense>
       {tab==="rotas"&&<RotasTab sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs} orgs={orgs} rfv={rfvMap} token={token} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}
       {tab==="relatorio"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando relatório…</p>}><RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/></Suspense>}
-      {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} plocs={plocs} dayBases={dayBases} user={user} visits={visits}/>}
+      {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} plocs={plocs} dayBases={dayBases} user={user} visits={visits} token={token} bump={crmBump}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs} bump={crmBump} onCrmChange={()=>setCrmBump(b=>b+1)}/>
 
       {tab==="config"&&<ConfigTab instEvt={instEvt} user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
@@ -351,7 +381,7 @@ export default function App(){
         onClearAllGPS={()=>{setPlocs({});sS("jc:pdvLocs",{});}}
         onLogout={sair}
       />}
-      </div>
+      </div></div>
     </div>
 
     {/* Voltar ao topo */}
@@ -361,6 +391,7 @@ export default function App(){
     {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=>{const act=navAtivo(t.id);return <button key={t.id} onClick={()=>{if(t.id==="mapa")setMapaLigado(true);setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:act?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:act?700:400,color:act?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={act?2.2:1.6}/>{t.l}</button>;})}</div></div>}
 
     {coTarget&&<NoteModal org={coTarget} pendencias={active&&coTarget.id===active.orgId?pendAtivas:[]} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
+    {remTarget&&<NoteModal remoto org={remTarget.org} pendencias={remTarget.pend} carregandoPend={remTarget.lo} onSave={remoteSave} onCancel={()=>setRemTarget(null)}/>}
     {pendAlerta&&<PendenciasAlerta dados={pendAlerta} onClose={()=>setPendAlerta(null)}/>}
     {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const n={...p,[k]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
     {showEndDay&&<DayEndModal user={user} onSave={b=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const cur=p[k]||{};const n={...p,[k]:{...cur,end:b}};sS("jc:dayBases",n);return n;});setShowEndDay(false);}} onCancel={()=>setShowEndDay(false)}/>}
