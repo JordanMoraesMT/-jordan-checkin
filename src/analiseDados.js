@@ -1,7 +1,7 @@
 // TeamCheck — carga compartilhada da Análise de visitas (v79)
 // Uma só leitura (com cache de 10 min) serve a Análise, o Rotas › Planejar, o cartão da semana e o balão "perto daqui".
 import { API, DASH } from "./lib";
-import { INDUSTRIAS, PREMISSAS_PADRAO } from "./analiseVisitas.js";
+import { INDUSTRIAS, PREMISSAS_PADRAO, setTramTaxas } from "./analiseVisitas.js";
 
 const k14 = x => String(x || "").replace(/\D/g, "").padStart(14, "0");
 const mesMenos = (ym, n) => { const [y, m] = ym.split("-").map(Number); const t = y * 12 + (m - 1) - n; return `${Math.floor(t / 12)}-${String(t % 12 + 1).padStart(2, "0")}`; };
@@ -34,7 +34,9 @@ export function carregarBase(token, inicio, hoje) {
   const p = Promise.all([
     fetch(`${DASH}/api/crm/atividades?tipo=VISITA&desde=${encodeURIComponent(inicio + " 04:00:00")}&limit=2000`, H).then(r => r.json()).catch(() => null),
     porInd(pIni, pFim), porInd(p12, pFim),
-  ]).then(([a, v, f]) => {
+    fetch(`${DASH}/api/crm/tram-taxas`, H).then(r => r.ok ? r.json() : null).catch(() => null),
+  ]).then(([a, v, f, tt]) => {
+    setTramTaxas(tt); // v87: taxa Tramontina por cliente direto dos extratos (sem rota → foto de tramTaxas.js)
     const ok = !!(a && a.atividades);
     const r = { visitas: ok ? a.atividades.filter(x => x.origem === "checkout") : [], vendInd: v.m, fat12Ind: f.m, falhouVisitas: !ok, falhouVendas: v.falhou + f.falhou };
     if (!ok || r.falhouVendas) cacheBase = null; // não guarda leitura incompleta

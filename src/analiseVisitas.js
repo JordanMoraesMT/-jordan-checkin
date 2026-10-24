@@ -49,12 +49,16 @@ export function classeDe(fatMes, prem) {
   if (!(fatMes > 0)) return prem.classes.find(k => k.c === "Sem compra");
   return prem.classes.filter(k => k.c !== "Sem compra").sort((a, b) => b.min - a.min).find(k => fatMes >= k.min) || prem.classes[2];
 }
+// v87: taxas Tramontina AO VIVO (rota /api/crm/tram-taxas do Dashboard). Sem ela, vale a foto de tramTaxas.js.
+let TRAM_VIVO = null;
+export function setTramTaxas(t) { if (t && t.ok && t.clientes && Object.keys(t.clientes).length) TRAM_VIVO = t; }
+export const tramTaxasInfo = () => TRAM_VIVO;
 // taxa (%) de uma indústria para um cliente (aplica exceções por razão social)
 export function taxaDe(ind, org, P) {
   const ex = (P.excecoes || []).find(e => e.ind === ind && new RegExp(e.razao, "i").test(`${org?.legalName || ""} ${org?.name || ""}`));
   if (ex) return ex.taxa;
   // Tramontina: taxa REAL do cliente nos extratos (mix de linhas/promoções), quando houver
-  if (ind === "TRAMONTINA" && P.tramPorCliente !== false) { const t = TRAM_TAXA_CLIENTE[k14(org?.cnpj)]; if (t) return t; }
+  if (ind === "TRAMONTINA" && P.tramPorCliente !== false) { const t = (TRAM_VIVO ? TRAM_VIVO.clientes : TRAM_TAXA_CLIENTE)[k14(org?.cnpj)]; if (t) return t; }
   return P.taxas?.[ind] ?? 5;
 }
 // comissão estimada de um cliente sobre {industria: valor}
