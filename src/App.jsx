@@ -70,6 +70,14 @@ export default function App(){
   const syncDayBasesSave=async(bases)=>{if(!bases||!Object.keys(bases).length)return;try{await fetch(`${API}?sync=dayBases`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:bases})});}catch(e){console.warn("syncBases:",e);}};
   const syncDayBasesLoad=async()=>{try{const r=await fetch(`${API}?sync=dayBases`);const d=await r.json();if(d.active&&Object.keys(d.active).length){setDayBases(prev=>{const merged={...prev};for(const k in d.active){merged[k]={...(d.active[k]||{}),...(prev[k]||{})};}sS("jc:dayBases",merged);return merged;});}}catch(e){console.warn("syncBasesLoad:",e);}};
   const[teamActive,setTeamActive]=useState(null);
+  // v73: aba aberta há muito tempo roda versão antiga — detecta deploy novo e oferece atualizar
+  const[novaVersao,setNovaVersao]=useState(false);
+  useEffect(()=>{const atual=(document.querySelector('script[src*="/assets/index-"]')?.getAttribute("src")||"").replace(/^.*\/assets\//,"");if(!atual)return;
+    const checa=async()=>{try{const h=await(await fetch("/?v="+Date.now(),{cache:"no-store"})).text();const m=h.match(/\/assets\/(index-[^"']+\.js)/);if(m&&m[1]!==atual)setNovaVersao(true);}catch(e){}};
+    const vis=()=>{if(document.visibilityState==="visible")checa();};
+    checa();const iv=setInterval(checa,5*60*1000);document.addEventListener("visibilitychange",vis);window.addEventListener("focus",checa);
+    return()=>{clearInterval(iv);document.removeEventListener("visibilitychange",vis);window.removeEventListener("focus",checa);};},[]);
+  const atualizarApp=async()=>{try{if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.update().catch(()=>{})));}if("caches" in window){const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)));}}catch(e){}location.reload();};
   // ─── Matriz RFV (D1, consolidada por CNPJ) — badges e ordenação da lista de visitas ───
   const[rfvMap,setRfvMap]=useState(null);
   const loadRfv=async()=>{try{const r=await fetch(`${DASH_CRM}/api/crm/rfv`,{headers:{"X-Session":token}});const d=await r.json();if(d&&d.ok&&d.clientes){const byOrg={};for(const k in d.clientes){const x=d.clientes[k];if(x.org_id)byOrg[x.org_id]=x;}setRfvMap({byCnpj:d.clientes,byOrg,ref:d.ref});}}catch(e){console.warn("rfv:",e);}};
@@ -306,6 +314,7 @@ export default function App(){
 
       {/* CONTEÚDO — recorte com sombra interna + efeitos Cyber Tech Premium (.jc-main) */}
       <div className="jc-main" style={{flex:1,overflowY:"auto",borderRadius:"22px 0 0 0",boxShadow:`inset 0 18px 28px -22px ${S.seam},inset 18px 0 28px -22px ${S.seam}`,padding:mob?"16px 14px 96px":"22px 26px 42px"}}>
+      {novaVersao&&<div onClick={atualizarApp} style={{background:S.pri+"22",border:`1px solid ${S.pri}`,borderRadius:12,padding:"10px 14px",marginBottom:10,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}><span style={{fontSize:15}}>🔄</span><p style={{fontSize:13,color:S.pl,margin:0,flex:1}}><b>Nova versão do app disponível.</b> Toque para atualizar.</p><span style={{fontSize:11,color:S.pl,fontWeight:700,whiteSpace:"nowrap"}}>Atualizar →</span></div>}
       {active&&tab!=="config"&&<Banner v={active} orgs={orgs} onClick={()=>{setTab("pdvs");setFocusReq({id:active.orgId,name:active.orgName,t:Date.now()});}}/>}
       {active&&tab!=="config"&&pendAtivas.length>0&&<div onClick={()=>setPendAlerta({org:active.orgName,itens:pendAtivas})} style={{cursor:"pointer",background:S.gold+"18",border:`1px solid ${S.gold}66`,borderRadius:12,padding:"10px 14px",marginBottom:10}}>
         <p style={{fontSize:13,color:S.gold,margin:0,fontWeight:700}}>📌 {pendAtivas.length} pendência(s) neste cliente</p>
