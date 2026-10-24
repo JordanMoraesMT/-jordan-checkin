@@ -210,7 +210,55 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const baixaArq = async (a) => { try { const r = await fetch(`${DASH}/api/crm/arquivo?id=${a.id}`, { headers: { "X-Session": token } }); const b = await r.blob(); const u = URL.createObjectURL(b); const el = document.createElement("a"); el.href = u; el.download = a.nome || "arquivo"; el.click(); setTimeout(() => URL.revokeObjectURL(u), 5000); } catch (e) { alert("Erro: " + e.message); } };
   const [preview, setPreview] = useState(null);
   // v42: navegação entre fotos pelas setas do teclado (e botões na tela)
-  const fotosOrd = useMemo(() => arqs.filter(a => a.tipo === "foto"), [arqs]);
+  // v70: fotos/arquivos agrupados por ENVIO — mesmo autor e pausa de no máx. 3 min entre um arquivo e o próximo
+  //      (no D1, um envio grava os arquivos com 1–7 s de diferença; envios distintos ficam a minutos/dias)
+  const lotes = useMemo(() => {
+    const ms = s => { const t = String(s || ""); return new Date(/[zZ]$|[+-]\d\d:\d\d$/.test(t) ? t : t.replace(" ", "T") + "Z").getTime() || 0; };
+    const asc = [...arqs].sort((a, b) => ms(a.criado_em) - ms(b.criado_em) || a.id - b.id);
+    const out = []; let cur = null;
+    for (const a of asc) { const t = ms(a.criado_em), u = a.user_nome || "";
+      if (cur && cur.user === u && t - cur.ult <= 3 * 60 * 1000) { cur.itens.push(a); cur.ult = t; cur.fim = a.criado_em; }
+      else { cur = { id: a.id, user: u, ini: a.criado_em, fim: a.criado_em, ult: t, itens: [a] }; out.push(cur); } }
+    return out.reverse(); // envio mais recente primeiro
+  }, [arqs]);
+  const fotosOrd = useMemo(() => lotes.flatMap(l => l.itens.filter(a => a.tipo === "foto")), [lotes]);
+  // Histórico = atividades + envios de fotos, numa linha do tempo só
+  const chaveT = s => String(s || "").replace("T", " ").slice(0, 19);
+  const linhaTempo = useMemo(() => [...atvs.map(a => ({ k: "a" + a.id, t: chaveT(a.criado_em), a })), ...lotes.map(l => ({ k: "l" + l.id, t: chaveT(l.fim), l }))]
+    .sort((x, y) => y.t.localeCompare(x.t)), [atvs, lotes]);
+  const blocoLote = (l, naAbaFotos) => { const fotos = l.itens.filter(a => a.tipo === "foto"), outros = l.itens.filter(a => a.tipo !== "foto");
+    const pl = (n, s) => `${n} ${s}${n > 1 ? "s" : ""}`;
+    const tit = fotos.length && outros.length ? `${pl(fotos.length, "foto")} e ${pl(outros.length, "arquivo")}` : fotos.length ? `${pl(fotos.length, "foto")} da loja` : pl(outros.length, "arquivo");
+    return (<Crd key={"lote" + l.id} style={{ padding: 0, overflow: "hidden" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: S.cl, borderBottom: `1px solid ${S.brd}` }}>
+        <div style={{ width: 28, height: 28, borderRadius: "50%", background: S.pri + "22", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{fotos.length ? <Camera size={15} color={S.pri} /> : <Paperclip size={15} color={S.pri} />}</div>
+        <p style={{ margin: 0, fontSize: 12, fontWeight: 800, color: S.txt, letterSpacing: 0.4 }}>{tit.toUpperCase()}</p>
+        <p style={{ margin: "0 0 0 auto", fontSize: 11, color: S.ts, display: "flex", alignItems: "center", gap: 4 }}><Clock size={11} />{fDH(l.ini)}</p>
+      </div>
+      <div style={{ padding: "10px 12px" }}>
+        <p style={{ margin: "0 0 8px", fontSize: 12, color: S.ts }}>{l.user || "—"}{!naAbaFotos && <button onClick={() => setSub("arq")} style={{ marginLeft: 8, background: "transparent", border: "none", padding: 0, color: S.pri, fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>ver em Fotos & Arquivos ›</button>}</p>
+        {fotos.length > 0 && <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
+          {fotos.map(a => <div key={a.id} style={{ flexShrink: 0, width: naAbaFotos ? 130 : 104 }}>
+            <div style={{ position: "relative", borderRadius: 10, overflow: "hidden", border: `1px solid ${S.brd}`, background: S.cl, width: naAbaFotos ? 130 : 104, height: naAbaFotos ? 130 : 104 }}>
+              {thumbs[a.id] ? <img src={thumbs[a.id]} alt={a.nome} onClick={() => setPreview(a)} style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><Camera size={20} color={S.td} /></div>}
+              {naAbaFotos && <button onClick={() => delArq(a)} style={{ position: "absolute", top: 4, right: 4, width: 26, height: 26, borderRadius: 8, background: "rgba(0,0,0,0.5)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={13} color="#fff" /></button>}
+            </div>
+            {(naAbaFotos || a.descricao) && <p onClick={() => naAbaFotos && editaDescricao(a)} title={naAbaFotos ? "Toque para editar a descrição" : ""} style={{ margin: "5px 1px 0", fontSize: 10.5, lineHeight: 1.35, color: a.descricao ? S.ts : S.td, cursor: naAbaFotos ? "pointer" : "default", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontStyle: a.descricao ? "normal" : "italic" }}>{a.descricao || "＋ descrição"}</p>}
+          </div>)}
+        </div>}
+        {outros.map(a => <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 0", borderTop: fotos.length ? `1px solid ${S.cl}` : "none" }}>
+          <FileText size={18} color={S.pri} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: S.txt, wordBreak: "break-all" }}>{a.nome}</p>
+            {a.descricao && <p style={{ margin: "1px 0 0", fontSize: 11.5, color: S.ts }}>{a.descricao}</p>}
+            <p style={{ margin: 0, fontSize: 11, color: S.td }}>{((a.tamanho || 0) / 1024).toFixed(0)} KB</p>
+          </div>
+          {naAbaFotos && <button onClick={() => editaDescricao(a)} title="Descrição" style={{ width: 36, height: 36, borderRadius: 10, background: S.cl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Pencil size={14} color={S.ts} /></button>}
+          <button onClick={() => baixaArq(a)} style={{ width: 36, height: 36, borderRadius: 10, background: S.pl + "22", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Download size={15} color={S.pl} /></button>
+          {naAbaFotos && <button onClick={() => delArq(a)} style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>}
+        </div>)}
+      </div>
+    </Crd>); };
   const navFoto = useCallback((delta) => { setPreview(p => { if (!p) return p; const i = fotosOrd.findIndex(x => x.id === p.id); if (i < 0) return p; const j = (i + delta + fotosOrd.length) % fotosOrd.length; return fotosOrd[j]; }); }, [fotosOrd]);
   useEffect(() => { if (!preview) return; const h = (e) => { if (e.key === "ArrowRight") { e.preventDefault(); navFoto(1); } else if (e.key === "ArrowLeft") { e.preventDefault(); navFoto(-1); } else if (e.key === "Escape") setPreview(null); };
     window.addEventListener("keydown", h); return () => window.removeEventListener("keydown", h); }, [preview, navFoto]);
@@ -332,8 +380,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
         </div>
       </Crd>
       {ldA && <p style={{ fontSize: 12, color: S.ts }}>Carregando histórico...</p>}
-      {!ldA && !atvs.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Nenhuma atividade registrada ainda.</p></Crd>}
-      {atvs.map(a => <AtvCard key={a.id} a={a} onFinish={async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setAtvs(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } }} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={delAtv} />)}
+      {!ldA && !ldF && !linhaTempo.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Nenhuma atividade registrada ainda.</p></Crd>}
+      {linhaTempo.map(({ k, a, l }) => l ? blocoLote(l, false) : <AtvCard key={k} a={a} onFinish={async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setAtvs(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } }} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={delAtv} />)}
     </div>}
 
     {/* ── CONTATOS ── */}
@@ -393,6 +441,17 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       {org.people && <p style={{ fontSize: 11.5, color: S.td, margin: "4px 2px" }}>Pessoas: {org.people}</p>}
     </div>}
 
+    {/* visualizador de fotos — abre do Histórico ou da aba Fotos */}
+    {preview && <div onClick={() => setPreview(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 60, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
+        <img src={thumbs[preview.id]} alt={preview.nome} onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "76vh", borderRadius: 10 }} />
+        {fotosOrd.length > 1 && <>
+          <button onClick={e => { e.stopPropagation(); navFoto(-1); }} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", width: 46, height: 46, borderRadius: "50%", background: "rgba(255,255,255,0.14)", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>‹</button>
+          <button onClick={e => { e.stopPropagation(); navFoto(1); }} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 46, height: 46, borderRadius: "50%", background: "rgba(255,255,255,0.14)", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>›</button>
+        </>}
+        {preview.descricao && <p style={{ color: "#fff", fontSize: 13.5, fontWeight: 600, margin: "12px 0 0", textAlign: "center", maxWidth: 640 }}>{preview.descricao}</p>}
+        <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 12, margin: "6px 0 0", textAlign: "center" }}>{fotosOrd.findIndex(x => x.id === preview.id) + 1} de {fotosOrd.length} · {preview.nome} · {preview.user_nome || "—"} · {fDH(preview.criado_em)}</p>
+        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, margin: "4px 0 0" }}>← → navegam · Esc ou toque fora fecha</p>
+      </div>}
     {/* ── FOTOS & ARQUIVOS ── */}
     {sub === "arq" && <div>
       <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
@@ -404,38 +463,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       {subindo && <p style={{ fontSize: 12, color: S.pri, margin: "0 0 8px" }}>Enviando {subindo}...</p>}
       {ldF && <p style={{ fontSize: 12, color: S.ts }}>Carregando arquivos...</p>}
       {!ldF && !arqs.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Nenhuma foto ou arquivo desta loja ainda.</p></Crd>}
-      {/* v42: fotos numa faixa horizontal rolável, com a descrição sob a miniatura */}
-      {fotosOrd.length > 0 && <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 8, marginBottom: 10 }}>
-        {fotosOrd.map(a => <div key={a.id} style={{ flexShrink: 0, width: 130 }}>
-          <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: `1px solid ${S.brd}`, background: S.cl, width: 130, height: 130 }}>
-            {thumbs[a.id] ? <img src={thumbs[a.id]} alt={a.nome} onClick={() => setPreview(a)} style={{ width: "100%", height: "100%", objectFit: "cover", cursor: "pointer" }} /> : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}><Camera size={20} color={S.td} /></div>}
-            <button onClick={() => delArq(a)} style={{ position: "absolute", top: 4, right: 4, width: 26, height: 26, borderRadius: 8, background: "rgba(0,0,0,0.5)", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={13} color="#fff" /></button>
-          </div>
-          <p onClick={() => editaDescricao(a)} title="Toque para editar a descrição" style={{ margin: "5px 1px 0", fontSize: 10.5, lineHeight: 1.35, color: a.descricao ? S.ts : S.td, cursor: "pointer", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", fontStyle: a.descricao ? "normal" : "italic" }}>{a.descricao || "＋ descrição"}</p>
-        </div>)}
-      </div>}
-      {/* lista de arquivos não-imagem */}
-      {arqs.filter(a => a.tipo !== "foto").map(a => <Crd key={a.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <FileText size={18} color={S.pri} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: S.txt, wordBreak: "break-all" }}>{a.nome}</p>
-          {a.descricao && <p style={{ margin: "1px 0 0", fontSize: 11.5, color: S.ts }}>{a.descricao}</p>}
-          <p style={{ margin: 0, fontSize: 11, color: S.td }}>{(a.tamanho / 1024).toFixed(0)} KB · {a.user_nome || "—"} · {fDH(a.criado_em)}</p>
-        </div>
-        <button onClick={() => editaDescricao(a)} title="Descrição" style={{ width: 36, height: 36, borderRadius: 10, background: S.cl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Pencil size={14} color={S.ts} /></button>
-        <button onClick={() => baixaArq(a)} style={{ width: 36, height: 36, borderRadius: 10, background: S.pl + "22", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Download size={15} color={S.pl} /></button>
-        <button onClick={() => delArq(a)} style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>
-      </Crd>)}
-      {preview && <div onClick={() => setPreview(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.88)", zIndex: 60, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 16 }}>
-        <img src={thumbs[preview.id]} alt={preview.nome} onClick={e => e.stopPropagation()} style={{ maxWidth: "100%", maxHeight: "76vh", borderRadius: 10 }} />
-        {fotosOrd.length > 1 && <>
-          <button onClick={e => { e.stopPropagation(); navFoto(-1); }} style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", width: 46, height: 46, borderRadius: "50%", background: "rgba(255,255,255,0.14)", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>‹</button>
-          <button onClick={e => { e.stopPropagation(); navFoto(1); }} style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", width: 46, height: 46, borderRadius: "50%", background: "rgba(255,255,255,0.14)", border: "none", color: "#fff", fontSize: 24, cursor: "pointer" }}>›</button>
-        </>}
-        {preview.descricao && <p style={{ color: "#fff", fontSize: 13.5, fontWeight: 600, margin: "12px 0 0", textAlign: "center", maxWidth: 640 }}>{preview.descricao}</p>}
-        <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 12, margin: "6px 0 0", textAlign: "center" }}>{fotosOrd.findIndex(x => x.id === preview.id) + 1} de {fotosOrd.length} · {preview.nome} · {preview.user_nome || "—"} · {fDH(preview.criado_em)}</p>
-        <p style={{ color: "rgba(255,255,255,0.5)", fontSize: 11, margin: "4px 0 0" }}>← → navegam · Esc ou toque fora fecha</p>
-      </div>}
+      {/* v70: um bloco por ENVIO, com data e autor — o envio mais recente primeiro */}
+      {lotes.map(l => blocoLote(l, true))}
       {/* v42: modal de descrição pós-upload */}
       {descrevendo && <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }}>
         <div style={{ background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 16, padding: "1.3rem", width: "100%", maxWidth: 460, maxHeight: "88vh", overflowY: "auto" }}>
