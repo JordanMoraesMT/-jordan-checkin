@@ -16,8 +16,8 @@ export const PREMISSAS_PADRAO = {
   // Taxa média de comissão por representada (%). Tramontina e Pado = taxa REAL dos extratos (out/25–jun/26):
   // Tramontina 4,16% efetivo (linhas de 3% a 6%); Pado 5% (exceções abaixo).
   // Demais informadas pelo Jordan em 24/10/2026: Zagonel 5, Santana 4, Plastilit 3 tubos / 4 conexões, Ruvolo 5, Hiper Têxtil 3.
-  // Festcolor: não informada — 5% provisório.
-  taxas: { TRAMONTINA: 4.16, PADO: 5, Zagonel: 5, "Plastilit Tubos": 3, Plastilit: 4, Santana: 4, Festcolor: 5, Ruvolo: 5, "Hiper Têxtil": 3 },
+  // Festcolor 4% (Jordan, 24/10). Plastilit: somar tubos×3% + demais×4% item a item = o ponderado de cada pedido.
+  taxas: { TRAMONTINA: 4.16, PADO: 5, Zagonel: 5, "Plastilit Tubos": 3, Plastilit: 4, Santana: 4, Festcolor: 4, Ruvolo: 5, "Hiper Têxtil": 3 },
   excecoes: [{ ind: "PADO", razao: "VALE FORMOSO|IRMAOS DOMINGOS|IRMÃOS DOMINGOS", taxa: 1.5 }],
   limitePct: 65,                 // cliente rentável = rende ≥ 65% do valor médio da hora do vendedor
   horaMin: 88,                   // reserva quando o vendedor tem pouca hora registrada (< 40 h): R$ 80/visita ÷ 0,91 h

@@ -203,7 +203,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
             {CONTAS.map(ind => <label key={ind} style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 12.5, color: S.t2 }}>{ROTULO_CONTA[ind] || ind}</span>
               <input type="number" step="0.01" value={pe.taxas[ind] ?? 5} onChange={e => setPe(p => ({ ...p, taxas: { ...p.taxas, [ind]: +e.target.value } }))} className="num" style={{ height: 40, boxSizing: "border-box" }} /></label>)}
           </div>
-          <p style={{ margin: "6px 0 0", fontSize: 12, color: S.ts }}>Tramontina 4,16% e Pado 5% vêm dos extratos (out/25–jun/26); Pado 1,5% para Vale Formoso e Irmãos Domingos. Plastilit: tubos = categoria "Tubos"; conexões e demais = o resto. Festcolor 5% provisório.</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12, color: S.ts }}>Tramontina 4,16% e Pado 5% vêm dos extratos (out/25–jun/26); Pado 1,5% para Vale Formoso e Irmãos Domingos. Plastilit: tubos (categoria "Tubos") a 3% e o resto a 4% — a soma item a item dá o ponderado de cada pedido.</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10 }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 12.5, color: S.t2 }}>Início do TeamCheck</span><DateField value={pe.inicio} onChange={v => setPe(p => ({ ...p, inicio: v }))} today={hoje} placeholder="Data" /></label>
