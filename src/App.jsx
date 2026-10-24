@@ -1,9 +1,10 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
-import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight } from "lucide-react";
+import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight, Gauge } from "lucide-react";
 import { API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
 import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
+const AnaliseTab=lazy(()=>import("./tabs/AnaliseTab").then(m=>({default:m.AnaliseTab})));// v75: análise de visitas (admin)
 const RelatorioTab=lazy(()=>import("./tabs/RelatorioTab").then(m=>({default:m.RelatorioTab})));// recharts só carrega ao abrir o Relatório
 import { EquipeTab } from "./tabs/EquipeTab";
 import { AgendaTab } from "./tabs/AgendaTab";
@@ -264,10 +265,10 @@ export default function App(){
   const NAVG=[
     {grp:"CAMPO",itens:[{id:"pdvs",I:Store,l:"PDVs"},{id:"mapa",I:MapPin,l:"Mapa"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"agenda",I:Calendar,l:"Agenda"}]},
     {grp:"CRM",itens:[{id:"crm_inicio",I:BookUser,l:"Início"},{id:"crm_empresas",I:Building2,l:"Empresas"},{id:"crm_pessoas",I:Contact,l:"Pessoas"}]},
-    {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true}]:[]),{id:"relatorio",I:BarChart3,l:"Relatório"}]},
+    {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true},{id:"analise",I:Gauge,l:"Análise de visitas",admin:true}]:[]),{id:"relatorio",I:BarChart3,l:"Relatório"}]},
     {grp:"SISTEMA",itens:[{id:"config",I:Settings,l:"Configurações"}]},
   ];
-  const TITULOS={pdvs:["PDVs","Pontos de venda"],crm_inicio:["CRM","Feed de atividades"],crm_empresas:["Empresas","Carteira de clientes"],crm_pessoas:["Pessoas","Contatos"],mapa:["Mapa","Clientes no mapa"],rotas:["Rotas","Roteiro do dia"],relatorio:["Relatório","Período, jornada e km"],equipe:["Equipe","Produtividade"],agenda:["Agenda","Tarefas e retornos"],config:["Configurações","Sistema"]};
+  const TITULOS={pdvs:["PDVs","Pontos de venda"],crm_inicio:["CRM","Feed de atividades"],crm_empresas:["Empresas","Carteira de clientes"],crm_pessoas:["Pessoas","Contatos"],mapa:["Mapa","Clientes no mapa"],rotas:["Rotas","Roteiro do dia"],relatorio:["Relatório","Período, jornada e km"],equipe:["Equipe","Produtividade"],analise:["Análise de visitas","Carteira, jornada e saúde"],agenda:["Agenda","Tarefas e retornos"],config:["Configurações","Sistema"]};
   // Bottom nav (mobile): CRM entra como atalho único (→ Início); Empresas/Pessoas ficam na gaveta lateral
   const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"mapa",I:MapPin,l:"Mapa"},{id:"crm_inicio",I:BookUser,l:"CRM"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
   const tabs=isAdmin?[...baseTabs.slice(0,4),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(4)]:baseTabs;
@@ -362,6 +363,7 @@ export default function App(){
       <CrmTab visible={tab.startsWith("crm")} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs} pessoasQ={pessoaQ0} onRemoto={quickAction}/>
       <Suspense fallback={null}>{mapaLigado&&<MapaTab visible={tab==="mapa"} orgs={orgs} plocs={plocs} user={user} rfv={rfvMap} excl={exclOrgs} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}</Suspense>
       {tab==="rotas"&&<RotasTab sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs} orgs={orgs} rfv={rfvMap} token={token} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}
+      {tab==="analise"&&isAdmin&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando análise…</p>}><AnaliseTab token={token} allOrgs={allOrgs} rfv={rfvMap} user={user} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/></Suspense>}
       {tab==="relatorio"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando relatório…</p>}><RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/></Suspense>}
       {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} plocs={plocs} dayBases={dayBases} user={user} visits={visits} token={token} bump={crmBump}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs} bump={crmBump} onCrmChange={()=>setCrmBump(b=>b+1)}/>
