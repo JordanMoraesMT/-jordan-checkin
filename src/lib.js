@@ -51,6 +51,18 @@ const hav=(a,b,c,d)=>{const R=6371,x=((c-a)*Math.PI)/180,y=((d-b)*Math.PI)/180;c
 const _bk=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[-/.]/g," ").replace(/\s+/g," ").trim();
 const _tc=t=>t.toLowerCase().split(" ").map((w,i)=>/^(i|ii|iii|iv|v|vi|cpa)$/i.test(w)?w.toUpperCase():(i>0&&/^(de|da|do|dos|das|e)$/.test(w))?w:w.charAt(0).toUpperCase()+w.slice(1)).join(" ");
 function bairroCanon(orgs,cidade,b){const t=String(b||"").trim().replace(/\s+/g," ");if(!t)return t;const k=_bk(t),c=_bk(cidade),n={};(orgs||[]).forEach(o=>{const ob=o.addr?.district;if(ob&&_bk(o.addr?.city_name||o.addr?.city)===c&&_bk(ob)===k)n[ob]=(n[ob]||0)+1;});const best=Object.entries(n).sort((x,y)=>y[1]-x[1])[0];if(best)return best[0];return t===t.toUpperCase()?_tc(t):t;}
+// v69: PENDÊNCIAS do cliente — tarefas abertas presas ao cliente. "📌 Próxima visita: …" é a pendência sem data
+// criada no fechamento do atendimento; aparece no próximo check-in e é conferida no próximo check-out.
+const PEND_PREFIXO="📌 Próxima visita: ";
+// data do D1 ("YYYY-MM-DD HH:MM:SS" em UTC, sem fuso) → dd/mm/aaaa em Cuiabá; o Safari não lê o formato cru
+const fD1=s=>{if(!s)return"";const t=String(s);return fD(/[zZ]$|[+-]\d\d:\d\d$/.test(t)?t:t.replace(" ","T")+(t.length>10?"Z":"T12:00:00Z"));};
+async function pendenciasDe(token,orgId,cnpj){
+  const get=async q=>{try{const r=await fetch(`${DASH}/api/crm/atividades?${q}&limit=1000`,{headers:{"X-Session":token},cache:"no-store"});const d=await r.json();return (d&&d.atividades)||[];}catch{return[];}};
+  const l=orgId?await get(`org_id=${orgId}`):[];const c=String(cnpj||"").replace(/\D/g,"");
+  if(c){const ids=new Set(l.map(a=>a.id));(await get(`cnpj=${c}`)).forEach(a=>{if(!ids.has(a.id))l.push(a);});}
+  return l.filter(a=>a.origem==="tarefa"&&!a.concluida&&!a.excluido).map(a=>{const t=String(a.texto||"");const prox=t.startsWith(PEND_PREFIXO);return{...a,proxima:prox,txt:prox?t.slice(PEND_PREFIXO.length):t};})
+    .sort((a,b)=>(b.proxima-a.proxima)||String(a.due_em||"9").localeCompare(String(b.due_em||"9")));
+}
 function sL(k,f){try{return JSON.parse(localStorage.getItem(k))||f;}catch{return f;}}
 function sS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("sync:",e);}}
 // 2º parâmetro carrega a SESSÃO (autenticação no Worker)
@@ -186,4 +198,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export {bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };
+export {PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };

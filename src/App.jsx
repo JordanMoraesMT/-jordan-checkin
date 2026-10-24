@@ -1,8 +1,8 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact } from "lucide-react";
-import { API, USERS, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
-import { Login, Banner, NoteModal, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
+import { API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
+import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 const RelatorioTab=lazy(()=>import("./tabs/RelatorioTab").then(m=>({default:m.RelatorioTab})));// recharts só carrega ao abrir o Relatório
 import { EquipeTab } from "./tabs/EquipeTab";
@@ -181,13 +181,24 @@ export default function App(){
 
   // (lastVisits/visitsByOrg/fo/proximidade/toggleCat movidos para PdvsTab)
   // Grava atividade no CRM próprio (D1) em segundo plano — nunca bloqueia o fluxo.
+  // ─── v69: PENDÊNCIAS do cliente na visita ativa ───
+  const[pendAtivas,setPendAtivas]=useState([]);const[pendAlerta,setPendAlerta]=useState(null);const pendAvisadas=useRef(new Set());
+  useEffect(()=>{
+    if(!active?.orgId||!token){setPendAtivas([]);return;}
+    let vivo=true;const o=(allOrgs||[]).find(x=>x.id===active.orgId);
+    pendenciasDe(token,active.orgId,o?.cnpj).then(l=>{if(!vivo)return;setPendAtivas(l);
+      // alerta só uma vez por visita, e só se o check-in acabou de acontecer (não a cada recarga)
+      const k=active.checkinTime;const recente=Date.now()-new Date(k).getTime()<10*60*1000;
+      if(l.length&&recente&&!pendAvisadas.current.has(k)){pendAvisadas.current.add(k);setPendAlerta({org:active.orgName,itens:l});}});
+    return()=>{vivo=false;};
+  },[active?.orgId,active?.checkinTime,token]);// eslint-disable-line
   const crmLog=(payload)=>{try{fetch(`${DASH_CRM}/api/crm/atividades`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(payload)}).catch(()=>{});}catch{}};
   const crmGps=(orgId,cnpj,g)=>{try{fetch(`${DASH_CRM}/api/crm/gps`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({org_id:orgId,cnpj:cnpj||null,lat:g.lat,lng:g.lng,precisao:g.acc})}).catch(()=>{});}catch{}};
   const quickAction=async(org,type)=>{const note=prompt(`Registrar ${type==="WHATSAPP"?"WhatsApp":"Ligacao"} com ${org.name}:`);if(!note?.trim())return;try{crmLog({org_id:org.id,cnpj:(org.cnpj||"").replace(/\D/g,"")||null,org_nome:org.nickname||org.name,tipo:type,texto:note});alert("Registrado!");}catch(e){alert("Erro: "+e.message);}};
 
   const checkin=async(org)=>{ensureBase();if(org.cat==="Online - B2B"&&!confirm(`${org.name} e Online/B2B.\nRegistrar visita?`))return;if(org.cat==="Inativo"&&!confirm(`${org.name} esta Inativo.\nContinuar?`))return;if(org.cat==="Excluido"&&!confirm(`${org.name} esta Excluido.\nContinuar?`))return;setLdId(org.id);setGeoErr("");try{const g=await gps();if(plocs[org.id]&&!plocs[org.id].geo){const d=hav(plocs[org.id].lat,plocs[org.id].lng,g.lat,g.lng)*1000;if(d>800&&(g.acc==null||g.acc<=120)){setDivTarget({org,dist:Math.round(d),geo:g});setLdId(null);return;}else if(d>800){/* GPS impreciso: não bloqueia, mas corrige a posição salva */const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);crmGps(org.id,(org.cnpj||"").replace(/\D/g,""),g);}}else{/* sem GPS OU só geocodificado por endereço: o check-in real assume a localização */const np={...plocs,[org.id]:{lat:g.lat,lng:g.lng}};setPlocs(np);syncPlocs(np);crmGps(org.id,(org.cnpj||"").replace(/\D/g,""),g);}const v={orgId:org.id,orgName:org.name||org.nickname,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:g.lat,lng:g.lng,accuracy:g.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}catch{setGeoErr("GPS indisponivel.");}setLdId(null);};
   const handleDivAction=(action,type)=>{if(!divTarget)return;const{org,geo}=divTarget;if(action==="checkin"){const v={orgId:org.id,orgName:org.name,city:org.addr?.city_name||"",checkinTime:new Date().toISOString(),lat:geo.lat,lng:geo.lng,accuracy:geo.acc,checkoutTime:null,note:"",taskType:"VISITA",synced:true,userName:user?.name||""};setActive(v);syncPush(v);}else if(action==="remote"&&type)setCoTarget({...org,remoteType:type});setDivTarget(null);};
-  const checkout=async(note,type="VISITA",next=null,sale=null)=>{if(!active||ldId)return;setLdId(active.orgId);let g=null;try{g=await gps();}catch{}
+  const checkout=async(note,type="VISITA",next=null,sale=null,extra=null)=>{if(!active||ldId)return;setLdId(active.orgId);let g=null;try{g=await gps();}catch{}
     // Checkout: só sinaliza divergência se a referência for GPS REAL (não geocodificada por endereço)
     // e ainda assim GRAVA a visita (a flag é só informativa) — a régua de endereço não é confiável p/ bloquear.
     let divergent=false,divDist=0;
@@ -199,12 +210,16 @@ export default function App(){
     // SEMPRE grava (D1 + KV). A visita conta no relatório; "divergent" é só um selo de conferência.
     done.synced=true;
     const oRef=(allOrgs||[]).find(o=>o.id===active.orgId);const cnpjRef=oRef?(oRef.cnpj||"").replace(/\D/g,""):null;
-    crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:""),lat:g?.lat,lng:g?.lng,origem:"checkout"});
+    const resolv=(extra?.resolvidas)||[],novas=(extra?.novas)||[];
+    crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:"")+resolv.map(x=>`\n✓ Pendência resolvida: ${x.txt}`).join(""),lat:g?.lat,lng:g?.lng,origem:"checkout"});
+    novas.forEach(t=>crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:"VISITA",texto:PEND_PREFIXO+t,origem:"tarefa"}));
+    resolv.forEach(x=>{try{fetch(`${DASH_CRM}/api/crm/tarefa-concluir`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({id:x.id})}).catch(()=>{});}catch{}});
     if(next?.nextDate&&next?.nextDesc){const nt=(next.nextType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(nt)?nt:"VISITA";crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:tipoOk,texto:next.nextDesc,origem:"tarefa",due_em:`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`});}
     syncVisitSave(done);
     setVisits(p=>[done,...p]);setActive(null);syncClear();setCoTarget(null);setLdId(null);
     if(divergent)setTimeout(()=>alert(`ℹ️ Visita registrada.\nO GPS ficou a ${divDist}m do ponto salvo do cliente — a visita foi gravada normalmente e conta no relatório; fica só um selo ⚠️ para você conferir o cadastro depois.`),100);
-    else if(next?.nextDate&&next?.nextDesc)setTimeout(()=>alert("Proximo passo agendado!"),100);
+    else{const m=[];if(next?.nextDate&&next?.nextDesc)m.push("✓ Próximo passo agendado.");if(novas.length)m.push(`📌 ${novas.length} pendência(s) para a próxima visita — vão aparecer no próximo check-in.`);if(resolv.length)m.push(`✓ ${resolv.length} pendência(s) marcada(s) como resolvida(s).`);if(m.length)setTimeout(()=>alert(m.join("\n")),100);}
+    setPendAtivas([]);
   };
 
   // ─── Deep-link: teamcheck.jordanmt.com/?cliente={CNPJ} abre a ficha da empresa ───
@@ -292,6 +307,10 @@ export default function App(){
       {/* CONTEÚDO — recorte com sombra interna + efeitos Cyber Tech Premium (.jc-main) */}
       <div className="jc-main" style={{flex:1,overflowY:"auto",borderRadius:"22px 0 0 0",boxShadow:`inset 0 18px 28px -22px ${S.seam},inset 18px 0 28px -22px ${S.seam}`,padding:mob?"16px 14px 96px":"22px 26px 42px"}}>
       {active&&tab!=="config"&&<Banner v={active} orgs={orgs} onClick={()=>{setTab("pdvs");setFocusReq({id:active.orgId,name:active.orgName,t:Date.now()});}}/>}
+      {active&&tab!=="config"&&pendAtivas.length>0&&<div onClick={()=>setPendAlerta({org:active.orgName,itens:pendAtivas})} style={{cursor:"pointer",background:S.gold+"18",border:`1px solid ${S.gold}66`,borderRadius:12,padding:"10px 14px",marginBottom:10}}>
+        <p style={{fontSize:13,color:S.gold,margin:0,fontWeight:700}}>📌 {pendAtivas.length} pendência(s) neste cliente</p>
+        <p style={{fontSize:11.5,color:S.t2,margin:"3px 0 0"}}>{pendAtivas.slice(0,3).map(x=>x.txt).join(" · ")}{pendAtivas.length>3?" …":""}</p>
+      </div>}
       {teamActive&&tab!=="config"&&isAdmin&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,borderRadius:"50%",background:S.gold,animation:"pulse 2s infinite"}}/><p style={{fontSize:13,color:S.gold,margin:0}}>Alisson em atendimento: <b>{teamActive.orgName}</b></p></div><p style={{fontSize:11,color:S.ts,margin:"3px 0 0 16px"}}>Desde {fT(teamActive.checkinTime)} — {hrsMin(mins(teamActive.checkinTime,new Date()))}</p></div>}
 
       {mAlert&&!active&&<div style={{background:S.gold+"18",border:`1px solid ${S.gold}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.gold,margin:0}}>⏰ Bom dia! Atividades ainda nao iniciadas.</p></div>}
@@ -332,7 +351,8 @@ export default function App(){
     {/* BOTTOM NAV — só no celular (agilidade de campo); no desktop a navegação é a sidebar */}
     {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=>{const act=navAtivo(t.id);return <button key={t.id} onClick={()=>{if(t.id==="mapa")setMapaLigado(true);setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:act?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:act?700:400,color:act?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={act?2.2:1.6}/>{t.l}</button>;})}</div></div>}
 
-    {coTarget&&<NoteModal org={coTarget} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
+    {coTarget&&<NoteModal org={coTarget} pendencias={active&&coTarget.id===active.orgId?pendAtivas:[]} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
+    {pendAlerta&&<PendenciasAlerta dados={pendAlerta} onClose={()=>setPendAlerta(null)}/>}
     {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const n={...p,[k]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
     {showEndDay&&<DayEndModal user={user} onSave={b=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const cur=p[k]||{};const n={...p,[k]:{...cur,end:b}};sS("jc:dayBases",n);return n;});setShowEndDay(false);}} onCancel={()=>setShowEndDay(false)}/>}
     {searchAdd&&<SearchOrAddModal token={token} allOrgs={allOrgs}
