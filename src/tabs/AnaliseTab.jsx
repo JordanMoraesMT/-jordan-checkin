@@ -41,9 +41,11 @@ function Quadro({ titulo, sub, itens, linhas, campo, ativos, onPick, extra }) {
 export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) {
   const [prem, setPrem] = useState(PREMISSAS_PADRAO);
   const [premAberta, setPremAberta] = useState(false); const [premEd, setPremEd] = useState(null);
-  const [uid, setUid] = useState(() => isAdmin ? String((USERS.find(u => String(u.id) !== String(user?.id)) || USERS[0] || { id: 743347 }).id) : String(user?.id));
-  const uidEf = isAdmin ? uid : String(user?.id);
-  const selUser = USERS.find(u => String(u.id) === uidEf) || { n: user?.name || "—" };
+  // v83: admin escolhe um ou mais vendedores (nomes); vendedor vê só a própria carteira
+  const [vends, setVends] = useState(() => isAdmin ? [(USERS.find(u => String(u.id) !== String(user?.id)) || USERS[0] || { n: "Alisson Henrique" }).n] : [user?.name]);
+  const sels = useMemo(() => { const nomes = isAdmin ? (vends.length ? vends : USERS.map(u => u.n)) : [user?.name];
+    return nomes.map(n => USERS.find(u => u.n === n) || { id: n === user?.name ? user?.id : null, n }); }, [vends, isAdmin, user?.name, user?.id]);
+  const selUser = { n: sels.length === 1 ? sels[0].n : sels.length === USERS.length ? "Equipe" : sels.map(u => u.n.split(" ")[0]).join(" + ") };
   const [desde, setDesde] = useState(null);
   // v81: filtros como nas demais telas (busca + "Filtros · N" + etiquetas). Não mudam o cálculo, só o que aparece.
   const [q, setQ] = useState(""); const [filtAberto, setFiltAberto] = useState(false);
@@ -66,14 +68,29 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
     return () => { vivo = false; }; }, [token, inicio]);
 
   const nrm = s => String(s || "").toLowerCase().trim();
-  const carteiraBase = useMemo(() => (allOrgs || []).filter(o => !o.excluido && nrm(o.owner) === nrm(selUser.n)), [allOrgs, selUser.n]);
+  const nomesSel = sels.map(u => nrm(u.n));
+  const carteiraBase = useMemo(() => (allOrgs || []).filter(o => !o.excluido && nomesSel.includes(nrm(o.owner))), [allOrgs, nomesSel.join("|")]);
   const cidadeOpts = useMemo(() => [...new Set(carteiraBase.map(o => o.addr?.city_name || o.addr?.city).filter(Boolean))].sort(), [carteiraBase]);
   const carteira = carteiraBase;
   const segOpts = useMemo(() => [...new Set(carteiraBase.map(o => o.sector).filter(Boolean))].sort(), [carteiraBase]);
-  const vUser = useMemo(() => visitas.filter(v => String(v.user_id || "") === uidEf || nrm(v.user_nome) === nrm(selUser.n)), [visitas, uidEf, selUser.n]);
   const dataVendas = useMemo(() => { let m = ""; Object.values(rfv?.byCnpj || {}).forEach(r => { if (r.ultima && r.ultima > m) m = r.ultima; }); return m || null; }, [rfv]);
   const ultimaEquipe = useMemo(() => { const m = {}; visitas.forEach(v => { const d = v.criado_em ? new Date(Date.parse(String(v.criado_em).replace(" ", "T") + "Z") - 4 * 3600000).toISOString().slice(0, 10) : null; if (d && v.org_id && (!m[v.org_id] || d > m[v.org_id])) m[v.org_id] = d; }); return m; }, [visitas]);
-  const A = useMemo(() => analisar({ visitas: vUser, carteira, carteiraValor: carteiraBase, ultimaEquipe, rfv, vendInd, fat12Ind, prem: { ...prem, inicio }, hoje, dataVendas }), [vUser, carteira, carteiraBase, ultimaEquipe, rfv, vendInd, fat12Ind, prem, inicio, hoje, dataVendas]);
+  // um cálculo por vendedor (jornada/hora são de cada um) e depois soma
+  const A = useMemo(() => {
+    const partes = sels.map(u => { const nu = nrm(u.n);
+      const cart = carteiraBase.filter(o => nrm(o.owner) === nu);
+      const vis = visitas.filter(v => (u.id != null && String(v.user_id || "") === String(u.id)) || nrm(v.user_nome) === nu);
+      const r = analisar({ visitas: vis, carteira: cart, carteiraValor: cart, ultimaEquipe, rfv, vendInd, fat12Ind, prem: { ...prem, inicio }, hoje, dataVendas });
+      return { u, r: { ...r, linhas: r.linhas.map(l => ({ ...l, vendedor: u.n })), dias: r.dias.map(d => ({ ...d, vendedor: u.n })) } }; });
+    if (partes.length === 1) return partes[0].r;
+    const soma = f => partes.reduce((t, x) => t + (f(x.r) || 0), 0);
+    const h = soma(r => r.hJanela), com = soma(r => r.valorHora ? r.valorHora * r.hJanela : 0), custo = soma(r => r.hJanela * r.limiteHora);
+    const base = partes[0].r;
+    return { ...base, linhas: partes.flatMap(x => x.r.linhas), dias: partes.flatMap(x => x.r.dias).sort((a, b) => a.dia.localeCompare(b.dia) || a.vendedor.localeCompare(b.vendedor)),
+      hJanela: h, valorHora: h > 0 ? com / h : null, limiteHora: h > 0 ? custo / h : base.limiteHora, pocaHora: h < 40, ateV: base.ateV,
+      resumo: { visitas: soma(r => r.resumo.visitas), diasCampo: soma(r => r.resumo.diasCampo), horas: soma(r => r.resumo.horas), km: soma(r => r.resumo.km),
+        fat12m: soma(r => r.resumo.fat12m), vendido: soma(r => r.resumo.vendido), clientes: soma(r => r.resumo.clientes), indice: custo > 0 ? com / custo : null } };
+  }, [sels, carteiraBase, visitas, ultimaEquipe, rfv, vendInd, fat12Ind, prem, inicio, hoje, dataVendas]); // eslint-disable-line
   // vendas entram 1× por mês (carga do dia 1º): só avisa se a carga do mês não chegou até o dia 5
   const cargaAtrasada = !!dataVendas && dataVendas < hoje.slice(0, 7) + "-01" && Number(hoje.slice(8, 10)) > 5;
 
@@ -101,9 +118,9 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   const verTxt = x => x.veredito === "Aguardar" && x.aPartir ? `Aguardar · a partir de ${dCurta(x.aPartir)}` : x.veredito;
 
   const exportar = () => {
-    const cab = ["CNPJ", "Cliente", "Cidade", "Bairro", "Status", "Segmento", "Classe", "Visitas", "Visitas/mês", "Visitas/mês ideal", "Última visita", "Dias sem visita", "Horas investidas", "Situação", "Vale nova visita?"];
+    const cab = ["CNPJ", "Cliente", "Responsável", "Cidade", "Bairro", "Status", "Segmento", "Classe", "Visitas", "Visitas/mês", "Visitas/mês ideal", "Última visita", "Dias sem visita", "Horas investidas", "Situação", "Vale nova visita?"];
     const rows = [isAdmin ? [...cab, "Diagnóstico", "Saúde", "Índice", "Faturamento 12m", "Vendido no período", "Última compra"] : cab];
-    linhasF.forEach(x => { const b = [x.cnpj, x.nome, x.cidade, x.bairro, x.status, x.segmento, x.classe, x.visitas, n1(x.porMes), x.ideal, x.ultVis ? dBR(x.ultVis) : "", x.diasSem ?? "", n1(x.horas), x.situacao, verTxt(x)];
+    linhasF.forEach(x => { const b = [x.cnpj, x.nome, x.vendedor || "", x.cidade, x.bairro, x.status, x.segmento, x.classe, x.visitas, n1(x.porMes), x.ideal, x.ultVis ? dBR(x.ultVis) : "", x.diasSem ?? "", n1(x.horas), x.situacao, verTxt(x)];
       rows.push(isAdmin ? [...b, x.diagnostico, x.saude, x.indice == null ? "" : n1(x.indice), Math.round(x.fat12m), Math.round(x.vendido), x.ultCompra ? dBR(x.ultCompra) : ""] : b); });
     csv(rows, `analise-visitas-${(selUser.n || "").split(" ")[0].toLowerCase()}-${hoje}.csv`); };
 
@@ -120,7 +137,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
         <p className="num" style={{ margin: "3px 0 0", fontSize: 12.5, color: S.ts }}>{dBR(inicio)} a {dBR(hoje)} · {n1(A.meses)} meses · {R.clientes} clientes na carteira</p>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        {isAdmin && <SearchSelect value={String(uid)} onChange={setUid} placeholder="Vendedor" style={{ width: 190 }} options={USERS.map(u => [String(u.id), u.n])} />}
+        {isAdmin && <MultiSelect values={vends} onChange={setVends} placeholder="Vendedor" allLabel="Todos" style={{ width: 220 }} options={USERS.map(u => u.n)} />}
         <DateField value={inicio} onChange={v => setDesde(v)} today={hoje} placeholder="Desde" style={{ width: 160 }} />
       </div>
     </div>
@@ -193,12 +210,13 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
     <div style={{ overflow: "auto", maxHeight: "70vh", border: `1px solid ${S.brd}`, borderRadius: 10, background: S.card, marginBottom: 16 }}>
       <table style={{ width: "100%", minWidth: isAdmin ? 1240 : 780, borderCollapse: "collapse" }}>
         <thead><tr>
-          {th("nome", "Cliente")}{th("veredito", "Vale nova visita?")}{th("classe", "Classe")}{th("visitas", "Visitas", 1)}{th("porMes", "Por mês · ideal", 1)}{th("diasSem", "Última visita", 1)}{th("horas", "Horas", 1)}{th("situacao", "Situação")}
+          {th("nome", "Cliente")}{sels.length > 1 && th("vendedor", "Responsável")}{th("veredito", "Vale nova visita?")}{th("classe", "Classe")}{th("visitas", "Visitas", 1)}{th("porMes", "Por mês · ideal", 1)}{th("diasSem", "Última visita", 1)}{th("horas", "Horas", 1)}{th("situacao", "Situação")}
           {isAdmin && <>{th("diagnostico", "Diagnóstico")}{th("indice", "Saúde", 1)}{th("vendido", "Vendido período", 1)}{th("fat12m", "Fat. 12m", 1)}</>}
         </tr></thead>
         <tbody>{linhasF.map(x => <tr key={x.id}>
           <td style={{ ...td, minWidth: 220, maxWidth: 300 }}><button onClick={() => onOpenFicha && onOpenFicha(x.org)} style={{ border: "none", padding: 0, background: "transparent", color: S.txt, fontWeight: 600, fontSize: 13.5, textAlign: "left" }}>{x.nome}</button>
             <div style={{ fontSize: 12, color: S.ts }}>{[x.bairro, x.cidade].filter(Boolean).join(" · ")}{x.status ? " · " + x.status : ""}</div></td>
+          {sels.length > 1 && <td style={{ ...td, whiteSpace: "nowrap" }}>{(x.vendedor || "").split(" ")[0]}</td>}
           <td style={{ ...td, color: corDe(VER, x.veredito), fontWeight: 600, whiteSpace: "nowrap" }}>{x.veredito}{x.veredito === "Aguardar" && x.aPartir && <div className="num" style={{ fontSize: 11.5, color: S.ts, fontWeight: 400 }}>a partir de {dCurta(x.aPartir)}</div>}</td>
           <td style={td}>{x.classe}</td>
           <td style={tdn}>{x.visitas}</td>
@@ -219,8 +237,9 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
     <button onClick={() => setVerJornada(v => !v)} aria-expanded={verJornada} style={{ width: "100%", height: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px", fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Jornada por dia ({A.dias.length} dias){verJornada ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
     {verJornada && <div style={{ overflowX: "auto", border: `1px solid ${S.brd}`, borderRadius: 10, background: S.card, marginBottom: 16 }}>
       <table style={{ width: "100%", minWidth: 640, borderCollapse: "collapse" }}>
-        <thead><tr>{["Data", "Dia", "Visitas", "Check-outs", "Início", "Fim", "Horas", "Km (est.)"].map((h, i) => <th key={h} style={{ padding: "9px 10px", fontSize: 12.5, fontWeight: 600, color: S.t2, textAlign: i > 1 ? "right" : "left", borderBottom: `1px solid ${S.brd}` }}>{h}</th>)}</tr></thead>
-        <tbody>{[...A.dias].reverse().map(d => <tr key={d.dia} style={{ opacity: d.visitas ? 1 : 0.6 }}>
+        <thead><tr>{[...(sels.length > 1 ? ["Vendedor"] : []), "Data", "Dia", "Visitas", "Check-outs", "Início", "Fim", "Horas", "Km (est.)"].map((h, i) => <th key={h} style={{ padding: "9px 10px", fontSize: 12.5, fontWeight: 600, color: S.t2, textAlign: i > (sels.length > 1 ? 2 : 1) ? "right" : "left", borderBottom: `1px solid ${S.brd}` }}>{h}</th>)}</tr></thead>
+        <tbody>{[...A.dias].reverse().map(d => <tr key={d.dia + (d.vendedor || "")} style={{ opacity: d.visitas ? 1 : 0.6 }}>
+          {sels.length > 1 && <td style={td}>{(d.vendedor || "").split(" ")[0]}</td>}
           <td style={{ ...td, fontFamily: "'IBM Plex Mono',monospace", fontSize: 12.5 }}>{dBR(d.dia)}</td><td style={td}>{d.dow}</td>
           <td style={tdn}>{d.visitas}</td><td style={tdn}>{d.checkouts}</td><td style={tdn}>{d.inicio}</td><td style={tdn}>{d.fim}</td><td style={tdn}>{d.horas ? hm(d.horas) : "—"}</td><td style={tdn}>{d.km ? n1(d.km) : "—"}</td>
         </tr>)}</tbody>
