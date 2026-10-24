@@ -7,7 +7,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
-import { S, CC, CATS, USERS, SECTORS, hav, gps, geoEstimate, fixMojibake } from "../lib";
+import { S, CC, CATS, USERS, SECTORS, hav, gps, geoEstimate, fixMojibake, normBusca } from "../lib";
 import { MultiSelect } from "../components";
 
 // Jitter determinístico (por id) p/ separar pins estimados que caem no mesmo ponto (bairro/cidade)
@@ -79,7 +79,7 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
     if (ownerSel.length) list = list.filter(o => ownerSel.includes(o.owner));
     if (grupoSel.length) list = list.filter(o => grupoSel.includes((o.grupo || "").replace("Grupo: ", "")));
     if (fRfv.length || fSr.length || fInd.length) { list = list.filter(o => { const r = rfvDe(o); if (!r) return false; if (fRfv.length && !fRfv.includes(r.rfv)) return false; if (fSr.length && !fSr.includes(r.status)) return false; if (fInd.length && !(r.inds || "").split(",").some(i => fInd.includes(i.trim()))) return false; return true; }); }
-    if (search.trim()) { const q = search.toLowerCase().replace(/[.\-\/]/g, ""); const casa = o => [o.name, o.nickname, o.legalName, o.cnpj?.replace(/[.\-\/]/g, ""), o.addr?.city, o.addr?.city_name, o.addr?.district, o.addr?.state, o.cat, o.sector, o.products, o.people].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(q); list = list.filter(casa); }
+    if (search.trim()) { const q = normBusca(search).replace(/[.\-\/]/g, ""); const casa = o => normBusca([o.name, o.nickname, o.legalName, o.cnpj?.replace(/[.\-\/]/g, ""), o.addr?.city, o.addr?.city_name, o.addr?.district, o.addr?.state, o.cat, o.sector, o.products, o.people].filter(Boolean).join(" ")).replace(/[.\-\/]/g, "").includes(q); list = list.filter(casa); }
     return list;
   }, [baseOrgs, search, catSel, ufSel, citySel, segSel, ownerSel, grupoSel, fRfv, fSr, fInd, rfvDe]);
 

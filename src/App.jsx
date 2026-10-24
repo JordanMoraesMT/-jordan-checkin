@@ -1,7 +1,7 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight, Gauge } from "lucide-react";
-import { API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
+import { API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, unificarCidades } from "./lib";
 import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 const AnaliseTab=lazy(()=>import("./tabs/AnaliseTab").then(m=>({default:m.AnaliseTab})));// v75/76: análise de visitas (vendedor vê sem valores)
@@ -154,7 +154,7 @@ export default function App(){
       }
     }catch(e){console.warn("clientes D1:",e);}
     if(!fonteD1){setSyncMsg("Erro ao carregar clientes. Tente novamente.");setSyncing(false);return;}
-    setAllOrgs(all);setOrgs(all);setExclOrgs(exc);setSyncMsg(`${all.length} clientes (D1)`);
+    unificarCidades([...all,...exc]);setAllOrgs(all);setOrgs(all);setExclOrgs(exc);setSyncMsg(`${all.length} clientes (D1)`);
     await loadHistoryInner(tk);
   }catch(e){setSyncMsg("Erro");}setSyncing(false);};
 

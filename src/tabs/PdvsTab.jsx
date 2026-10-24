@@ -1,7 +1,7 @@
 // TeamCheck — aba PdvsTab
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { MapPin, Search, SlidersHorizontal, X } from "lucide-react";
-import { PG, toLocalDate, todayLocal, CATS, CANAIS, CC, USERS, SECTORS, BRANDS, geoEstimate, S, fD, fDS, hav, DASH, gps, roadKm, csv, fixMojibake } from "../lib";
+import { PG, toLocalDate, todayLocal, CATS, CANAIS, CC, USERS, SECTORS, BRANDS, geoEstimate, S, fD, fDS, hav, DASH, gps, roadKm, csv, fixMojibake, normBusca } from "../lib";
 import { OrgCard, MultiSelect, DateField } from "../components";
 
 function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,onOpenFicha,focusReq,rfv,excl,pendMapa}){
@@ -36,7 +36,7 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
       list=list.sort((a,b)=>{const la=lastVisits[a.id]?.time||"0";const lb=lastVisits[b.id]?.time||"0";return la.localeCompare(lb);});}
     if(canalSel.length)list=list.filter(o=>canalSel.includes(o.canal||"Presencial"));
     if(fRfv.length||fSr.length||fInd.length){list=list.filter(o=>{const r=rfvDe(o);if(!r)return false;if(fRfv.length&&!fRfv.includes(r.rfv))return false;if(fSr.length&&!fSr.includes(r.status))return false;if(fInd.length&&!(r.inds||"").split(",").some(i=>fInd.includes(i.trim())))return false;return true;});}
-    if(search.trim()){const q=search.toLowerCase().replace(/[.\-\/]/g,"");const casa=o=>[o.name,o.nickname,o.legalName,o.cnpj?.replace(/[.\-\/]/g,""),o.addr?.city,o.addr?.city_name,o.addr?.district,o.addr?.state,o.cat,o.sector,o.products,o.people].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g,"").includes(q);list=list.filter(casa);}
+    if(search.trim()){const q=normBusca(search).replace(/[.\-\/]/g,"");const casa=o=>normBusca([o.name,o.nickname,o.legalName,o.cnpj?.replace(/[.\-\/]/g,""),o.addr?.city,o.addr?.city_name,o.addr?.district,o.addr?.state,o.cat,o.sector,o.products,o.people].filter(Boolean).join(" ")).replace(/[.\-\/]/g,"").includes(q);list=list.filter(casa);}
     if(sortMode==="near"&&nearMe){
       const withGPS=list.filter(o=>plocs[o.id]).map(o=>({...o,dist:hav(nearMe.lat,nearMe.lng,plocs[o.id].lat,plocs[o.id].lng),distType:"gps"}));
       const noGPS=list.filter(o=>!plocs[o.id]).map(o=>{const geo=geoEstimate(o);if(geo)return{...o,dist:hav(nearMe.lat,nearMe.lng,geo[0],geo[1]),distType:"bairro"};return{...o,dist:9999,distType:"sem_ref"};});

@@ -3,7 +3,7 @@
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset } from "lucide-react";
-import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal } from "../lib";
+import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
 const DASH = "https://dashboard.jordanmt.com";
@@ -177,8 +177,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const [vincRes, setVincRes] = useState([]); const [vincLo, setVincLo] = useState(false);
   useEffect(() => { if (vincBusca === null || vincBusca.trim().length < 2) { setVincRes([]); return; }
     const t = setTimeout(async () => { setVincLo(true);
-      try { const d = await crm(token, "/api/crm/contatos-todos?limit=1500"); const q = vincBusca.trim().toLowerCase();
-        setVincRes((d.contatos || []).filter(c => c.id && !ctts.some(x => x.id === c.id) && [c.nome, c.cargo, c.org_nome, c.empresa, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ").toLowerCase().includes(q)).slice(0, 10));
+      try { const d = await crm(token, "/api/crm/contatos-todos?limit=1500"); const q = normBusca(vincBusca.trim());
+        setVincRes((d.contatos || []).filter(c => c.id && !ctts.some(x => x.id === c.id) && normBusca([c.nome, c.cargo, c.org_nome, c.empresa, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ")).includes(q)).slice(0, 10));
       } catch (e) { setVincRes([]); }
       setVincLo(false); }, 300);
     return () => clearTimeout(t); }, [vincBusca, ctts]);
@@ -545,8 +545,8 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
   useEffect(() => { carrega(); }, []);
   const achaOrg = (c) => { const k = soDig(c.cnpj); const tudo = [ ...(allOrgs || []), ...(excl || []) ];
     return tudo.find(o => (c.org_id && o.id === c.org_id) || (k && soDig(o.cnpj) === k)) || null; };
-  const filtrada = useMemo(() => { if (!lista) return []; const n = q.trim().toLowerCase(); if (!n) return lista;
-    return lista.filter(c => [c.nome, c.empresa, c.cargo, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ").toLowerCase().includes(n)); }, [lista, q]);
+  const filtrada = useMemo(() => { if (!lista) return []; const n = normBusca(q.trim()); if (!n) return lista;
+    return lista.filter(c => normBusca([c.nome, c.empresa, c.cargo, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ")).includes(n)); }, [lista, q]);
   return (<div>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
       <p style={{ margin: 0, fontSize: 12.5, color: S.ts }}>Exibindo <b style={{ color: S.txt }}>{Math.min(vc, filtrada.length)}</b> de <b style={{ color: S.txt }}>{filtrada.length}</b> pessoas</p>
@@ -595,8 +595,8 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const gruposE = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const g = ((o.grupo || "").replace("Grupo: ", "")).trim(); if (g) s.add(g); }); return [...s].sort(); }, [allOrgs]);
   const lista = useMemo(() => {
     let l = (q.trim() || fCat.includes("Excluido")) ? [ ...(allOrgs || []), ...(excl || []) ] : (allOrgs || []);
-    if (q.trim()) { const n = q.toLowerCase().replace(/[.\-\/]/g, "");
-      const casa = o => [o.name, o.nickname, o.legalName, soDig(o.cnpj), o.addr?.district, o.addr?.city_name, o.email, o.phone].filter(Boolean).join(" ").toLowerCase().replace(/[.\-\/]/g, "").includes(n);
+    if (q.trim()) { const n = normBusca(q).replace(/[.\-\/]/g, "");
+      const casa = o => normBusca([o.name, o.nickname, o.legalName, soDig(o.cnpj), o.addr?.district, o.addr?.city_name, o.email, o.phone].filter(Boolean).join(" ")).replace(/[.\-\/]/g, "").includes(n);
       l = l.filter(casa); }
     if (fCat.length) l = l.filter(o => fCat.includes(o.cat));
     if (fResp.length) l = l.filter(o => fResp.includes(o.owner));
@@ -786,8 +786,8 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   // v41: tipo e equipe filtram no aparelho (combináveis entre si)
   const feedF = useMemo(() => feed.filter(a => (!fTipo.length || fTipo.includes(a.tipo)) && (!fUser.length || fUser.includes(String(a.user_id)) || fUser.some(uid => { const U = USERS.find(u => String(u.id) === uid); return U && (a.user_nome || "") && (a.user_nome === U.n || a.user_nome.includes(U.n.split(" ")[0])); }))), [feed, fTipo, fUser]);
 
-  const achados = useMemo(() => { const t = q.trim().toLowerCase(); if (t.length < 2) return [];
-    const casa = o => (o.nickname || o.name || "").toLowerCase().includes(t) || soDig(o.cnpj).includes(soDig(t)) || (o.addr?.city_name || "").toLowerCase().includes(t);
+  const achados = useMemo(() => { const t = normBusca(q.trim()); if (t.length < 2) return [];
+    const casa = o => normBusca(o.nickname || o.name || "").includes(t) || (soDig(t) && soDig(o.cnpj).includes(soDig(t))) || normBusca(o.addr?.city_name || "").includes(t);
     return [ ...(allOrgs || []).filter(casa), ...(excl || []).filter(casa) ].slice(0, 12);
   }, [q, allOrgs, excl]);
 

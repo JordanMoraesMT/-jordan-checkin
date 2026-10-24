@@ -48,7 +48,17 @@ const hrsMin=m=>m>=60?`${Math.floor(m/60)}h${(m%60).toString().padStart(2,"0")}`
 const hourDec=d=>{const t=new Date(d);return t.getHours()+t.getMinutes()/60;};
 const hav=(a,b,c,d)=>{const R=6371,x=((c-a)*Math.PI)/180,y=((d-b)*Math.PI)/180;const z=Math.sin(x/2)**2+Math.cos((a*Math.PI)/180)*Math.cos((c*Math.PI)/180)*Math.sin(y/2)**2;return R*2*Math.atan2(Math.sqrt(z),Math.sqrt(1-z));};
 // v68: bairro na grafia que já existe na mesma cidade (a Receita devolve tudo em MAIÚSCULAS e criava variante)
-const _bk=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[-/.]/g," ").replace(/\s+/g," ").trim();
+const _bk=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[-/.'’´`]/g," ").replace(/\s+/g," ").trim();
+// v84: texto para BUSCA — sem acento, sem maiúscula, apóstrofo vira espaço ("cac" acha "Cáceres", "d oeste" acha "D'Oeste")
+const normBusca=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/['’´`]/g," ").replace(/\s+/g," ");
+const contemBusca=(txt,q)=>{const n=normBusca(q).trim();return !n||normBusca(txt).includes(n);};
+// v84: CIDADE na grafia certa — a Receita devolve "CUIABA"; une com "Cuiabá" (prefere a grafia com minúsculas/acento mais usada)
+const _caps=t=>t===t.toUpperCase()&&/[A-Z]/.test(t);
+const _temAcento=t=>/[\u00C0-\u017F]/.test(t);
+function _mapaCidades(orgs){const m={};(orgs||[]).forEach(o=>{const c=String(o.addr?.city_name||o.addr?.city||"").trim();if(!c)return;const k=_bk(c);(m[k]=m[k]||{})[c]=(m[k][c]||0)+1;});const best={};for(const[k,v]of Object.entries(m)){const top=Object.entries(v).sort((a,b)=>((_caps(b[0])?0:2e6)+(_temAcento(b[0])?1e6:0)+b[1])-((_caps(a[0])?0:2e6)+(_temAcento(a[0])?1e6:0)+a[1]))[0][0];best[k]=_caps(top)?_tc(top.toLowerCase()):top;}return best;}
+function cidadeCanon(orgs,c){const t=String(c||"").trim().replace(/\s+/g," ");if(!t)return t;const b=_mapaCidades(orgs)[_bk(t)];if(b&&!_caps(b))return b;return _caps(t)?_tc(t.toLowerCase()):t;}
+// aplica a grafia única em todos os clientes carregados (filtros de cidade sem duplicata)
+function unificarCidades(lista){const best=_mapaCidades(lista);(lista||[]).forEach(o=>{if(!o.addr)return;const c=String(o.addr.city_name||o.addr.city||"").trim();if(!c)return;const b=best[_bk(c)];if(b&&b!==c){o.addr={...o.addr,city_name:b,city:b};}});return lista;}
 const _tc=t=>t.toLowerCase().split(" ").map((w,i)=>/^(i|ii|iii|iv|v|vi|cpa)$/i.test(w)?w.toUpperCase():(i>0&&/^(de|da|do|dos|das|e)$/.test(w))?w:w.charAt(0).toUpperCase()+w.slice(1)).join(" ");
 function bairroCanon(orgs,cidade,b){const t=String(b||"").trim().replace(/\s+/g," ");if(!t)return t;const k=_bk(t),c=_bk(cidade),n={};(orgs||[]).forEach(o=>{const ob=o.addr?.district;if(ob&&_bk(o.addr?.city_name||o.addr?.city)===c&&_bk(ob)===k)n[ob]=(n[ob]||0)+1;});const best=Object.entries(n).sort((x,y)=>y[1]-x[1])[0];if(best)return best[0];return t===t.toUpperCase()?_tc(t):t;}
 // v69: PENDÊNCIAS do cliente — tarefas abertas presas ao cliente. "📌 Próxima visita: …" é a pendência sem data
@@ -198,4 +208,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export {PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };
+export {normBusca, contemBusca, cidadeCanon, unificarCidades, PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };
