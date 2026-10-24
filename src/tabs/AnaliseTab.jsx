@@ -69,7 +69,8 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   const dataVendas = useMemo(() => { let m = ""; Object.values(rfv?.byCnpj || {}).forEach(r => { if (r.ultima && r.ultima > m) m = r.ultima; }); return m || null; }, [rfv]);
   const ultimaEquipe = useMemo(() => { const m = {}; visitas.forEach(v => { const d = v.criado_em ? new Date(Date.parse(String(v.criado_em).replace(" ", "T") + "Z") - 4 * 3600000).toISOString().slice(0, 10) : null; if (d && v.org_id && (!m[v.org_id] || d > m[v.org_id])) m[v.org_id] = d; }); return m; }, [visitas]);
   const A = useMemo(() => analisar({ visitas: vUser, carteira, carteiraValor: carteiraBase, ultimaEquipe, rfv, vendInd, fat12Ind, prem: { ...prem, inicio }, hoje, dataVendas }), [vUser, carteira, carteiraBase, ultimaEquipe, rfv, vendInd, fat12Ind, prem, inicio, hoje, dataVendas]);
-  const diasVendas = dataVendas ? Math.round((Date.parse(hoje + "T12:00:00Z") - Date.parse(dataVendas + "T12:00:00Z")) / 86400000) : null;
+  // vendas entram 1× por mês (carga do dia 1º): só avisa se a carga do mês não chegou até o dia 5
+  const cargaAtrasada = !!dataVendas && dataVendas < hoje.slice(0, 7) + "-01" && Number(hoje.slice(8, 10)) > 5;
 
   const ORDV = { "Rentável visitar": 0, "Aguardar": 1, "Atender a distância": 2, "Prospecção": 3 };
   const linhasF = useMemo(() => { let l = A.linhas;
@@ -109,7 +110,8 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
       </div>
     </div>
     {ld && <p style={{ fontSize: 13, color: S.ts, margin: "0 0 10px" }}>Carregando visitas e vendas…</p>}
-    {diasVendas != null && diasVendas > 15 && <p style={{ fontSize: 13, color: S.gold, margin: "0 0 10px", padding: "8px 12px", border: `1px solid ${S.gold}55`, borderRadius: 8, background: S.gold + "12" }}>As vendas carregadas vão até {dBR(dataVendas)} ({diasVendas} dias atrás) — compras recentes ainda não entram no cálculo. Atualize a carga de vendas no Dashboard.</p>}
+    {cargaAtrasada && <p style={{ fontSize: 13, color: S.gold, margin: "0 0 10px", padding: "8px 12px", border: `1px solid ${S.gold}55`, borderRadius: 8, background: S.gold + "12" }}>A carga mensal de vendas deste mês ainda não entrou — as vendas vão até {dBR(dataVendas)}. Atualize no Dashboard.</p>}
+    {!cargaAtrasada && dataVendas && isAdmin && <p className="num" style={{ fontSize: 12, color: S.ts, margin: "0 0 10px" }}>vendas até {dBR(dataVendas)} · próxima carga no dia 1º</p>}
     {erro && <p style={{ fontSize: 13, color: S.dng, margin: "0 0 10px" }}>{erro}</p>}
 
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10, marginBottom: 14 }}>
