@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from "react";
 import { ChevronDown, ChevronUp, Download, SlidersHorizontal } from "lucide-react";
 import { S, USERS, API, DASH, todayLocal, csv } from "../lib";
 import { SearchSelect, MultiSelect, DateField, Kpi } from "../components";
-import { analisar, PREMISSAS_PADRAO, INDUSTRIAS } from "../analiseVisitas";
+import { analisar, PREMISSAS_PADRAO, INDUSTRIAS, CONTAS, ROTULO_CONTA } from "../analiseVisitas";
 
 const brl = v => (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const n1 = v => (v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -57,8 +57,12 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   useEffect(() => { if (!token) return; let vivo = true; setLd(true); setErro("");
     const H = { headers: { "X-Session": token }, cache: "no-store" };
     const pIni = inicio.slice(0, 7), pFim = hoje.slice(0, 7), p12 = mesMenos(pFim, 11);
-    const porInd = (de, ate) => Promise.all(INDUSTRIAS.map(ind => fetch(`${DASH}/api/detalhada?de=${de}&ate=${ate}&ind=${encodeURIComponent(ind)}`, H).then(r => r.json()).then(d => [ind, (d && d.clients) || null]).catch(() => [ind, null])))
-      .then(lst => { const m = {}; let falhou = 0; lst.forEach(([ind, cl]) => { if (!cl) { falhou++; return; } cl.forEach(c => { const k = k14(c.cnpj); (m[k] = m[k] || {})[ind] = +c.fat || 0; }); }); return { m, falhou }; });
+    // 1 chamada por indústria + 1 para Plastilit só tubos (taxa própria); "Plastilit" fica = total − tubos
+    const consultas = [...INDUSTRIAS.map(ind => [ind, `ind=${encodeURIComponent(ind)}`]), ["Plastilit Tubos", "ind=Plastilit&cat=Tubos"]];
+    const porInd = (de, ate) => Promise.all(consultas.map(([conta, q]) => fetch(`${DASH}/api/detalhada?de=${de}&ate=${ate}&${q}`, H).then(r => r.json()).then(d => [conta, (d && d.clients) || null]).catch(() => [conta, null])))
+      .then(lst => { const m = {}; let falhou = 0; lst.forEach(([conta, cl]) => { if (!cl) { falhou++; return; } cl.forEach(c => { const k = k14(c.cnpj); (m[k] = m[k] || {})[conta] = +c.fat || 0; }); });
+        Object.values(m).forEach(x => { if (x["Plastilit Tubos"]) x.Plastilit = Math.max(0, (x.Plastilit || 0) - x["Plastilit Tubos"]); });
+        return { m, falhou }; });
     Promise.all([
       fetch(`${DASH}/api/crm/atividades?tipo=VISITA&desde=${encodeURIComponent(inicio + " 04:00:00")}&limit=2000`, H).then(r => r.json()),
       porInd(pIni, pFim), porInd(p12, pFim),
@@ -196,10 +200,10 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
         <div>
           <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: S.txt }}>Taxa média por representada (%)</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8 }}>
-            {INDUSTRIAS.map(ind => <label key={ind} style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 12.5, color: S.t2 }}>{ind}</span>
+            {CONTAS.map(ind => <label key={ind} style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 12.5, color: S.t2 }}>{ROTULO_CONTA[ind] || ind}</span>
               <input type="number" step="0.01" value={pe.taxas[ind] ?? 5} onChange={e => setPe(p => ({ ...p, taxas: { ...p.taxas, [ind]: +e.target.value } }))} className="num" style={{ height: 40, boxSizing: "border-box" }} /></label>)}
           </div>
-          <p style={{ margin: "6px 0 0", fontSize: 12, color: S.ts }}>Tramontina 4,16% e Pado 5% vêm dos extratos (out/25–jun/26). Pado 1,5% para Vale Formoso e Irmãos Domingos. Demais 5% até confirmar.</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12, color: S.ts }}>Tramontina 4,16% e Pado 5% vêm dos extratos (out/25–jun/26); Pado 1,5% para Vale Formoso e Irmãos Domingos. Plastilit: tubos = categoria "Tubos"; conexões e demais = o resto. Festcolor 5% provisório.</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10 }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 12.5, color: S.t2 }}>Início do TeamCheck</span><DateField value={pe.inicio} onChange={v => setPe(p => ({ ...p, inicio: v }))} today={hoje} placeholder="Data" /></label>
