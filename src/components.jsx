@@ -271,13 +271,15 @@ function DateField({value,onChange,placeholder="Data",today,marks,style}){
   const[btnRef,rect]=useAnchorRect(open);const panelRef=useRef(null);
   useOutside(open,()=>setOpen(false),btnRef,panelRef);
   const W=300;const left=rect?Math.max(8,Math.min(rect.left,window.innerWidth-W-8)):0;
+  // v76: perto do rodapé (ex.: folha de check-out no celular) o calendário abre para CIMA — antes saía da tela
+  const PH=400;const top=rect?(rect.bottom+6+PH>window.innerHeight&&rect.top-6-PH>=8?rect.top-6-PH:Math.max(8,Math.min(rect.bottom+6,window.innerHeight-PH-8))):0;
   return(<div style={{position:"relative",...style}}>
     <button ref={btnRef} type="button" onClick={()=>setOpen(o=>!o)} style={{width:"100%",display:"flex",alignItems:"center",gap:8,background:S.inp,border:`1px solid ${open?S.pri:S.inpBdr}`,borderRadius:10,padding:"9px 11px",fontSize:13,color:value?S.txt:S.ts,cursor:"pointer",textAlign:"left"}}>
       <CalIcon size={15} color={S.td} style={{flexShrink:0}}/>
       <span style={{flex:1}}>{value?fmtBR(value):placeholder}</span>
       <ChevronDown size={14} color={S.td} style={{flexShrink:0,transform:open?"rotate(180deg)":"none"}}/>
     </button>
-    {open&&rect&&createPortal(<div ref={panelRef} style={{position:"fixed",top:rect.bottom+6,left,zIndex:9999,background:"var(--card-solid)",border:`1px solid ${S.brd}`,borderRadius:14,boxShadow:"0 16px 40px rgba(0,0,0,.4)",padding:14,width:W}}>
+    {open&&rect&&createPortal(<div ref={panelRef} style={{position:"fixed",top,left,zIndex:9999,background:"var(--card-solid)",border:`1px solid ${S.brd}`,borderRadius:14,boxShadow:"0 16px 40px rgba(0,0,0,.4)",padding:14,width:W,maxHeight:"calc(100vh - 16px)",overflowY:"auto"}}>
       <MonthCalendar value={value} today={today} marks={marks} onSelect={d=>{onChange&&onChange(d);setOpen(false);}}/>
       <div style={{display:"flex",justifyContent:"space-between",marginTop:10,borderTop:`1px solid ${S.cl}`,paddingTop:10}}>
         <button type="button" onClick={()=>{onChange&&onChange("");setOpen(false);}} style={{background:"transparent",border:"none",color:S.dng,fontSize:12,fontWeight:600,cursor:"pointer",padding:0}}>Limpar</button>

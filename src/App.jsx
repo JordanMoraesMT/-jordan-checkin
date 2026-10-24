@@ -4,7 +4,8 @@ import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Pl
 import { API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos } from "./lib";
 import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
-const AnaliseTab=lazy(()=>import("./tabs/AnaliseTab").then(m=>({default:m.AnaliseTab})));// v75: análise de visitas (admin)
+const AnaliseTab=lazy(()=>import("./tabs/AnaliseTab").then(m=>({default:m.AnaliseTab})));// v75/76: análise de visitas (vendedor vê sem valores)
+import { sugerirProxima } from "./analiseVisitas";
 const RelatorioTab=lazy(()=>import("./tabs/RelatorioTab").then(m=>({default:m.RelatorioTab})));// recharts só carrega ao abrir o Relatório
 import { EquipeTab } from "./tabs/EquipeTab";
 import { AgendaTab } from "./tabs/AgendaTab";
@@ -207,6 +208,7 @@ export default function App(){
   // v74: atendimento a distância (sem check-in) — mesma janela do check-out, conferindo as pendências do cliente.
   // Grava como atividade do app (origem "teamcheck") com o tipo do contato; a Equipe conta como produtividade de escritório.
   const[remTarget,setRemTarget]=useState(null);
+  const[sugestao,setSugestao]=useState(null);
   const quickAction=(org)=>{if(!org)return;const cn=(org.cnpj||"").replace(/\D/g,"");setRemTarget({org,pend:[],lo:true});
     pendenciasDe(token,org.id,cn).then(pl=>setRemTarget(t=>t&&t.org.id===org.id?{...t,pend:pl,lo:false}:t)).catch(()=>setRemTarget(t=>t?{...t,lo:false}:t));};
   const remoteSave=(note,type,next,sale,extra)=>{const t=remTarget;if(!t)return;const o=t.org;const cn=(o.cnpj||"").replace(/\D/g,"")||null;const nome=o.nickname||o.name;
@@ -239,6 +241,11 @@ export default function App(){
     if(next?.nextDate&&next?.nextDesc){const nt=(next.nextType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(nt)?nt:"VISITA";crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:tipoOk,texto:next.nextDesc,origem:"tarefa",due_em:`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`});}
     syncVisitSave(done);
     setVisits(p=>[done,...p]);setActive(null);syncClear();setCoTarget(null);setLdId(null);
+    // v76: balão "perto daqui" — cliente com potencial próximo do que acabou de ser visitado (até 17h, dispensável no dia)
+    try{if(new Date().getHours()<17&&sL("jc:semSugestao","")!==todayLocal()){const ref=g&&g.lat!=null?{lat:g.lat,lng:g.lng}:plocs[active.orgId];
+      const meus=(allOrgs||[]).filter(o=>(o.owner||"")===user?.name);
+      const sug=sugerirProxima({origem:ref,orgs:meus.length?meus:allOrgs,plocs,visits:[done,...visits],rfv:rfvMap,excluirId:active.orgId,hoje:todayLocal()});
+      if(sug.length)setTimeout(()=>setSugestao({de:done.orgName,itens:sug,i:0}),divergent?400:250);}}catch(e){console.warn("sugestão:",e);}
     if(divergent)setTimeout(()=>alert(`ℹ️ Visita registrada.\nO GPS ficou a ${divDist}m do ponto salvo do cliente — a visita foi gravada normalmente e conta no relatório; fica só um selo ⚠️ para você conferir o cadastro depois.`),100);
     else{const m=[];if(next?.nextDate&&next?.nextDesc)m.push("✓ Próximo passo agendado.");if(novas.length)m.push(`📌 ${novas.length} pendência(s) para a próxima visita — vão aparecer no próximo check-in.`);if(resolv.length)m.push(`✓ ${resolv.length} pendência(s) marcada(s) como resolvida(s).`);if(m.length)setTimeout(()=>alert(m.join("\n")),100);}
     setPendAtivas([]);
@@ -265,7 +272,7 @@ export default function App(){
   const NAVG=[
     {grp:"CAMPO",itens:[{id:"pdvs",I:Store,l:"PDVs"},{id:"mapa",I:MapPin,l:"Mapa"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"agenda",I:Calendar,l:"Agenda"}]},
     {grp:"CRM",itens:[{id:"crm_inicio",I:BookUser,l:"Início"},{id:"crm_empresas",I:Building2,l:"Empresas"},{id:"crm_pessoas",I:Contact,l:"Pessoas"}]},
-    {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true},{id:"analise",I:Gauge,l:"Análise de visitas",admin:true}]:[]),{id:"relatorio",I:BarChart3,l:"Relatório"}]},
+    {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true}]:[]),{id:"analise",I:Gauge,l:"Análise de visitas"},{id:"relatorio",I:BarChart3,l:"Relatório"}]},
     {grp:"SISTEMA",itens:[{id:"config",I:Settings,l:"Configurações"}]},
   ];
   const TITULOS={pdvs:["PDVs","Pontos de venda"],crm_inicio:["CRM","Feed de atividades"],crm_empresas:["Empresas","Carteira de clientes"],crm_pessoas:["Pessoas","Contatos"],mapa:["Mapa","Clientes no mapa"],rotas:["Rotas","Roteiro do dia"],relatorio:["Relatório","Período, jornada e km"],equipe:["Equipe","Produtividade"],analise:["Análise de visitas","Carteira, jornada e saúde"],agenda:["Agenda","Tarefas e retornos"],config:["Configurações","Sistema"]};
@@ -363,7 +370,7 @@ export default function App(){
       <CrmTab visible={tab.startsWith("crm")} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs} pessoasQ={pessoaQ0} onRemoto={quickAction}/>
       <Suspense fallback={null}>{mapaLigado&&<MapaTab visible={tab==="mapa"} orgs={orgs} plocs={plocs} user={user} rfv={rfvMap} excl={exclOrgs} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}</Suspense>
       {tab==="rotas"&&<RotasTab sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs} orgs={orgs} rfv={rfvMap} token={token} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}
-      {tab==="analise"&&isAdmin&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando análise…</p>}><AnaliseTab token={token} allOrgs={allOrgs} rfv={rfvMap} user={user} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/></Suspense>}
+      {tab==="analise"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando análise…</p>}><AnaliseTab token={token} allOrgs={allOrgs} rfv={rfvMap} user={user} isAdmin={isAdmin} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/></Suspense>}
       {tab==="relatorio"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando relatório…</p>}><RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/></Suspense>}
       {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} plocs={plocs} dayBases={dayBases} user={user} visits={visits} token={token} bump={crmBump}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs} bump={crmBump} onCrmChange={()=>setCrmBump(b=>b+1)}/>
@@ -393,6 +400,23 @@ export default function App(){
     {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=>{const act=navAtivo(t.id);return <button key={t.id} onClick={()=>{if(t.id==="mapa")setMapaLigado(true);setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:act?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:act?700:400,color:act?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={act?2.2:1.6}/>{t.l}</button>;})}</div></div>}
 
     {coTarget&&<NoteModal org={coTarget} pendencias={active&&coTarget.id===active.orgId?pendAtivas:[]} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
+    {sugestao&&sugestao.itens[sugestao.i]&&(()=>{const x=sugestao.itens[sugestao.i];const o=x.org;const g=plocs[o.id];return(<div role="status" aria-live="polite" style={{position:"fixed",left:12,right:12,bottom:mob?88:24,zIndex:55,display:"flex",justifyContent:"center",pointerEvents:"none"}}>
+      <div style={{pointerEvents:"auto",width:"100%",maxWidth:460,background:S.cardSolid,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",boxShadow:"0 10px 30px rgba(0,0,0,.35)"}}>
+        <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+          <div style={{flex:1,minWidth:0}}>
+            <p style={{margin:0,fontSize:12.5,color:S.t2}}>Perto daqui{sugestao.itens.length>1?` · ${sugestao.i+1} de ${sugestao.itens.length}`:""}</p>
+            <p style={{margin:"2px 0 0",fontSize:15.5,fontWeight:700,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.nickname||o.name}</p>
+            <p className="num" style={{margin:"3px 0 0",fontSize:12,color:S.ts}}>{x.km<1?`${Math.round(x.km*1000)} m`:`${x.km.toFixed(1).replace(".",",")} km`} · {x.dSem==null?"nunca visitado":`última visita ${x.dSem}d`}{x.recompra==="Atrasado"?" · recompra atrasada":x.recompra==="Momento de Recompra"?" · momento de recompra":""}{x.rfv?` · ${x.rfv}`:""}</p>
+          </div>
+          <button onClick={()=>setSugestao(null)} aria-label="Fechar sugestão" style={{width:36,height:36,border:"none",background:"transparent",color:S.ts,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:18}}>×</button>
+        </div>
+        <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
+          <button onClick={()=>{window.open(`https://www.google.com/maps/dir/?api=1&destination=${g.lat},${g.lng}&travelmode=driving`,"_blank","noopener");setSugestao(null);}} style={{flex:"1 1 110px",height:40,fontSize:13.5,fontWeight:600,background:S.pri,border:"none",color:"#fff"}}>Traçar rota</button>
+          <button onClick={()=>{setTab("pdvs");setFocusReq({id:o.id,name:o.nickname||o.name,t:Date.now()});setSugestao(null);}} style={{flex:"1 1 90px",height:40,fontSize:13.5}}>Ver cliente</button>
+          {sugestao.itens.length>1&&<button onClick={()=>setSugestao(s=>({...s,i:(s.i+1)%s.itens.length}))} style={{flex:"1 1 80px",height:40,fontSize:13.5}}>Outro</button>}
+          <button onClick={()=>{sS("jc:semSugestao",todayLocal());setSugestao(null);}} style={{flex:"1 1 100px",height:40,fontSize:12.5,border:"none",color:S.ts}}>Não sugerir hoje</button>
+        </div>
+      </div></div>);})()}
     {remTarget&&<NoteModal remoto org={remTarget.org} pendencias={remTarget.pend} carregandoPend={remTarget.lo} onSave={remoteSave} onCancel={()=>setRemTarget(null)}/>}
     {pendAlerta&&<PendenciasAlerta dados={pendAlerta} onClose={()=>setPendAlerta(null)}/>}
     {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const n={...p,[k]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
