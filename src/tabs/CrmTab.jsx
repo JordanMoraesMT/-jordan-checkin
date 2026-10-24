@@ -2,7 +2,7 @@
 // CRM próprio: histórico de atividades, contatos, fotos/arquivos da loja e GPS.
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal } from "lucide-react";
+import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal, Link2 } from "lucide-react";
 import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
@@ -53,6 +53,18 @@ async function crm(token, path, opts = {}) {
   if (!r.ok || d.erro) throw new Error(d.erro || d.detalhe || ("HTTP " + r.status));
   return d;
 }
+
+// v86: GRUPO de lojas — vincular contatos de uma loja às demais lojas do mesmo grupo (mesma pessoa em várias lojas)
+const grupoDe = o => ((o?.grupo || "").replace("Grupo: ", "")).trim();
+const lojasDoGrupo = (org, allOrgs) => { const g = normBusca(grupoDe(org)).trim(); if (!g || !org) return [];
+  return (allOrgs || []).filter(o => o.id !== org.id && normBusca(grupoDe(o)).trim() === g); };
+async function vincularNoGrupo(token, contatos, lojas, onProg) { let ok = 0, falhas = 0, i = 0; const tot = contatos.length * lojas.length;
+  for (const c of contatos) for (const l of lojas) { i++; onProg && onProg(i, tot);
+    if (Number(c.org_id) === Number(l.id)) continue;
+    try { await crm(token, "/api/crm/contato-vincular", { method: "POST", body: JSON.stringify({ contato_id: c.id, org_id: l.id, cnpj: soDig(l.cnpj) || null }) }); ok++; }
+    catch (e) { if (!/já pertence/.test(e.message || "")) falhas++; } }
+  return { ok, falhas }; }
+const confirmaGrupo = (nomes, lojas, g) => confirm(`Vincular ${nomes} às ${lojas.length} outras lojas do grupo "${g}"?\n\n${lojas.slice(0, 12).map(l => "• " + (l.nickname || l.name)).join("\n")}${lojas.length > 12 ? `\n… e mais ${lojas.length - 12}` : ""}\n\nÉ a MESMA pessoa em todas: editar os dados dela em qualquer loja atualiza todas.`);
 
 // comprime imagem no aparelho antes do upload (máx 1600px, webp)
 function comprime(file) {
@@ -111,7 +123,7 @@ function AtvCard({ a, onOrg, onDel, canDel, onFinish }) {
 // ─────────────────────────────────────────────────────────────
 //  Tela do cliente — cabeçalho + Histórico | Contatos | Fotos | Dados
 // ─────────────────────────────────────────────────────────────
-function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange, backLabel, onRemoto }) {
+function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange, backLabel, onRemoto, allOrgs }) {
   const [sub, setSub] = useState("hist");
   const [info, setInfo] = useState(null);           // /api/crm/cliente
   const [atvs, setAtvs] = useState([]); const [ldA, setLdA] = useState(false);
@@ -177,12 +189,18 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const [vincRes, setVincRes] = useState([]); const [vincLo, setVincLo] = useState(false);
   useEffect(() => { if (vincBusca === null || vincBusca.trim().length < 2) { setVincRes([]); return; }
     const t = setTimeout(async () => { setVincLo(true);
-      try { const d = await crm(token, "/api/crm/contatos-todos?limit=1500"); const q = normBusca(vincBusca.trim());
+      try { const d = await crm(token, "/api/crm/contatos-todos?limit=5000"); const q = normBusca(vincBusca.trim());
         setVincRes((d.contatos || []).filter(c => c.id && !ctts.some(x => x.id === c.id) && normBusca([c.nome, c.cargo, c.org_nome, c.empresa, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ")).includes(q)).slice(0, 10));
       } catch (e) { setVincRes([]); }
       setVincLo(false); }, 300);
     return () => clearTimeout(t); }, [vincBusca, ctts]);
   const vincular = async (c) => { try { await crm(token, "/api/crm/contato-vincular", { method: "POST", body: JSON.stringify({ contato_id: c.id, org_id: org.id, cnpj: cnpjN || null }) }); setVincBusca(null); carregaCtts(); } catch (e) { alert("Erro: " + (e.body || e.message)); } };
+  const lojasG = useMemo(() => lojasDoGrupo(org, allOrgs), [org, allOrgs]);
+  const [grpMsg, setGrpMsg] = useState("");
+  const vincGrupo = async (lista) => { if (!lista.length || !lojasG.length) return;
+    if (!confirmaGrupo(lista.length === 1 ? lista[0].nome : `os ${lista.length} contatos desta loja`, lojasG, grupoDe(org))) return;
+    const r = await vincularNoGrupo(token, lista, lojasG, (i, t) => setGrpMsg(`Vinculando ${i} de ${t}…`));
+    setGrpMsg(`Pronto: ${lista.length} contato(s) nas ${lojasG.length} lojas do grupo${r.falhas ? ` · ${r.falhas} falha(s)` : ""}.`); carregaCtts(); };
   const desvincular = async (c) => { if (!confirm(`Desvincular ${c.nome} desta empresa? (a pessoa continua nas demais)`)) return; try { await crm(token, `/api/crm/contato-vincular?contato_id=${c.id}&org_id=${org.id}`, { method: "DELETE" }); carregaCtts(); } catch (e) { alert("Erro: " + e.message); } };
 
   // ── arquivos/fotos ──
@@ -411,6 +429,13 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
         <button onClick={() => { setCttForm({ ...cttVazio }); setVincBusca(null); }} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.acc, color: "#fff", border: "none", borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}><Plus size={16} />Novo contato</button>
         <button onClick={() => setVincBusca(vincBusca === null ? "" : null)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: vincBusca !== null ? S.pri : S.card, color: vincBusca !== null ? "#fff" : S.txt, border: vincBusca !== null ? "none" : `1px solid ${S.brd}`, borderRadius: 10, padding: "11px", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>🔗 Vincular pessoa existente</button>
       </div>}
+      {!cttForm && lojasG.length > 0 && <Crd style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: S.txt }}>Grupo {grupoDe(org)} · {lojasG.length} outra{lojasG.length > 1 ? "s" : ""} loja{lojasG.length > 1 ? "s" : ""}</p>
+          <p style={{ margin: "2px 0 0", fontSize: 11.5, color: S.ts }}>{grpMsg || "Leve os contatos desta loja para as demais do grupo (mesma pessoa em todas)."}</p>
+        </div>
+        <button onClick={() => vincGrupo(ctts)} disabled={!ctts.length} style={{ display: "flex", alignItems: "center", gap: 6, background: ctts.length ? S.pri : S.cl, color: ctts.length ? "#fff" : S.ts, border: "none", borderRadius: 10, padding: "9px 12px", fontSize: 12.5, fontWeight: 700, cursor: ctts.length ? "pointer" : "default" }}><Link2 size={15} />Vincular contatos ao grupo</button>
+      </Crd>}
       {vincBusca !== null && !cttForm && <Crd>
         <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 13.5 }}>Vincular pessoa de outra empresa</p>
         <p style={{ margin: "0 0 8px", fontSize: 11.5, color: S.ts }}>Para redes com comprador único: a MESMA pessoa fica em várias lojas — editar os dados dela em qualquer loja atualiza todas.</p>
@@ -453,6 +478,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
           <div style={{ display: "flex", gap: 6, alignItems: "flex-start", flexShrink: 0 }}>
             {c.whatsapp && <a href={`https://wa.me/55${soDig(c.whatsapp)}`} target="_blank" rel="noopener noreferrer" style={{ width: 36, height: 36, borderRadius: 10, background: "#25D36622", display: "flex", alignItems: "center", justifyContent: "center" }}><MessageCircle size={17} color="#25D366" /></a>}
             {c.telefone && <a href={`tel:${soDig(c.telefone)}`} style={{ width: 36, height: 36, borderRadius: 10, background: S.pl + "22", display: "flex", alignItems: "center", justifyContent: "center" }}><Phone size={16} color={S.pl} /></a>}
+            {lojasG.length > 0 && <button onClick={() => vincGrupo([c])} title={`Vincular ${c.nome} às ${lojasG.length} lojas do grupo`} style={{ width: 36, height: 36, borderRadius: 10, background: S.pri + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Link2 size={15} color={S.pl} /></button>}
             <button onClick={() => setCttForm({ ...c })} title={c.vinculado ? "Editar (atualiza em TODAS as empresas vinculadas)" : "Editar"} style={{ width: 36, height: 36, borderRadius: 10, background: S.cl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Pencil size={14} color={S.ts} /></button>
             <button onClick={() => c.vinculado ? desvincular(c) : desvProprio(c)} title="Tirar desta empresa (o contato continua no CRM)" style={{ width: 36, height: 36, borderRadius: 10, background: S.gold + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Unlink size={14} color={S.gold} /></button>
             <button onClick={() => delCtt(c)} title="Excluir contato do CRM (some de todas as empresas)" style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>
@@ -540,41 +566,72 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
 //  WhatsApp/Ligar/E-mail. Enche de vez com a importação do backup.
 // ─────────────────────────────────────────────────────────────
 function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
-  const [lista, setLista] = useState(null); const [q, setQ] = useState(q0 || ""); const [vc, setVc] = useState(60);
-  const carrega = async () => { try { const d = await crm(token, "/api/crm/contatos-todos"); setLista(d.contatos || []); } catch (e) { setLista([]); console.warn("pessoas:", e); } };
+  // v86: tabela no padrão de Empresas (Nome · Empresa · Telefone · E-mail) + vincular ao grupo da empresa
+  const [lista, setLista] = useState(null); const [vincs, setVincs] = useState([]); const [q, setQ] = useState(q0 || ""); const [vc, setVc] = useState(60);
+  const [ordem, setOrdem] = useState(1); const [msg, setMsg] = useState("");
+  const carrega = async () => { try { const d = await crm(token, "/api/crm/contatos-todos?limit=5000"); setLista(d.contatos || []); } catch (e) { setLista([]); console.warn("pessoas:", e); }
+    try { const v = await crm(token, "/api/crm/contato-vinculos-todos"); setVincs(v.vinculos || []); } catch (e) { setVincs([]); } };
   useEffect(() => { carrega(); }, []);
-  const achaOrg = (c) => { const k = soDig(c.cnpj); const tudo = [ ...(allOrgs || []), ...(excl || []) ];
-    return tudo.find(o => (c.org_id && o.id === c.org_id) || (k && soDig(o.cnpj) === k)) || null; };
-  const filtrada = useMemo(() => { if (!lista) return []; const n = normBusca(q.trim()); if (!n) return lista;
-    return lista.filter(c => normBusca([c.nome, c.empresa, c.cargo, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ")).includes(n)); }, [lista, q]);
+  const tudo = useMemo(() => [...(allOrgs || []), ...(excl || [])], [allOrgs, excl]);
+  const porId = useMemo(() => new Map(tudo.map(o => [Number(o.id), o])), [tudo]);
+  const porCnpj = useMemo(() => new Map(tudo.filter(o => soDig(o.cnpj)).map(o => [soDig(o.cnpj), o])), [tudo]);
+  const achaOrg = (c) => (c.org_id && porId.get(Number(c.org_id))) || (soDig(c.cnpj) && porCnpj.get(soDig(c.cnpj))) || null;
+  const outras = useMemo(() => { const m = new Map(); vincs.forEach(v => { const o = (v.org_id && porId.get(Number(v.org_id))) || (soDig(v.cnpj) && porCnpj.get(soDig(v.cnpj))); if (!o) return; const a = m.get(v.contato_id) || []; if (!a.some(x => x.id === o.id)) a.push(o); m.set(v.contato_id, a); }); return m; }, [vincs, porId, porCnpj]);
+  const filtrada = useMemo(() => { if (!lista) return []; const n = normBusca(q.trim());
+    const l = !n ? lista : lista.filter(c => { const o = achaOrg(c); return normBusca([c.nome, c.empresa, c.org_nome, o?.nickname, o?.name, grupoDe(o), c.cargo, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ")).includes(n); });
+    return [...l].sort((a, b) => ordem * String(a.nome || "").localeCompare(String(b.nome || ""))); }, [lista, q, ordem, porId, porCnpj]);
+  const vincGrupo = async (c, o, lojas) => { const ja = new Set((outras.get(c.id) || []).map(x => x.id)); const faltam = lojas.filter(l => !ja.has(l.id));
+    if (!faltam.length) { alert(`${c.nome} já está em todas as lojas do grupo.`); return; }
+    if (!confirmaGrupo(c.nome, faltam, grupoDe(o))) return;
+    const r = await vincularNoGrupo(token, [c], faltam, (i, t) => setMsg(`Vinculando ${c.nome}: ${i} de ${t}…`));
+    setMsg(`${c.nome} vinculado a ${r.ok} loja(s) do grupo ${grupoDe(o)}${r.falhas ? ` · ${r.falhas} falha(s)` : ""}.`); carrega(); };
+  const th = { textAlign: "left", padding: "10px 10px", fontSize: 12.5, fontWeight: 600, color: S.t2, whiteSpace: "nowrap", borderBottom: `1px solid ${S.brd}`, position: "sticky", top: 0, background: S.cardSolid, zIndex: 1 };
+  const td = { padding: "9px 10px", fontSize: 13, color: S.txt, borderBottom: `1px solid ${S.brd}`, verticalAlign: "middle" };
+  const ico = (bg, bd) => ({ width: 32, height: 32, padding: 0, borderRadius: 8, background: bg, border: `1px solid ${bd}`, display: "inline-flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0 });
   return (<div>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
       <p style={{ margin: 0, fontSize: 12.5, color: S.ts }}>Exibindo <b style={{ color: S.txt }}>{Math.min(vc, filtrada.length)}</b> de <b style={{ color: S.txt }}>{filtrada.length}</b> pessoas</p>
-      <button onClick={carrega} style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: `1px solid ${S.brd}`, borderRadius: 10, padding: "7px 10px", fontSize: 12, color: S.ts }}><RefreshCw size={13}/>Atualizar</button>
+      <button onClick={carrega} style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: `1px solid ${S.brd}`, borderRadius: 10, padding: "7px 10px", fontSize: 12, color: S.ts, cursor: "pointer" }}><RefreshCw size={13}/>Atualizar</button>
     </div>
-    <div style={{ position: "relative", marginBottom: 10 }}>
-      <Search size={15} color={S.td} style={{ position: "absolute", left: 12, top: 12 }} />
-      <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Buscar pessoa, empresa, cargo, telefone ou e-mail..." style={{ ...inp, paddingLeft: 34 }} />
+    <div style={{ display: "flex", alignItems: "center", gap: 10, background: S.card, border: `1px solid ${S.brd}`, borderRadius: 8, padding: "0 12px", height: 46, marginBottom: 10 }}>
+      <Search size={17} strokeWidth={1.8} color="var(--t3)" style={{ flexShrink: 0 }} />
+      <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Pessoa, empresa, grupo, cargo, telefone ou e-mail" aria-label="Buscar pessoa" style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", padding: 0, fontSize: 15 }} />
+      {q && <button onClick={() => { setQ(""); setVc(60); }} aria-label="Limpar busca" style={{ border: "none", padding: 4, color: S.ts, display: "flex", background: "transparent" }}><X size={16} /></button>}
     </div>
+    {msg && <p style={{ fontSize: 12.5, color: S.acc, margin: "0 0 8px" }}>{msg}</p>}
     {lista === null && <p style={{ color: S.ts, textAlign: "center", padding: "1.5rem 0" }}>Carregando pessoas...</p>}
-    {lista !== null && filtrada.length === 0 && <Crd><p style={{ margin: 0, fontSize: 12.5, color: S.ts, textAlign: "center" }}>Nenhuma pessoa encontrada.{!q && " A lista enche com os contatos criados no CRM e com a importação inicial."}</p></Crd>}
-    {filtrada.slice(0, vc).map(c => { const o = achaOrg(c); return (<Crd key={c.id} style={{ padding: "10px 12px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 8, alignItems: "flex-start" }}>
-        <div style={{ minWidth: 0 }}>
-          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: S.txt }}>{c.nome}{c.cargo && <span style={{ fontWeight: 400, color: S.ts, fontSize: 11.5 }}> · {c.cargo}</span>}</p>
-          {(c.empresa || o) && <button onClick={() => o && onOpenOrg(o)} disabled={!o} style={{ background: "transparent", border: "none", padding: 0, margin: "2px 0 0", fontSize: 11.5, color: o ? S.pl : S.td, cursor: o ? "pointer" : "default", display: "flex", alignItems: "center", gap: 4, textAlign: "left" }}><Building2 size={12}/>{c.empresa || (o && (o.nickname || o.name))}</button>}
-          <p style={{ margin: "3px 0 0", fontSize: 11, color: S.td }}>{[c.telefone, c.whatsapp, c.email].filter(Boolean).join(" · ") || "sem contato"}</p>
-        </div>
-        <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-          {onPerson && o && <button onClick={() => onPerson(o)} title="Editar pessoas desta empresa" style={{ background: S.gold + "18", border: `1px solid ${S.gold}55`, borderRadius: 8, padding: "6px 8px", display: "flex", cursor: "pointer" }}><Pencil size={14} color={S.gold}/></button>}
-          {!o && <button onClick={async () => { if (!confirm(`Excluir o contato ${c.nome}?\n\nEle não está vinculado a nenhuma empresa da base.`)) return; try { await crm(token, `/api/crm/contatos?id=${c.id}`, { method: "DELETE" }); carrega(); } catch (e) { alert("Erro: " + e.message); } }} title="Excluir contato (sem empresa vinculada)" style={{ background: S.dng + "18", border: `1px solid ${S.dng}55`, borderRadius: 8, padding: "6px 8px", display: "flex", cursor: "pointer" }}><Trash2 size={14} color={S.dng}/></button>}
-          {(c.whatsapp || c.telefone) && <a href={`https://wa.me/55${soDig(c.whatsapp || c.telefone)}`} target="_blank" rel="noreferrer" style={{ background: S.ok + "18", border: `1px solid ${S.ok}55`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><MessageCircle size={14} color={S.ok}/></a>}
-          {c.telefone && <a href={`tel:${soDig(c.telefone)}`} style={{ background: S.pri + "18", border: `1px solid ${S.pri}55`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><Phone size={14} color={S.pri}/></a>}
-          {c.email && <a href={`mailto:${c.email}`} style={{ background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 8, padding: "6px 8px", display: "flex" }}><Mail size={14} color={S.ts}/></a>}
-        </div>
-      </div>
-    </Crd>); })}
-    {vc < filtrada.length && <button onClick={() => setVc(v => v + 60)} style={{ width: "100%", marginTop: 4, padding: 12, fontSize: 13, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.txt }}>Ver mais ({filtrada.length - vc})</button>}
+    {lista !== null && filtrada.length === 0 && <Crd><p style={{ margin: 0, fontSize: 12.5, color: S.ts, textAlign: "center" }}>Nenhuma pessoa encontrada.</p></Crd>}
+    {lista !== null && filtrada.length > 0 && <div style={{ overflow: "auto", maxHeight: "calc(100vh - 230px)", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 820 }}>
+        <thead><tr>
+          <th style={{ ...th, cursor: "pointer" }} onClick={() => setOrdem(o => -o)}>Nome {ordem === 1 ? "▲" : "▼"}</th>
+          <th style={th}>Empresa</th><th style={th}>Telefone</th><th style={th}>E-mail</th><th style={th}></th>
+        </tr></thead>
+        <tbody>
+          {filtrada.slice(0, vc).map(c => { const o = achaOrg(c); const ext = outras.get(c.id) || []; const lojas = o ? lojasDoGrupo(o, allOrgs) : [];
+            const tel = c.whatsapp || c.telefone; const faltam = lojas.filter(l => !ext.some(x => x.id === l.id)).length;
+            return (<tr key={c.id}>
+            <td style={{ ...td, maxWidth: 220 }}>
+              <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</span>
+              {c.cargo && <span style={{ display: "block", fontSize: 11.5, color: S.ts }}>{c.cargo}</span>}</td>
+            <td style={{ ...td, maxWidth: 300 }}>
+              {o ? <button onClick={() => onOpenOrg(o)} title="Abrir a ficha" style={{ background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer", color: S.pl, fontSize: 13, fontWeight: 600, display: "block", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.nickname || o.name}</button>
+                : <span style={{ color: S.ts }}>{c.empresa || c.org_nome || "sem empresa"}</span>}
+              <span style={{ display: "block", fontSize: 11.5, color: S.ts, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={ext.map(x => x.nickname || x.name).join("\n")}>
+                {[o && grupoDe(o) && "Grupo " + grupoDe(o), ext.length ? `+${ext.length} loja${ext.length > 1 ? "s" : ""} vinculada${ext.length > 1 ? "s" : ""}` : ""].filter(Boolean).join(" · ")}</span></td>
+            <td style={{ ...td, whiteSpace: "nowrap" }}>{tel ? <a href={`https://wa.me/55${soDig(tel)}`} target="_blank" rel="noreferrer" className="num" style={{ color: S.ok, textDecoration: "none", fontWeight: 600 }}>{tel}</a> : <span style={{ color: S.ts }}>—</span>}
+              {c.whatsapp && c.telefone && soDig(c.whatsapp) !== soDig(c.telefone) && <span className="num" style={{ display: "block", fontSize: 11.5, color: S.ts }}>{c.telefone}</span>}</td>
+            <td style={{ ...td, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.email ? <a href={`mailto:${c.email}`} style={{ color: S.pl, textDecoration: "none" }}>{c.email}</a> : <span style={{ color: S.ts }}>—</span>}</td>
+            <td style={{ ...td, whiteSpace: "nowrap", textAlign: "right" }}><div style={{ display: "inline-flex", gap: 6 }}>
+              {o && lojas.length > 0 && <button onClick={() => vincGrupo(c, o, lojas)} title={faltam ? `Vincular às ${faltam} loja(s) do grupo que faltam` : "Já está em todas as lojas do grupo"} style={{ ...ico(S.pri + "18", S.pri + "55"), opacity: faltam ? 1 : .45 }}><Link2 size={14} color={S.pl} /></button>}
+              {onPerson && o && <button onClick={() => onPerson(o)} title="Editar pessoas desta empresa" style={ico(S.gold + "18", S.gold + "55")}><Pencil size={14} color={S.gold}/></button>}
+              {!o && <button onClick={async () => { if (!confirm(`Excluir o contato ${c.nome}?\n\nEle não está vinculado a nenhuma empresa da base.`)) return; try { await crm(token, `/api/crm/contatos?id=${c.id}`, { method: "DELETE" }); carrega(); } catch (e) { alert("Erro: " + e.message); } }} title="Excluir contato (sem empresa)" style={ico(S.dng + "18", S.dng + "55")}><Trash2 size={14} color={S.dng}/></button>}
+            </div></td>
+          </tr>); })}
+        </tbody>
+      </table>
+    </div>}
+    {vc < filtrada.length && <button onClick={() => setVc(v => v + 60)} style={{ width: "100%", marginTop: 8, padding: 12, fontSize: 13, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.txt }}>Ver mais ({filtrada.length - vc})</button>}
   </div>);
 }
 
@@ -832,7 +889,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   };
 
   if (!visible) return null;
-  if (sel) return <ClienteCRM org={sel} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
+  if (sel) return <ClienteCRM org={sel} allOrgs={allOrgs} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
 
   return (<div>
     {secao === "empresas" && <EmpresasView token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}
