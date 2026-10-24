@@ -264,7 +264,7 @@ export default function App(){
     done.synced=true;
     const oRef=(allOrgs||[]).find(o=>o.id===active.orgId);const cnpjRef=oRef?(oRef.cnpj||"").replace(/\D/g,""):null;
     const resolv=(extra?.resolvidas)||[],novas=(extra?.novas)||[];
-    crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:"")+resolv.map(x=>`\n✓ Pendência resolvida: ${x.txt}`).join(""),lat:g?.lat,lng:g?.lng,origem:"checkout"});
+    crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:"")+resolv.map(x=>`\n✓ Pendência resolvida: ${x.txt}`).join(""),lat:g?.lat,lng:g?.lng,origem:"checkout",checkin_em:active.checkinTime||null});
     novas.forEach(t=>crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:"VISITA",texto:PEND_PREFIXO+t,origem:"tarefa"}));
     resolv.forEach(x=>{try{fetch(`${DASH_CRM}/api/crm/tarefa-concluir`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({id:x.id})}).catch(()=>{});}catch{}});
     if(next?.nextDate&&next?.nextDesc){const nt=(next.nextType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(nt)?nt:"VISITA";crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:tipoOk,texto:next.nextDesc,origem:"tarefa",due_em:`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`});}

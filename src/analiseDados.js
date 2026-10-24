@@ -44,7 +44,10 @@ export function carregarBase(token, inicio, hoje) {
     const porOrg = new Map(); (kv || []).forEach(x => { if (!x || !x.orgId || !x.checkinTime || !x.checkoutTime || x.note === "Auto 18h") return;
       const ci = Date.parse(x.checkinTime), co = Date.parse(x.checkoutTime); if (isNaN(ci) || isNaN(co)) return;
       const k = String(x.orgId); if (!porOrg.has(k)) porOrg.set(k, []); porOrg.get(k).push({ ci, co }); });
-    const comDur = l => l.map(x => { const ms = Date.parse(String(x.criado_em || "").replace(" ", "T") + "Z"); const c = porOrg.get(String(x.org_id)) || [];
+    // v89: o check-in vem gravado no próprio check-out do D1 (checkin_em, Dashboard v334); o registro do app é reserva
+    const comDur = l => l.map(x => { const ms = Date.parse(String(x.criado_em || "").replace(" ", "T") + "Z");
+      if (x.checkin_em) { const ci = Date.parse(x.checkin_em); const dd = (ms - ci) / 60000; if (!isNaN(dd)) return dd >= 2 && dd <= 240 ? { ...x, durMin: dd } : x; }
+      const c = porOrg.get(String(x.org_id)) || [];
       let best = null; for (const k of c) { const d = Math.abs(k.co - ms); if (d <= 600000 && (!best || d < best.d)) best = { d, k }; }
       const dur = best ? (best.k.co - best.k.ci) / 60000 : null;
       return dur != null && dur >= 2 && dur <= 240 ? { ...x, durMin: dur } : x; });
