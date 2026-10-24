@@ -310,7 +310,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
   const fato = (k, v, sub, cor) => <div style={{ padding: "12px 0" }}><dt style={{ fontSize: 12.5, color: S.t2 }}>{k}</dt><dd style={{ margin: "3px 0 0", fontSize: 19, fontWeight: 600, color: cor || S.txt }}>{v}</dd>{sub && <dd className="num" style={{ margin: "2px 0 0", fontSize: 11.5, color: S.ts }}>{sub}</dd>}</div>;
   const btnSec = { height: 44, borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.txt, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, fontSize: 14, cursor: "pointer", padding: "0 12px" };
 
-  return (<div>
+  return (<div style={{ maxWidth: 980, margin: "0 auto" }}>
     <button onClick={onBack} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "transparent", border: "none", color: S.pl, fontSize: 14, fontWeight: 600, height: 40, padding: "0 4px 0 0", cursor: "pointer" }}><ArrowLeft size={16} />{backLabel || "Voltar ao CRM"}</button>
 
     {/* Cabeçalho do cliente — v74: sem cartão, hierarquia por tipografia */}
@@ -607,8 +607,8 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       if (fRfv.length && !fRfv.includes(r.rfv)) return false; if (fSr.length && !fSr.includes(r.status)) return false; return true; });
     return [...l].sort((a, b) => ordem * (a.nickname || a.name || "").localeCompare(b.nickname || b.name || ""));
   }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, ordem, rfv]);
-  const th = { textAlign: "left", padding: "8px 10px", fontSize: 10.5, fontWeight: 800, color: S.ts, textTransform: "uppercase", letterSpacing: .4, whiteSpace: "nowrap", borderBottom: `2px solid ${S.brd}` };
-  const td = { padding: "9px 10px", fontSize: 12, color: S.txt, borderBottom: `1px solid ${S.cl}`, whiteSpace: "nowrap", verticalAlign: "middle" };
+  const th = { textAlign: "left", padding: "10px 12px", fontSize: 12.5, fontWeight: 600, color: S.t2, whiteSpace: "nowrap", borderBottom: `1px solid ${S.brd}`, position: "sticky", top: 0, background: S.cardSolid, zIndex: 1 };
+  const td = { padding: "10px 12px", fontSize: 13, color: S.txt, borderBottom: `1px solid ${S.brd}`, whiteSpace: "nowrap", verticalAlign: "middle" };
 
   // ── Planilhas: CNPJ SEMPRE na 1ª coluna, gravado como TEXTO (preserva o zero à esquerda) ──
   const [importar, setImportar] = useState(false);
@@ -709,28 +709,28 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       <MultiSelect values={fCanal} onChange={v => { setFCanal(v); setVc(60); }} placeholder="Canal" allLabel="todos" style={{ flex: 1 }} options={CANAIS} />
       <button onClick={() => { setFCat([]); setFResp([]); setFRfv([]); setFGrp([]); setFSr([]); setFCid([]); setFCanal([]); setQ(""); setVc(60); }} style={{ padding: "8px 10px", fontSize: 12, color: S.dng, border: `1px solid ${S.dng}44`, borderRadius: 10, background: "transparent", whiteSpace: "nowrap" }}>✕ Limpar</button>
     </div>
-    <div style={{ overflowX: "auto", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: S.shadow }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1030 }}>
+    <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1180 }}>
         <thead><tr>
           <th style={{ ...th, cursor: "pointer" }} onClick={() => setOrdem(o => -o)}>Nome {ordem === 1 ? "▲" : "▼"}</th>
           <th style={th}>Categoria</th><th style={th}>Canal</th><th style={th}>Bairro</th><th style={th}>Cidade</th><th style={th}>UF</th><th style={th}>RFV</th><th style={th}>Responsável</th><th style={th}>E-mail</th><th style={th}>Telefone</th><th style={th}></th>
         </tr></thead>
         <tbody>
           {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id}>
-            <td style={{ ...td, maxWidth: 230, overflow: "hidden", textOverflow: "ellipsis" }}>
+            <td style={{ ...td, maxWidth: 320, overflow: "hidden", textOverflow: "ellipsis" }}>
               <button onClick={() => onOpen(o)} style={{ background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer" }}>
-                <span style={{ display: "block", fontSize: 12.5, fontWeight: 700, color: S.pl }}>{o.nickname || o.name}</span>
-                <span style={{ display: "block", fontSize: 10.5, color: S.td }}>{[o.addr?.city_name || o.addr?.city, o.cnpj].filter(Boolean).join(" · ")}</span>
+                <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: S.txt }}>{o.nickname || o.name}</span>
+                <span className="num" style={{ display: "block", fontSize: 11.5, color: S.ts }}>{[o.addr?.city_name || o.addr?.city, o.cnpj].filter(Boolean).join(" · ")}</span>
               </button></td>
-            <td style={td}>{o.cat && <span style={{ fontSize: 10.5, color: "#fff", background: cor, padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>{o.cat}</span>}</td>
+            <td style={td}>{o.cat && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: S.txt }}><span style={{ width: 8, height: 8, borderRadius: 4, background: cor, flexShrink: 0 }} />{o.cat}</span>}</td>
             <td style={td}>{(o.canal || "Presencial") === "Presencial" ? <span style={{ fontSize: 10.5, color: S.td }}>Presencial</span> : <span style={{ fontSize: 10.5, color: S.acc, border: `1px solid ${S.acc}66`, background: S.acc + "18", padding: "2px 7px", borderRadius: 4, fontWeight: 700 }}>{o.canal}</span>}</td>
-            <td style={{ ...td, fontSize: 11.5, maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis" }} title={o.addr?.district || ""}>{o.addr?.district || "—"}</td>
-            <td style={{ ...td, fontSize: 11.5 }}>{o.addr?.city_name || o.addr?.city || "—"}</td>
-            <td style={{ ...td, fontSize: 11.5, color: S.ts }}>{o.addr?.state || "—"}</td>
+            <td style={{ ...td, maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis" }} title={o.addr?.district || ""}>{o.addr?.district || "—"}</td>
+            <td style={{ ...td, fontSize: 13 }}>{o.addr?.city_name || o.addr?.city || "—"}</td>
+            <td style={{ ...td, fontSize: 13, color: S.ts }}>{o.addr?.state || "—"}</td>
             <td style={td}>{(() => { const r = rfvDe(o); if (!r) return "—"; const rc = { "Campeão": S.gold, "Leal": S.ok, "Em Crescimento": S.pri, "Em Risco": "#E76F51", "Inativo": S.td }[r.rfv] || S.ts; return <span style={{ fontSize: 10.5, color: rc, border: `1px solid ${rc}66`, background: rc + "18", padding: "2px 7px", borderRadius: 4, fontWeight: 700 }}>{r.rfv}</span>; })()}</td>
-            <td style={{ ...td, fontSize: 11.5 }}>{o.owner || "—"}</td>
-            <td style={{ ...td, fontSize: 11.5 }}>{o.email ? <a href={`mailto:${o.email}`} style={{ color: S.pl, textDecoration: "none" }}>{o.email}</a> : "—"}</td>
-            <td style={{ ...td, fontSize: 11.5 }}>{o.phone ? <a href={`https://wa.me/55${String(o.phone).replace(/\D/g, "")}`} target="_blank" rel="noreferrer" style={{ color: S.ok, textDecoration: "none", fontWeight: 600 }}>{o.phone}</a> : "—"}</td>
+            <td style={{ ...td, fontSize: 13 }}>{o.owner || "—"}</td>
+            <td style={{ ...td, fontSize: 13 }}>{o.email ? <a href={`mailto:${o.email}`} style={{ color: S.pl, textDecoration: "none" }}>{o.email}</a> : "—"}</td>
+            <td style={{ ...td, fontSize: 13 }}>{o.phone ? <a href={`https://wa.me/55${String(o.phone).replace(/\D/g, "")}`} target="_blank" rel="noreferrer" style={{ color: S.ok, textDecoration: "none", fontWeight: 600 }}>{o.phone}</a> : "—"}</td>
             <td style={td}><button onClick={() => onEdit(o)} title="Editar empresa" style={{ background: "transparent", border: `1px solid ${S.gold}66`, color: S.gold, borderRadius: 8, padding: "5px 8px", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={14}/></button></td>
           </tr>); })}
         </tbody>

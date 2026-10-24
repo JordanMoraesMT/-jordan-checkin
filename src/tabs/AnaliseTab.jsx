@@ -2,8 +2,8 @@
 // Versão viva da planilha VISITAS_ALISSON. Admin vê tudo (valores, saúde, premissas).
 // Vendedor vê a própria carteira SEM nenhum valor: só situação da visita e se vale investir uma nova visita.
 import { useState, useEffect, useMemo } from "react";
-import { ChevronDown, ChevronUp, Download, SlidersHorizontal } from "lucide-react";
-import { S, USERS, API, DASH, todayLocal, csv } from "../lib";
+import { ChevronDown, ChevronUp, Download, SlidersHorizontal, Search, X } from "lucide-react";
+import { S, USERS, API, DASH, todayLocal, csv, CC, CATS, CANAIS } from "../lib";
 import { SearchSelect, MultiSelect, DateField, Kpi } from "../components";
 import { analisar, PREMISSAS_PADRAO, CONTAS, ROTULO_CONTA } from "../analiseVisitas.js";
 import { carregarBase, carregarPremissas, salvarPremissas } from "../analiseDados.js";
@@ -22,13 +22,13 @@ const DIAG = [["Adequado", S.ok], ["Excesso de visitas", "#B5718E"], ["Visitas a
 const SAU = [["Saudável", S.ok], ["Atenção", S.gold], ["Não se paga", S.dng], ["Sem visita", "var(--t3)"]];
 const corDe = (lista, v) => (lista.find(x => x[0] === v) || [null, S.ts])[1];
 
-function Quadro({ titulo, sub, itens, linhas, campo, ativo, onPick, extra }) {
+function Quadro({ titulo, sub, itens, linhas, campo, ativos, onPick, extra }) {
   const tot = linhas.length || 1;
   return (<section style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "12px 14px", flex: "1 1 260px", minWidth: 0 }}>
     <h3 style={{ margin: 0, fontSize: 14, fontWeight: 600, color: S.txt }}>{titulo}</h3>
     {sub && <p style={{ margin: "2px 0 0", fontSize: 12, color: S.ts }}>{sub}</p>}
-    <div style={{ marginTop: 6 }}>{itens.map(([l, c]) => { const n = linhas.filter(x => x[campo] === l).length; const on = ativo === l;
-      return (<button key={l} onClick={() => onPick(on ? null : l)} aria-pressed={on} style={{ width: "100%", display: "grid", gridTemplateColumns: "10px minmax(0,1fr) auto auto", gap: 10, alignItems: "center", padding: "8px 6px", minHeight: 40, border: "none", borderRadius: 6, background: on ? S.cl : "transparent", textAlign: "left" }}>
+    <div style={{ marginTop: 6 }}>{itens.map(([l, c]) => { const n = linhas.filter(x => x[campo] === l).length; const on = (ativos || []).includes(l);
+      return (<button key={l} onClick={() => onPick(l)} aria-pressed={on} style={{ width: "100%", display: "grid", gridTemplateColumns: "10px minmax(0,1fr) auto auto", gap: 10, alignItems: "center", padding: "8px 6px", minHeight: 40, border: "none", borderRadius: 6, background: on ? S.cl : "transparent", textAlign: "left" }}>
         <span style={{ width: 8, height: 8, borderRadius: 4, background: c }} />
         <span style={{ fontSize: 14, color: S.txt, fontWeight: on ? 600 : 400 }}>{l}</span>
         <span className="num" style={{ fontSize: 14, color: S.txt, fontWeight: 600 }}>{n}</span>
@@ -44,10 +44,14 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   const [uid, setUid] = useState(() => isAdmin ? String((USERS.find(u => String(u.id) !== String(user?.id)) || USERS[0] || { id: 743347 }).id) : String(user?.id));
   const uidEf = isAdmin ? uid : String(user?.id);
   const selUser = USERS.find(u => String(u.id) === uidEf) || { n: user?.name || "—" };
-  const [desde, setDesde] = useState(null); const [cidades, setCidades] = useState([]);
+  const [desde, setDesde] = useState(null);
+  // v81: filtros como nas demais telas (busca + "Filtros · N" + etiquetas). Não mudam o cálculo, só o que aparece.
+  const [q, setQ] = useState(""); const [filtAberto, setFiltAberto] = useState(false);
+  const [fCid, setFCid] = useState([]); const [fCat, setFCat] = useState([]); const [fSeg, setFSeg] = useState([]); const [fCanal, setFCanal] = useState([]); const [fClasse, setFClasse] = useState([]);
   const [visitas, setVisitas] = useState([]); const [vendInd, setVendInd] = useState({}); const [fat12Ind, setFat12Ind] = useState({});
   const [ld, setLd] = useState(false); const [erro, setErro] = useState("");
-  const [fSit, setFSit] = useState(null); const [fVer, setFVer] = useState(null); const [fDiag, setFDiag] = useState(null); const [fSau, setFSau] = useState(null);
+  const [fSit, setFSit] = useState([]); const [fVer, setFVer] = useState([]); const [fDiag, setFDiag] = useState([]); const [fSau, setFSau] = useState([]);
+  const tog = set => v => set(a => a.includes(v) ? a.filter(x => x !== v) : [...a, v]);
   const [ord, setOrd] = useState({ k: isAdmin ? "fat12m" : "veredito", d: isAdmin ? -1 : 1 }); const [verJornada, setVerJornada] = useState(false);
   const hoje = todayLocal(); const inicio = desde || prem.inicio;
 
@@ -64,7 +68,8 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   const nrm = s => String(s || "").toLowerCase().trim();
   const carteiraBase = useMemo(() => (allOrgs || []).filter(o => !o.excluido && nrm(o.owner) === nrm(selUser.n)), [allOrgs, selUser.n]);
   const cidadeOpts = useMemo(() => [...new Set(carteiraBase.map(o => o.addr?.city_name || o.addr?.city).filter(Boolean))].sort(), [carteiraBase]);
-  const carteira = useMemo(() => cidades.length ? carteiraBase.filter(o => cidades.includes(o.addr?.city_name || o.addr?.city)) : carteiraBase, [carteiraBase, cidades]);
+  const carteira = carteiraBase;
+  const segOpts = useMemo(() => [...new Set(carteiraBase.map(o => o.sector).filter(Boolean))].sort(), [carteiraBase]);
   const vUser = useMemo(() => visitas.filter(v => String(v.user_id || "") === uidEf || nrm(v.user_nome) === nrm(selUser.n)), [visitas, uidEf, selUser.n]);
   const dataVendas = useMemo(() => { let m = ""; Object.values(rfv?.byCnpj || {}).forEach(r => { if (r.ultima && r.ultima > m) m = r.ultima; }); return m || null; }, [rfv]);
   const ultimaEquipe = useMemo(() => { const m = {}; visitas.forEach(v => { const d = v.criado_em ? new Date(Date.parse(String(v.criado_em).replace(" ", "T") + "Z") - 4 * 3600000).toISOString().slice(0, 10) : null; if (d && v.org_id && (!m[v.org_id] || d > m[v.org_id])) m[v.org_id] = d; }); return m; }, [visitas]);
@@ -73,14 +78,26 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   const cargaAtrasada = !!dataVendas && dataVendas < hoje.slice(0, 7) + "-01" && Number(hoje.slice(8, 10)) > 5;
 
   const ORDV = { "Rentável visitar": 0, "Aguardar": 1, "Atender a distância": 2, "Prospecção": 3 };
-  const linhasF = useMemo(() => { let l = A.linhas;
-    if (fSit) l = l.filter(x => x.situacao === fSit); if (fVer) l = l.filter(x => x.veredito === fVer); if (fDiag) l = l.filter(x => x.diagnostico === fDiag); if (fSau) l = l.filter(x => x.saude === fSau);
+  const norm = x => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  // linhas que entram nos quadros: busca + filtros de cadastro
+  const linhasBase = useMemo(() => { let l = A.linhas; const t = norm(q).replace(/[.\-\/]/g, "");
+    if (t) l = l.filter(x => norm([x.nome, x.org?.legalName, x.cnpj, x.bairro, x.cidade, x.segmento].join(" ")).replace(/[.\-\/]/g, "").includes(t));
+    if (fCid.length) l = l.filter(x => fCid.includes(x.cidade)); if (fCat.length) l = l.filter(x => fCat.includes(x.status));
+    if (fSeg.length) l = l.filter(x => fSeg.includes(x.segmento)); if (fCanal.length) l = l.filter(x => fCanal.includes(x.org?.canal || "Presencial"));
+    if (fClasse.length) l = l.filter(x => fClasse.includes(x.classe)); return l; }, [A, q, fCid, fCat, fSeg, fCanal, fClasse]);
+  const linhasF = useMemo(() => { let l = linhasBase;
+    if (fSit.length) l = l.filter(x => fSit.includes(x.situacao)); if (fVer.length) l = l.filter(x => fVer.includes(x.veredito));
+    if (fDiag.length) l = l.filter(x => fDiag.includes(x.diagnostico)); if (fSau.length) l = l.filter(x => fSau.includes(x.saude));
     const k = ord.k; return [...l].sort((a, b) => {
       if (k === "veredito") return ((ORDV[a.veredito] - ORDV[b.veredito]) || ((b.diasSem ?? 9999) - (a.diasSem ?? 9999))) * ord.d;
       const va = a[k], vb = b[k]; if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; return (typeof va === "string" ? va.localeCompare(vb) : va - vb) * ord.d; });
-  }, [A, fSit, fVer, fDiag, fSau, ord]);
+  }, [linhasBase, fSit, fVer, fDiag, fSau, ord]);
+  const chips = useMemo(() => { const out = []; const add = (arr, set, pref = "") => arr.forEach(v => out.push({ k: pref + v, l: pref + v, tira: () => set(a => a.filter(x => x !== v)) }));
+    add(fCid, setFCid); add(fCat, setFCat); add(fSeg, setFSeg); add(fCanal, setFCanal); add(fClasse, setFClasse, "Classe "); add(fVer, setFVer); add(fSit, setFSit); add(fDiag, setFDiag); add(fSau, setFSau, "Saúde: ");
+    return out; }, [fCid, fCat, fSeg, fCanal, fClasse, fVer, fSit, fDiag, fSau]);
+  const limparFiltros = () => { setQ(""); [setFCid, setFCat, setFSeg, setFCanal, setFClasse, setFVer, setFSit, setFDiag, setFSau].forEach(f => f([])); };
   const R = A.resumo; const saudeGeral = R.indice == null ? "—" : R.indice >= 1 ? "Saudável" : R.indice >= 0.5 ? "Atenção" : "Não se paga";
-  const horasNaoPaga = A.linhas.filter(x => x.saude === "Não se paga").reduce((s, x) => s + x.horas, 0);
+  const horasNaoPaga = linhasBase.filter(x => x.saude === "Não se paga").reduce((s, x) => s + x.horas, 0);
   const verTxt = x => x.veredito === "Aguardar" && x.aPartir ? `Aguardar · a partir de ${dCurta(x.aPartir)}` : x.veredito;
 
   const exportar = () => {
@@ -93,7 +110,6 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   const th = (k, l, right) => <th scope="col" onClick={() => setOrd(o => ({ k, d: o.k === k ? -o.d : (k === "veredito" || typeof A.linhas[0]?.[k] === "string" ? 1 : -1) }))} style={{ padding: "9px 10px", fontSize: 12.5, fontWeight: 600, color: ord.k === k ? S.txt : S.t2, textAlign: right ? "right" : "left", borderBottom: `1px solid ${S.brd}`, cursor: "pointer", whiteSpace: "nowrap", position: "sticky", top: 0, background: S.cardSolid, zIndex: 1 }}>{l}{ord.k === k ? (ord.d > 0 ? " ↑" : " ↓") : ""}</th>;
   const td = { padding: "9px 10px", borderBottom: `1px solid ${S.brd}`, fontSize: 13.5, color: S.txt, verticalAlign: "top" };
   const tdn = { ...td, textAlign: "right", fontFamily: "'IBM Plex Mono',monospace", fontSize: 12.5, whiteSpace: "nowrap" };
-  const filtrosAtivos = [fSit, fVer, fDiag, fSau].filter(Boolean);
   const pe = premEd || prem;
   const setPe = f => setPremEd(p => f(p || prem));
 
@@ -106,7 +122,6 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {isAdmin && <SearchSelect value={String(uid)} onChange={setUid} placeholder="Vendedor" style={{ width: 190 }} options={USERS.map(u => [String(u.id), u.n])} />}
         <DateField value={inicio} onChange={v => setDesde(v)} today={hoje} placeholder="Desde" style={{ width: 160 }} />
-        <MultiSelect values={cidades} onChange={setCidades} placeholder="Cidade" allLabel="Todas" options={cidadeOpts} style={{ width: 190 }} />
       </div>
     </div>
     {ld && <p style={{ fontSize: 13, color: S.ts, margin: "0 0 10px" }}>Carregando visitas e vendas…</p>}
@@ -134,18 +149,44 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
       </div>}
     </div>
 
+    <div style={{ display: "flex", alignItems: "center", gap: 10, background: S.card, border: `1px solid ${S.brd}`, borderRadius: 8, padding: "0 12px", height: 46, marginBottom: 10 }}>
+      <Search size={17} strokeWidth={1.8} color="var(--t3)" style={{ flexShrink: 0 }} />
+      <input value={q} onChange={e => setQ(e.target.value)} placeholder="Cliente, CNPJ, bairro, cidade, segmento" aria-label="Buscar cliente" style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", padding: 0, fontSize: 15 }} />
+      {q && <button onClick={() => setQ("")} aria-label="Limpar busca" style={{ border: "none", padding: 4, color: S.ts, display: "flex" }}><X size={16} /></button>}
+    </div>
+    <div style={{ display: "flex", gap: 6, alignItems: "center", overflowX: "auto", paddingBottom: 2, marginBottom: filtAberto ? 10 : 12 }}>
+      <button onClick={() => setFiltAberto(v => !v)} aria-expanded={filtAberto} style={{ flexShrink: 0, height: 36, padding: "0 12px", borderRadius: 18, display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, border: `1px solid ${filtAberto || chips.length ? S.txt : S.inpBdr}`, background: filtAberto || chips.length ? S.txt : "transparent", color: filtAberto || chips.length ? S.bg : S.txt }}><SlidersHorizontal size={14} strokeWidth={2} />Filtros{chips.length ? ` · ${chips.length}` : ""}</button>
+      {chips.map(c => <button key={c.k} onClick={c.tira} title="Remover filtro" style={{ flexShrink: 0, height: 36, padding: "0 10px 0 12px", borderRadius: 18, display: "flex", alignItems: "center", gap: 6, fontSize: 13, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.txt, whiteSpace: "nowrap" }}>{c.l}<X size={12} strokeWidth={2.2} color="var(--t3)" /></button>)}
+      {(chips.length > 1 || q) && <button onClick={limparFiltros} style={{ flexShrink: 0, height: 36, padding: "0 8px", border: "none", background: "transparent", color: S.ts, fontSize: 13 }}>Limpar</button>}
+    </div>
+    {filtAberto && <div style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10, padding: 12, marginBottom: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 8 }}>
+        <MultiSelect values={fVer} onChange={setFVer} placeholder="Vale nova visita?" allLabel="Todos" options={VER.map(x => x[0])} />
+        <MultiSelect values={fSit} onChange={setFSit} placeholder="Situação" allLabel="Todas" options={SIT.map(x => x[0])} />
+        <MultiSelect values={fCid} onChange={setFCid} placeholder="Cidade" allLabel="Todas" options={cidadeOpts} />
+        <MultiSelect values={fCat} onChange={setFCat} placeholder="Status" allLabel="Todos" colorFor={c => CC[c] || S.pri} options={CATS} />
+        <MultiSelect values={fSeg} onChange={setFSeg} placeholder="Segmento" allLabel="Todos" options={segOpts} />
+        <MultiSelect values={fCanal} onChange={setFCanal} placeholder="Canal" allLabel="Todos" options={CANAIS} />
+        <MultiSelect values={fClasse} onChange={setFClasse} placeholder="Classe" allLabel="Todas" options={["A", "B", "C", "Sem compra"]} />
+        {isAdmin && <MultiSelect values={fDiag} onChange={setFDiag} placeholder="Diagnóstico" allLabel="Todos" options={DIAG.map(x => x[0])} />}
+        {isAdmin && <MultiSelect values={fSau} onChange={setFSau} placeholder="Saúde" allLabel="Todas" options={SAU.map(x => x[0])} />}
+      </div>
+      <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <button onClick={limparFiltros} style={{ height: 40, padding: "0 14px", fontSize: 13.5, color: S.t2 }}>Limpar tudo</button>
+        <button onClick={() => setFiltAberto(false)} style={{ height: 40, padding: "0 18px", fontSize: 13.5, fontWeight: 600, background: S.pri, border: "none", color: "#fff" }}>Ver {linhasF.length} clientes</button>
+      </div>
+    </div>}
     <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-      <Quadro titulo="Vale uma nova visita?" sub="retorno esperado do cliente × horas que a visita consome" itens={VER} linhas={A.linhas} campo="veredito" ativo={fVer} onPick={setFVer} />
-      <Quadro titulo="Situação das visitas" itens={SIT} linhas={A.linhas} campo="situacao" ativo={fSit} onPick={setFSit} />
-      {isAdmin && <Quadro titulo="Diagnóstico de eficiência" itens={DIAG} linhas={A.linhas} campo="diagnostico" ativo={fDiag} onPick={setFDiag} />}
-      {isAdmin && <Quadro titulo="Saúde do cliente (horas × retorno)" itens={SAU} linhas={A.linhas} campo="saude" ativo={fSau} onPick={setFSau}
+      <Quadro titulo="Vale uma nova visita?" sub="retorno esperado do cliente × horas que a visita consome" itens={VER} linhas={linhasBase} campo="veredito" ativos={fVer} onPick={tog(setFVer)} />
+      <Quadro titulo="Situação das visitas" itens={SIT} linhas={linhasBase} campo="situacao" ativos={fSit} onPick={tog(setFSit)} />
+      {isAdmin && <Quadro titulo="Diagnóstico de eficiência" itens={DIAG} linhas={linhasBase} campo="diagnostico" ativos={fDiag} onPick={tog(setFDiag)} />}
+      {isAdmin && <Quadro titulo="Saúde do cliente (horas × retorno)" itens={SAU} linhas={linhasBase} campo="saude" ativos={fSau} onPick={tog(setFSau)}
         extra={<p className="num" style={{ margin: "8px 6px 0", fontSize: 12, color: S.ts }}>horas em clientes que não se pagam: {hm(horasNaoPaga)}</p>} />}
     </div>
 
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", margin: "4px 0 8px" }}>
       <h2 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: S.txt }}>Carteira <span className="num" style={{ fontSize: 13, fontWeight: 400, color: S.ts }}>{linhasF.length} de {A.linhas.length}</span></h2>
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        {filtrosAtivos.length > 0 && <button onClick={() => { setFSit(null); setFVer(null); setFDiag(null); setFSau(null); }} style={{ height: 36, padding: "0 12px", fontSize: 13 }}>Limpar ({filtrosAtivos.join(" · ")})</button>}
         <button onClick={exportar} style={{ height: 36, padding: "0 12px", fontSize: 13, display: "flex", alignItems: "center", gap: 6 }}><Download size={14} />Exportar</button>
       </div>
     </div>
