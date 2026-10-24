@@ -47,6 +47,10 @@ const mins=(a,b)=>Math.max(0,Math.round((new Date(b)-new Date(a))/60000));
 const hrsMin=m=>m>=60?`${Math.floor(m/60)}h${(m%60).toString().padStart(2,"0")}`:`${m}min`;
 const hourDec=d=>{const t=new Date(d);return t.getHours()+t.getMinutes()/60;};
 const hav=(a,b,c,d)=>{const R=6371,x=((c-a)*Math.PI)/180,y=((d-b)*Math.PI)/180;const z=Math.sin(x/2)**2+Math.cos((a*Math.PI)/180)*Math.cos((c*Math.PI)/180)*Math.sin(y/2)**2;return R*2*Math.atan2(Math.sqrt(z),Math.sqrt(1-z));};
+// v68: bairro na grafia que já existe na mesma cidade (a Receita devolve tudo em MAIÚSCULAS e criava variante)
+const _bk=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/[-/.]/g," ").replace(/\s+/g," ").trim();
+const _tc=t=>t.toLowerCase().split(" ").map((w,i)=>/^(i|ii|iii|iv|v|vi|cpa)$/i.test(w)?w.toUpperCase():(i>0&&/^(de|da|do|dos|das|e)$/.test(w))?w:w.charAt(0).toUpperCase()+w.slice(1)).join(" ");
+function bairroCanon(orgs,cidade,b){const t=String(b||"").trim().replace(/\s+/g," ");if(!t)return t;const k=_bk(t),c=_bk(cidade),n={};(orgs||[]).forEach(o=>{const ob=o.addr?.district;if(ob&&_bk(o.addr?.city_name||o.addr?.city)===c&&_bk(ob)===k)n[ob]=(n[ob]||0)+1;});const best=Object.entries(n).sort((x,y)=>y[1]-x[1])[0];if(best)return best[0];return t===t.toUpperCase()?_tc(t):t;}
 function sL(k,f){try{return JSON.parse(localStorage.getItem(k))||f;}catch{return f;}}
 function sS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("sync:",e);}}
 // 2º parâmetro carrega a SESSÃO (autenticação no Worker)
@@ -182,4 +186,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export {CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };
+export {bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };

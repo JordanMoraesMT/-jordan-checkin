@@ -1,9 +1,22 @@
 // TeamCheck — aba RotasTab
 import { useState, useEffect, useMemo } from "react";
 import { LUNCH_START, LUNCH_END, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hourDec, roadKm, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord } from "../lib";
-import { Kpi, DateField } from "../components";
+import { Kpi, DateField, SegTabs } from "../components";
+import { PlanejarRota } from "./PlanejarRota";
 
-function RotasTab({sel,setSel,visits,dayBases,user,plocs}){
+// v68: Rotas tem duas visões — PLANEJAR (montar o roteiro) e REALIZADO (o que foi feito no dia)
+function RotasTab(props){
+  const[modo,setModo]=useState(()=>{try{return localStorage.getItem("jc:rotasModo")||"planejar";}catch{return "planejar";}});
+  useEffect(()=>{try{localStorage.setItem("jc:rotasModo",modo);}catch{}},[modo]);
+  return(<div>
+    <div style={{maxWidth:320,marginBottom:16}}><SegTabs items={[["planejar","🧭 Planejar"],["realizado","📍 Realizado"]]} value={modo} onChange={setModo} size={12.5}/></div>
+    {modo==="planejar"
+      ?<PlanejarRota orgs={props.orgs||[]} plocs={props.plocs} visits={props.visits} rfv={props.rfv} user={props.user} token={props.token} onOpenFicha={props.onOpenFicha}/>
+      :<RotasRealizado {...props}/>}
+  </div>);
+}
+
+function RotasRealizado({sel,setSel,visits,dayBases,user,plocs}){
   const[routes,setRoutes]=useState([]);const[lo,setLo]=useState(false);
   const startBase=getBase(dayBases,sel,user?.id);
   const endBase=getEnd(dayBases,sel,user?.id);
