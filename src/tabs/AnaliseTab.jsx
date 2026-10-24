@@ -118,9 +118,9 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   const verTxt = x => x.veredito === "Aguardar" && x.aPartir ? `Aguardar · a partir de ${dCurta(x.aPartir)}` : x.veredito;
 
   const exportar = () => {
-    const cab = ["CNPJ", "Cliente", "Responsável", "Cidade", "Bairro", "Status", "Segmento", "Classe", "Visitas", "Visitas/mês", "Visitas/mês ideal", "Última visita", "Dias sem visita", "Horas investidas", "Situação", "Vale nova visita?"];
+    const cab = ["CNPJ", "Cliente", "Responsável", "Cidade", "Bairro", "Status", "Segmento", "Classe", "Visitas", "Visitas/mês", "Visitas/mês ideal", "Última visita", "Dias sem visita", "Horas investidas", "Horas na loja", "Situação", "Vale nova visita?"];
     const rows = [isAdmin ? [...cab, "Diagnóstico", "Saúde", "Índice", "Faturamento 12m", "Vendido no período", "Última compra"] : cab];
-    linhasF.forEach(x => { const b = [x.cnpj, x.nome, x.vendedor || "", x.cidade, x.bairro, x.status, x.segmento, x.classe, x.visitas, n1(x.porMes), x.ideal, x.ultVis ? dBR(x.ultVis) : "", x.diasSem ?? "", n1(x.horas), x.situacao, verTxt(x)];
+    linhasF.forEach(x => { const b = [x.cnpj, x.nome, x.vendedor || "", x.cidade, x.bairro, x.status, x.segmento, x.classe, x.visitas, n1(x.porMes), x.ideal, x.ultVis ? dBR(x.ultVis) : "", x.diasSem ?? "", n1(x.horas), x.nReal ? n1(x.emLoja) : "", x.situacao, verTxt(x)];
       rows.push(isAdmin ? [...b, x.diagnostico, x.saude, x.indice == null ? "" : n1(x.indice), Math.round(x.fat12m), Math.round(x.vendido), x.ultCompra ? dBR(x.ultCompra) : ""] : b); });
     csv(rows, `analise-visitas-${(selUser.n || "").split(" ")[0].toLowerCase()}-${hoje}.csv`); };
 
@@ -222,7 +222,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
           <td style={tdn}>{x.visitas}</td>
           <td style={{ ...tdn, color: x.porMes > x.ideal * prem.tolerancia ? S.gold : S.txt }}>{n1(x.porMes)} · {x.ideal}</td>
           <td style={{ ...tdn, color: x.situacao === "Visita atrasada" ? S.gold : x.situacao === "Sem visita" ? S.dng : S.txt }}>{x.ultVis ? `${x.diasSem}d` : "nunca"}<div style={{ fontSize: 11, color: S.ts }}>{x.ultVis ? dBR(x.ultVis) : ""}</div></td>
-          <td style={tdn}>{x.horas ? hm(x.horas) : "—"}</td>
+          <td style={tdn} title={x.nReal ? `Tempo dentro da loja (check-in → check-out) em ${x.nReal} de ${x.visitas} visita(s)` : "Sem check-in casado: jornada dividida igualmente"}>{x.horas ? hm(x.horas) : "—"}{x.nReal > 0 && <span style={{ display: "block", fontSize: 10.5, color: S.ts }}>na loja {hm(x.emLoja)}{x.nReal < x.visitas ? ` · ${x.nReal}/${x.visitas}` : ""}</span>}</td>
           <td style={{ ...td, color: corDe(SIT, x.situacao), whiteSpace: "nowrap" }}>{x.situacao}</td>
           {isAdmin && <>
             <td style={{ ...td, color: corDe(DIAG, x.diagnostico) }}>{x.diagnostico}</td>
@@ -270,7 +270,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
           <tbody>{pe.classes.map((c, i) => <tr key={c.c}><td style={{ padding: "4px 8px", fontSize: 13.5, color: S.txt }}>{c.c}</td>
             {["min", "ideal", "max"].map(f => <td key={f} style={{ padding: "4px 8px" }}><input type="number" value={c[f]} disabled={c.c === "Sem compra" && f === "min"} onChange={e => setPe(p => ({ ...p, classes: p.classes.map((x, j) => j === i ? { ...x, [f]: +e.target.value } : x) }))} className="num" style={{ width: 110, height: 38, boxSizing: "border-box" }} /></td>)}</tr>)}</tbody>
         </table></div>
-        <p style={{ margin: 0, fontSize: 12, color: S.ts, lineHeight: 1.5 }}>Valor da hora = comissão estimada da carteira (vendas de cada representada × taxa) ÷ horas de campo, até a última venda carregada. Horas = jornada do dia (1º → último check-out) dividida pelas visitas do dia. Saúde = comissão gerada pelo cliente ÷ (horas investidas × limite). Vale nova visita = a comissão mensal esperada do cliente já cobre mais uma visita desde a última?</p>
+        <p style={{ margin: 0, fontSize: 12, color: S.ts, lineHeight: 1.5 }}>Valor da hora = comissão estimada da carteira (vendas de cada representada × taxa) ÷ horas de campo, até a última venda carregada. Horas = jornada do dia (1º → último check-out) repartida entre as visitas do dia na proporção da duração real de cada uma (check-in → check-out); sem check-in casado, em partes iguais. "Na loja" = tempo real dentro do cliente (as últimas 200 visitas de cada vendedor têm o check-in guardado). Saúde = comissão gerada pelo cliente ÷ (horas investidas × limite). Vale nova visita = a comissão mensal esperada do cliente já cobre mais uma visita desde a última?</p>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
           <button onClick={() => setPremEd({ ...PREMISSAS_PADRAO })} style={{ height: 40, padding: "0 12px", fontSize: 13.5 }}>Voltar ao padrão</button>
           <button onClick={() => salvaPrem(pe)} style={{ height: 40, padding: "0 16px", fontSize: 13.5, fontWeight: 600, background: S.pri, border: "none", color: "#fff" }}>Salvar e recalcular</button>

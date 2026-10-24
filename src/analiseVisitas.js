@@ -99,10 +99,20 @@ export function analisar({ visitas, carteira, carteiraValor, ultimaEquipe, vendI
   const mediaH = vComH ? hTot / vComH : 1;
   const hDia = new Map(dias.map(d => [d.dia, d.visitas ? (d.horas > 0 ? d.horas / d.visitas : mediaH) : 0]));
   const vCli = vs.filter(v => !v.escritorio);
+  // v88: horas de cada visita. Com check-in casado, a jornada do dia é repartida NA PROPORÇÃO da duração real
+  // (quem tomou 1h leva mais que quem tomou 15 min; o total do dia continua = jornada, coerente com o valor da hora).
+  // Visita sem duração no mesmo dia pesa a média das conhecidas; dia sem nenhuma duração = divisão igual (reserva).
+  const jDia = new Map(dias.map(d => [d.dia, d.horas]));
+  const hVis = new Map();
+  for (const [dia, l] of porDia) { const cli = l.filter(v => !v.escritorio); if (!cli.length) continue; const H = jDia.get(dia) || 0;
+    const conh = cli.filter(v => v.durMin > 0); const med = conh.length ? conh.reduce((s, v) => s + v.durMin, 0) / conh.length : null;
+    if (H > 0 && med) { const pesos = cli.map(v => v.durMin > 0 ? v.durMin : med); const tot = pesos.reduce((s, x) => s + x, 0); cli.forEach((v, i) => hVis.set(v, H * pesos[i] / tot)); }
+    else cli.forEach(v => hVis.set(v, H > 0 ? H / cli.length : (v.durMin > 0 ? v.durMin / 60 : mediaH))); }
+  const hDe = v => hVis.get(v) ?? (hDia.get(v.dia) || mediaH);
   const meses = Math.max(diffDias(hoje, ini), 1) / 30.44;
 
   // ── valor da hora do vendedor = comissão gerada pela carteira ÷ horas de campo (mesma janela das vendas) ──
-  const hJanela = diasCampo.filter(d => d.dia <= ateV).reduce((s, d) => s + d.visitas * (hDia.get(d.dia) || 0), 0);
+  const hJanela = vCli.filter(v => v.dia <= ateV).reduce((s, v) => s + hDe(v), 0);
   const comJanela = (carteiraValor || carteira || []).reduce((s, o) => s + comissaoDe(vendInd?.[k14(o.cnpj)], o, P), 0);
   const valorHora = hJanela > 0 ? comJanela / hJanela : null;
   const pocaHora = hJanela < 40;
@@ -120,8 +130,9 @@ export function analisar({ visitas, carteira, carteiraValor, ultimaEquipe, vendI
     const fatMes = fat12m / 12; const k = classeDe(fatMes, P);
     const nVis = mv.length, porMes = nVis / meses;
     const ultVis = nVis ? mv[mv.length - 1].dia : null; const diasSem = ultVis ? diffDias(hoje, ultVis) : null;
-    const horas = mv.reduce((s, v) => s + (hDia.get(v.dia) || mediaH), 0);
-    const horasJanela = mv.filter(v => v.dia <= ateV).reduce((s, v) => s + (hDia.get(v.dia) || mediaH), 0);
+    const horas = mv.reduce((s, v) => s + hDe(v), 0);
+    const horasJanela = mv.filter(v => v.dia <= ateV).reduce((s, v) => s + hDe(v), 0);
+    const reais = mv.filter(v => v.durMin > 0); const emLoja = reais.reduce((s, v) => s + v.durMin / 60, 0); const nReal = reais.length;
     const vendido = Object.values(vendInd?.[cn] || {}).reduce((s, v) => s + (+v || 0), 0);
     const comGerada = comissaoDe(vendInd?.[cn], o, P);
     const comMes = Object.keys(f12).length ? comissaoDe(f12, o, P) / 12 : fatMes * taxaMedia;
@@ -141,7 +152,7 @@ export function analisar({ visitas, carteira, carteiraValor, ultimaEquipe, vendI
     else { const ue = ultimaEquipe?.[o.id]; const uRef = ue && (!ultVis || ue > ultVis) ? ue : ultVis; const dRef = uRef ? diffDias(hoje, uRef) : null;
       const prox = Math.max(intervaloPago, 0); if (!uRef || dRef >= prox) veredito = "Rentável visitar"; else { veredito = "Aguardar"; aPartir = somaDias(uRef, prox); } }
     return { id: o.id, org: o, nome: o.nickname || o.name, cnpj: cn, cidade: o.addr?.city_name || o.addr?.city || "", bairro: o.addr?.district || "", status: o.cat || "",
-      segmento: o.sector || "", fat12m, fatMes, classe: k.c, ideal: k.ideal, max: k.max, visitas: nVis, porMes, ultVis, diasSem, horas, vendido,
+      segmento: o.sector || "", fat12m, fatMes, classe: k.c, ideal: k.ideal, max: k.max, visitas: nVis, porMes, ultVis, diasSem, horas, emLoja, nReal, vendido,
       ultCompra: rfvDe(o)?.ultima || null, quePagam, intervaloPago, situacao, diagnostico, indice, saude, veredito, aPartir };
   });
 
