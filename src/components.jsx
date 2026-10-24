@@ -344,7 +344,7 @@ const RFVC={"Campeão":S.gold,"Leal":S.ok,"Em Crescimento":S.pri,"Em Risco":"#E7
 // Quadradinho de ação 32px com borda (padrão do mockup)
 const IQ={width:32,height:32,borderRadius:8,border:`1px solid ${S.inpBdr}`,background:S.inp,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0};
 const SRC_={"Em Dia":S.ok,"Momento de Recompra":S.gold,"Atrasado":S.dng};
-const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,onQuick,onOpen,ldId,plocs,lastVisit,lastOrder,nearRoad,rfvInfo}){
+const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,onQuick,onOpen,ldId,plocs,lastVisit,lastOrder,nearRoad,rfvInfo,pend}){
   // v74: linha (não cartão) — nome, local, números em fonte fixa; ações numa fileira discreta
   const isA=active?.orgId===org.id;const a=org.addr||{};const loc=[a.district,[a.city_name||a.city,a.state].filter(Boolean).join("/")].filter(Boolean).join(" · ");
   const catColor=CC[org.cat]||S.ts;const dV=lastVisit?Math.floor((Date.now()-new Date(lastVisit.time))/86400000):null;
@@ -356,6 +356,7 @@ const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,o
         <div style={{display:"flex",alignItems:"center",gap:8}}>
           <span title={org.cat||""} style={{width:8,height:8,borderRadius:4,background:catColor,flexShrink:0}}/>
           <button onClick={()=>onOpen&&onOpen(org)} title="Abrir ficha do cliente" style={{background:"transparent",border:"none",padding:0,margin:0,cursor:onOpen?"pointer":"default",textAlign:"left",fontWeight:600,fontSize:15,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{org.name||org.nickname}</button>
+          {pend&&pend.length>0&&<span title={pend.join(" · ")} style={{flexShrink:0,fontSize:11.5,fontWeight:600,color:S.gold,border:`1px solid ${S.gold}66`,borderRadius:4,padding:"0 6px",lineHeight:"18px"}}>{pend.length>1?`${pend.length} pendências`:"pendência"}</span>}
         </div>
         <p style={{fontSize:13,color:S.t2,margin:"3px 0 0 16px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{loc||"Sem endereço"}{org.sector?` · ${org.sector}`:""}</p>
         <div className="num" style={{display:"flex",flexWrap:"wrap",gap:"2px 12px",margin:"4px 0 0 16px",fontSize:11.5,color:S.ts}}>

@@ -9,6 +9,9 @@ import "leaflet/dist/leaflet.css";
 import { Route, Navigation, Home, Crosshair, CalendarPlus, ArrowLeft, X, Check } from "lucide-react";
 import { S, CC, CATS, CANAIS, USERS, HOMES, OSRM, DASH, hav, gps, sL, sS, todayLocal, fD, fixMojibake } from "../lib";
 import { MultiSelect, Kpi, DateField } from "../components";
+import { analisar } from "../analiseVisitas.js";
+import { carregarBase, carregarPremissas } from "../analiseDados.js";
+const VER_COR = { "Rentável visitar": "#2A9D8F", "Aguardar": "#C8964E", "Atender a distância": "#E28A5B", "Prospecção": "#8C9CAE" };
 
 const TRIP = OSRM.replace("/route/", "/trip/");
 const MAX_PARADAS = 30;
@@ -97,7 +100,7 @@ function Pill({ t, cor }) {
   return <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 5, color: tom(cor), background: cor + "1c", border: `1px solid ${cor}44`, whiteSpace: "nowrap" }}>{t}</span>;
 }
 
-function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha }) {
+function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pendMapa }) {
   const PREF = `jc:rotaPlan:${user?.id || "x"}`;
   const p0 = useMemo(() => sL(PREF, {}), []); // eslint-disable-line
   const mob = typeof window !== "undefined" && window.innerWidth <= 768;
@@ -122,9 +125,13 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha }) {
   const [lo, setLo] = useState(false);
   const [msg, setMsg] = useState("");
   const [vc, setVc] = useState(60);
+  const [ocultaDist, setOcultaDist] = useState(p0.ocultaDist !== false); // v79: esconde "atender a distância" por padrão
+  // v79: veredito da Análise de visitas ("vale nova visita?") — mesma régua, mesmo cache
+  const [base, setBase] = useState(null); const [prem, setPrem] = useState(null);
+  useEffect(() => { let vivo = true; carregarPremissas().then(p => { if (!vivo) return; setPrem(p); if (token) carregarBase(token, p.inicio, todayLocal()).then(b => { if (vivo) setBase(b); }).catch(() => {}); }); return () => { vivo = false; }; }, [token]);
 
-  useEffect(() => { sS(PREF, { owner, cid, bai, cat, fRfv, fSr, canal, dias, ordem, sel: [...sel], partidaTipo, voltar, saida, minVisita, dia, plano }); },
-    [owner, cid, bai, cat, fRfv, fSr, canal, dias, ordem, sel, partidaTipo, voltar, saida, minVisita, dia, plano]); // eslint-disable-line
+  useEffect(() => { sS(PREF, { owner, cid, bai, cat, fRfv, fSr, canal, dias, ordem, sel: [...sel], partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist }); },
+    [owner, cid, bai, cat, fRfv, fSr, canal, dias, ordem, sel, partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist]); // eslint-disable-line
 
   const rfvDe = useCallback(o => { if (!rfv) return null; const k = (o.cnpj || "").replace(/\D/g, ""); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; }, [rfv]);
   // Última visita da EQUIPE (qualquer usuário) — a mesma que aparece no cartão do PDV
@@ -146,6 +153,18 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha }) {
   }, [orgs, cid, owner]);
   useEffect(() => { if (bai.length) { const ok = new Set(bairros.map(b => b[0])); const n = bai.filter(b => ok.has(b)); if (n.length !== bai.length) setBai(n); } }, [bairros]); // eslint-disable-line
 
+  // veredito: horas/limite do vendedor (1 responsável filtrado, senão o usuário logado); última visita da equipe conta
+  const vereditos = useMemo(() => {
+    if (!base || !prem) return null;
+    const vend = owner.length === 1 ? owner[0] : user?.name; const U = USERS.find(u => u.n === vend);
+    const nrm = s => String(s || "").toLowerCase().trim();
+    const vis = base.visitas.filter(v => (U && String(v.user_id || "") === String(U.id)) || nrm(v.user_nome) === nrm(vend));
+    const ue = {}; base.visitas.forEach(v => { const d = new Date(Date.parse(String(v.criado_em).replace(" ", "T") + "Z") - 4 * 3600000).toISOString().slice(0, 10); if (v.org_id && (!ue[v.org_id] || d > ue[v.org_id])) ue[v.org_id] = d; });
+    let dv = ""; Object.values(rfv?.byCnpj || {}).forEach(r => { if (r.ultima && r.ultima > dv) dv = r.ultima; });
+    const A = analisar({ visitas: vis, carteira: orgs, carteiraValor: orgs.filter(o => nrm(o.owner) === nrm(vend)), ultimaEquipe: ue, rfv, vendInd: base.vendInd, fat12Ind: base.fat12Ind, prem, hoje: todayLocal(), dataVendas: dv || null });
+    const m = {}; A.linhas.forEach(l => { m[l.id] = { v: l.veredito, aPartir: l.aPartir }; }); return m;
+  }, [base, prem, orgs, owner, user?.name, rfv]);
+
   // Lista filtrada e priorizada
   const lista = useMemo(() => {
     let l = orgs;
@@ -157,8 +176,12 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha }) {
     const out = l.map(o => {
       const r = rfvDe(o); const uv = ultVisita[o.id]; const d = diasDesde(uv); const g = plocs?.[o.id];
       const { s, mot } = prioridade(r, d);
-      return { id: o.id, o, nome: o.nickname || o.name, cidade: cidadeDe(o), bairro: fixMojibake(o.addr?.district || ""), rfv: r, dias: d, uv, lat: g?.lat, lng: g?.lng, geoEst: !!g?.geo, temGps: g?.lat != null && g?.lng != null, prio: s, mot };
+      const ver = vereditos?.[o.id] || null; let pr = s;
+      if (ver?.v === "Rentável visitar") pr += 25; else if (ver?.v === "Aguardar") pr -= 15; else if (ver?.v === "Atender a distância") pr -= 40;
+      const pend = pendMapa?.[o.id] || null; if (pend) pr += 10;
+      return { id: o.id, o, nome: o.nickname || o.name, cidade: cidadeDe(o), bairro: fixMojibake(o.addr?.district || ""), rfv: r, dias: d, uv, lat: g?.lat, lng: g?.lng, geoEst: !!g?.geo, temGps: g?.lat != null && g?.lng != null, prio: pr, mot, ver, pend };
     }).filter(x => {
+      if (ocultaDist && x.ver?.v === "Atender a distância") return false;
       if (fRfv.length && !fRfv.includes(x.rfv?.rfv)) return false;
       if (fSr.length && !fSr.includes(x.rfv?.status)) return false;
       if (dias === "nunca") return x.dias == null;
@@ -168,7 +191,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha }) {
     if (ordem === "perto" && partida) out.forEach(x => { x.dist = x.temGps ? hav(partida.lat, partida.lng, x.lat, x.lng) : Infinity; });
     out.sort((a, b) => ordem === "az" ? a.nome.localeCompare(b.nome) : ordem === "perto" && partida ? a.dist - b.dist : b.prio - a.prio || a.nome.localeCompare(b.nome));
     return out;
-  }, [orgs, owner, cid, bai, cat, canal, fRfv, fSr, dias, ordem, rfvDe, ultVisita, plocs, partida?.lat, partida?.lng]); // eslint-disable-line
+  }, [orgs, owner, cid, bai, cat, canal, fRfv, fSr, dias, ordem, rfvDe, ultVisita, plocs, partida?.lat, partida?.lng, vereditos, ocultaDist, pendMapa]); // eslint-disable-line
 
   const comGps = lista.filter(x => x.temGps);
   const selLista = useMemo(() => { const m = new Map(lista.map(x => [x.id, x])); const out = []; sel.forEach(id => { const x = m.get(id) || (() => { const o = orgs.find(z => z.id === id); if (!o) return null; const g = plocs?.[id]; const r = rfvDe(o); return { id, o, nome: o.nickname || o.name, cidade: cidadeDe(o), bairro: fixMojibake(o.addr?.district || ""), rfv: r, dias: diasDesde(ultVisita[id]), lat: g?.lat, lng: g?.lng, temGps: g?.lat != null }; })(); if (x) out.push(x); }); return out; }, [sel, lista, orgs, plocs, rfvDe, ultVisita]);
@@ -331,6 +354,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha }) {
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11.5, color: S.ts, marginRight: 2 }}>Sem visita:</span>
         {DIAS_OPC.map(([v, l]) => <button key={v} onClick={() => setDias(v)} style={chip(dias === v)}>{l}</button>)}
+        <button onClick={() => setOcultaDist(v => !v)} aria-pressed={ocultaDist} title="Clientes cujo retorno não cobre visita presencial" style={chip(ocultaDist)}>{ocultaDist ? "Ocultando \"atender a distância\"" : "Mostrar todos"}</button>
       </div>
     </div>
 
@@ -358,6 +382,8 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha }) {
               <span style={{ fontSize: 13.5, fontWeight: 700, color: S.txt }}>{x.nome}</span>
               {x.o.cat && <Pill t={x.o.cat} cor={CC[x.o.cat] || S.ts} />}
               {r?.rfv && <Pill t={r.rfv} cor={RFV_COR[r.rfv] || S.ts} />}
+              {x.ver && <Pill t={x.ver.v === "Aguardar" && x.ver.aPartir ? `Aguardar · ${x.ver.aPartir.slice(8, 10)}/${x.ver.aPartir.slice(5, 7)}` : x.ver.v} cor={VER_COR[x.ver.v] || S.ts} />}
+              {x.pend && <Pill t={x.pend.length === 1 ? `Pendência: ${x.pend[0]}` : `${x.pend.length} pendências`} cor="#C8964E" />}
               {x.mot.map(([t, c]) => <Pill key={t} t={t} cor={c} />)}
             </div>
             <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.ts }}>{[x.bairro, x.cidade].filter(Boolean).join(" · ")}{x.dist != null && isFinite(x.dist) ? ` · ${fmtKm(x.dist)} km` : ""}</p>

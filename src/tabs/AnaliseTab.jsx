@@ -5,7 +5,9 @@ import { useState, useEffect, useMemo } from "react";
 import { ChevronDown, ChevronUp, Download, SlidersHorizontal } from "lucide-react";
 import { S, USERS, API, DASH, todayLocal, csv } from "../lib";
 import { SearchSelect, MultiSelect, DateField, Kpi } from "../components";
-import { analisar, PREMISSAS_PADRAO, INDUSTRIAS, CONTAS, ROTULO_CONTA } from "../analiseVisitas";
+import { analisar, PREMISSAS_PADRAO, CONTAS, ROTULO_CONTA } from "../analiseVisitas.js";
+import { carregarBase, carregarPremissas, salvarPremissas } from "../analiseDados.js";
+import { TRAM_GERADO } from "../tramTaxas.js";
 
 const brl = v => (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const n1 = v => (v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -49,26 +51,13 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   const [ord, setOrd] = useState({ k: isAdmin ? "fat12m" : "veredito", d: isAdmin ? -1 : 1 }); const [verJornada, setVerJornada] = useState(false);
   const hoje = todayLocal(); const inicio = desde || prem.inicio;
 
-  // premissas: serviço de sync do app (KV) — compartilhadas
-  useEffect(() => { fetch(`${API}?sync=analisePremissas`).then(r => r.json()).then(d => { if (d && d.active && d.active.inicio) setPrem({ ...PREMISSAS_PADRAO, ...d.active, taxas: { ...PREMISSAS_PADRAO.taxas, ...(d.active.taxas || {}) } }); }).catch(() => {}); }, []);
-  const salvaPrem = async (p) => { setPrem(p); setPremEd(null); setPremAberta(false); try { await fetch(`${API}?sync=analisePremissas`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: p }) }); } catch (e) { alert("Não consegui salvar as premissas: " + e.message); } };
-
-  // dados: check-outs (D1) + vendas por cliente e por representada (rota Detalhada do Dashboard, 1 chamada por indústria)
+  // premissas (KV, compartilhadas) e dados (cache de 10 min, o mesmo do Planejar e do balão)
+  useEffect(() => { carregarPremissas().then(setPrem); }, []);
+  const salvaPrem = async (p) => { setPrem(p); setPremEd(null); setPremAberta(false); try { await salvarPremissas(p); } catch (e) { alert("Não consegui salvar as premissas: " + e.message); } };
   useEffect(() => { if (!token) return; let vivo = true; setLd(true); setErro("");
-    const H = { headers: { "X-Session": token }, cache: "no-store" };
-    const pIni = inicio.slice(0, 7), pFim = hoje.slice(0, 7), p12 = mesMenos(pFim, 11);
-    // 1 chamada por indústria + 1 para Plastilit só tubos (taxa própria); "Plastilit" fica = total − tubos
-    const consultas = [...INDUSTRIAS.map(ind => [ind, `ind=${encodeURIComponent(ind)}`]), ["Plastilit Tubos", "ind=Plastilit&cat=Tubos"]];
-    const porInd = (de, ate) => Promise.all(consultas.map(([conta, q]) => fetch(`${DASH}/api/detalhada?de=${de}&ate=${ate}&${q}`, H).then(r => r.json()).then(d => [conta, (d && d.clients) || null]).catch(() => [conta, null])))
-      .then(lst => { const m = {}; let falhou = 0; lst.forEach(([conta, cl]) => { if (!cl) { falhou++; return; } cl.forEach(c => { const k = k14(c.cnpj); (m[k] = m[k] || {})[conta] = +c.fat || 0; }); });
-        Object.values(m).forEach(x => { if (x["Plastilit Tubos"]) x.Plastilit = Math.max(0, (x.Plastilit || 0) - x["Plastilit Tubos"]); });
-        return { m, falhou }; });
-    Promise.all([
-      fetch(`${DASH}/api/crm/atividades?tipo=VISITA&desde=${encodeURIComponent(inicio + " 04:00:00")}&limit=2000`, H).then(r => r.json()),
-      porInd(pIni, pFim), porInd(p12, pFim),
-    ]).then(([a, v, f]) => { if (!vivo) return;
-      setVisitas(((a && a.atividades) || []).filter(x => x.origem === "checkout")); setVendInd(v.m); setFat12Ind(f.m);
-      if (!(a && a.atividades)) setErro("Não consegui ler as visitas."); else if (v.falhou || f.falhou) setErro("Parte das vendas por representada não carregou — o cálculo usa a média da carteira para o que faltou.");
+    carregarBase(token, inicio, hoje).then(r => { if (!vivo) return;
+      setVisitas(r.visitas); setVendInd(r.vendInd); setFat12Ind(r.fat12Ind);
+      if (r.falhouVisitas) setErro("Não consegui ler as visitas."); else if (r.falhouVendas) setErro("Parte das vendas por representada não carregou — o cálculo usa a média da carteira para o que faltou.");
     }).catch(e => { if (vivo) setErro(String(e.message || e)); }).finally(() => { if (vivo) setLd(false); });
     return () => { vivo = false; }; }, [token, inicio]);
 
@@ -78,7 +67,9 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   const carteira = useMemo(() => cidades.length ? carteiraBase.filter(o => cidades.includes(o.addr?.city_name || o.addr?.city)) : carteiraBase, [carteiraBase, cidades]);
   const vUser = useMemo(() => visitas.filter(v => String(v.user_id || "") === uidEf || nrm(v.user_nome) === nrm(selUser.n)), [visitas, uidEf, selUser.n]);
   const dataVendas = useMemo(() => { let m = ""; Object.values(rfv?.byCnpj || {}).forEach(r => { if (r.ultima && r.ultima > m) m = r.ultima; }); return m || null; }, [rfv]);
-  const A = useMemo(() => analisar({ visitas: vUser, carteira, rfv, vendInd, fat12Ind, prem: { ...prem, inicio }, hoje, dataVendas }), [vUser, carteira, rfv, vendInd, fat12Ind, prem, inicio, hoje, dataVendas]);
+  const ultimaEquipe = useMemo(() => { const m = {}; visitas.forEach(v => { const d = v.criado_em ? new Date(Date.parse(String(v.criado_em).replace(" ", "T") + "Z") - 4 * 3600000).toISOString().slice(0, 10) : null; if (d && v.org_id && (!m[v.org_id] || d > m[v.org_id])) m[v.org_id] = d; }); return m; }, [visitas]);
+  const A = useMemo(() => analisar({ visitas: vUser, carteira, carteiraValor: carteiraBase, ultimaEquipe, rfv, vendInd, fat12Ind, prem: { ...prem, inicio }, hoje, dataVendas }), [vUser, carteira, carteiraBase, ultimaEquipe, rfv, vendInd, fat12Ind, prem, inicio, hoje, dataVendas]);
+  const diasVendas = dataVendas ? Math.round((Date.parse(hoje + "T12:00:00Z") - Date.parse(dataVendas + "T12:00:00Z")) / 86400000) : null;
 
   const ORDV = { "Rentável visitar": 0, "Aguardar": 1, "Atender a distância": 2, "Prospecção": 3 };
   const linhasF = useMemo(() => { let l = A.linhas;
@@ -118,6 +109,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
       </div>
     </div>
     {ld && <p style={{ fontSize: 13, color: S.ts, margin: "0 0 10px" }}>Carregando visitas e vendas…</p>}
+    {diasVendas != null && diasVendas > 15 && <p style={{ fontSize: 13, color: S.gold, margin: "0 0 10px", padding: "8px 12px", border: `1px solid ${S.gold}55`, borderRadius: 8, background: S.gold + "12" }}>As vendas carregadas vão até {dBR(dataVendas)} ({diasVendas} dias atrás) — compras recentes ainda não entram no cálculo. Atualize a carga de vendas no Dashboard.</p>}
     {erro && <p style={{ fontSize: 13, color: S.dng, margin: "0 0 10px" }}>{erro}</p>}
 
     <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 10, marginBottom: 14 }}>
@@ -203,7 +195,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
             {CONTAS.map(ind => <label key={ind} style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 12.5, color: S.t2 }}>{ROTULO_CONTA[ind] || ind}</span>
               <input type="number" step="0.01" value={pe.taxas[ind] ?? 5} onChange={e => setPe(p => ({ ...p, taxas: { ...p.taxas, [ind]: +e.target.value } }))} className="num" style={{ height: 40, boxSizing: "border-box" }} /></label>)}
           </div>
-          <p style={{ margin: "6px 0 0", fontSize: 12, color: S.ts }}>Tramontina 4,16% e Pado 5% vêm dos extratos (out/25–jun/26); Pado 1,5% para Vale Formoso e Irmãos Domingos. Plastilit: tubos (categoria "Tubos") a 3% e o resto a 4% — a soma item a item dá o ponderado de cada pedido.</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12, color: S.ts }}>Tramontina 4,16% e Pado 5% vêm dos extratos (out/25–jun/26); Pado 1,5% para Vale Formoso e Irmãos Domingos. Plastilit: tubos (categoria "Tubos") a 3% e o resto a 4% — a soma item a item dá o ponderado de cada pedido. Tramontina: usa a taxa real de cada cliente nos extratos quando existe (152 clientes, base {TRAM_GERADO.split("-").reverse().join("/")}); os demais, a média acima.</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10 }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 12.5, color: S.t2 }}>Início do TeamCheck</span><DateField value={pe.inicio} onChange={v => setPe(p => ({ ...p, inicio: v }))} today={hoje} placeholder="Data" /></label>

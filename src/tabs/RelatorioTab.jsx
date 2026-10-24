@@ -3,6 +3,7 @@ import { useState, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { HOMES, toLocalDate, todayLocal, USERS, S, PC, fT, fD, fDS, mins, hrsMin, hav, csv, getBase, getEnd, getVCoord, getVEndCoord } from "../lib";
 import { BaseEditInline, Kpi, SegTabs, DateField } from "../components";
+import { EscritorioResumo } from "./EscritorioResumo";
 
 function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
   const[sd,setSd]=useState(todayLocal);// v41: inicial e final abrem no dia presente
@@ -161,6 +162,7 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
       })}
     </div>}
   </div>
+  <EscritorioResumo token={token} uid={repUserId} nome={repUserName} de={sd} ate={ed}/>
   </div>);}
 
 export { RelatorioTab };

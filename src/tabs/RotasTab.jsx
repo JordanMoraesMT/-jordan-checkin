@@ -1,6 +1,6 @@
 // TeamCheck — aba RotasTab
 import { useState, useEffect, useMemo } from "react";
-import { LUNCH_START, LUNCH_END, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hourDec, roadKm, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord } from "../lib";
+import { LUNCH_START, LUNCH_END, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hourDec, roadKm, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, DASH, hav } from "../lib";
 import { Kpi, DateField, SegTabs } from "../components";
 import { PlanejarRota } from "./PlanejarRota";
 
@@ -9,14 +9,41 @@ function RotasTab(props){
   const[modo,setModo]=useState(()=>{try{return localStorage.getItem("jc:rotasModo")||"planejar";}catch{return "planejar";}});
   useEffect(()=>{try{localStorage.setItem("jc:rotasModo",modo);}catch{}},[modo]);
   return(<div>
-    <div style={{maxWidth:320,marginBottom:16}}><SegTabs items={[["planejar","🧭 Planejar"],["realizado","📍 Realizado"]]} value={modo} onChange={setModo} size={12.5}/></div>
+    <div style={{maxWidth:320,marginBottom:16}}><SegTabs items={[["planejar","Planejar"],["realizado","Realizado"]]} value={modo} onChange={setModo} size={12.5}/></div>
     {modo==="planejar"
-      ?<PlanejarRota orgs={props.orgs||[]} plocs={props.plocs} visits={props.visits} rfv={props.rfv} user={props.user} token={props.token} onOpenFicha={props.onOpenFicha}/>
+      ?<PlanejarRota orgs={props.orgs||[]} plocs={props.plocs} visits={props.visits} rfv={props.rfv} user={props.user} token={props.token} onOpenFicha={props.onOpenFicha} pendMapa={props.pendMapa}/>
       :<RotasRealizado {...props}/>}
   </div>);
 }
 
-function RotasRealizado({sel,setSel,visits,dayBases,user,plocs}){
+// v79: planejado (visitas agendadas para o dia) × realizado (check-outs do dia)
+function PlanejadoRealizado({token,user,sel,dvAll,plocs}){
+  const[tar,setTar]=useState(null);
+  useEffect(()=>{if(!token||!sel)return;let vivo=true;setTar(null);
+    fetch(`${DASH}/api/crm/tarefas?desde=${sel}&ate=${encodeURIComponent(sel+"T23:59:59-04:00")}&limit=500`,{headers:{"X-Session":token},cache:"no-store"}).then(r=>r.json())
+      .then(d=>{if(vivo)setTar((d&&d.tarefas)||[]);}).catch(()=>{if(vivo)setTar([]);});return()=>{vivo=false;};},[token,sel]);
+  const nrm=s=>String(s||"").toLowerCase().trim();
+  const plan=useMemo(()=>(tar||[]).filter(t=>t.type==="VISITA"&&t.due&&String(t.due).slice(0,10)===sel&&(String(t.userId||"")===String(user?.id)||nrm(t.userName)===nrm(user?.name))).sort((a,b)=>String(a.due).localeCompare(String(b.due))),[tar,sel,user]);
+  if(!plan.length)return null;
+  const feitosIds=new Set(dvAll.map(v=>String(v.orgId)));const planIds=new Set(plan.map(t=>String(t.orgId)));
+  const feitas=plan.filter(t=>feitosIds.has(String(t.orgId))),puladas=plan.filter(t=>!feitosIds.has(String(t.orgId)));
+  const esc=v=>/JORDAN REPRESENTA/i.test(v.orgName||"");// check-out no escritório não é visita
+  const extras=[];const vistos=new Set();dvAll.forEach(v=>{const k=String(v.orgId);if(!esc(v)&&!planIds.has(k)&&!vistos.has(k)){vistos.add(k);extras.push(v);}});
+  const kmDe=pts=>{let k=0;for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];if(a&&b)k+=hav(a.lat,a.lng,b.lat,b.lng)*1.3;}return k;};
+  const kmPlan=kmDe(plan.map(t=>plocs?.[t.orgId]).filter(Boolean));const kmReal=kmDe(dvAll.filter(v=>!esc(v)).map(v=>getVCoord(v,plocs)).filter(Boolean));
+  const hora=d=>{const t=String(d||"");const m=t.match(/T(\d\d:\d\d)/)||t.match(/ (\d\d:\d\d)/);return m?m[1]:"";};
+  const linha=(nome,sub,cor,txt)=>(<div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderTop:`1px solid ${S.brd}`}}><span style={{width:8,height:8,borderRadius:4,background:cor,flexShrink:0}}/><span style={{flex:1,minWidth:0,fontSize:13.5,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{nome}</span><span className="num" style={{fontSize:12,color:S.ts}}>{sub}</span><span style={{fontSize:12.5,fontWeight:600,color:cor,width:70,textAlign:"right"}}>{txt}</span></div>);
+  return(<section aria-label="Planejado e realizado" style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:10,padding:"14px 16px",marginBottom:16}}>
+    <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10,flexWrap:"wrap",marginBottom:8}}>
+      <h3 style={{margin:0,fontSize:15,fontWeight:700,color:S.txt}}>Planejado × realizado</h3>
+      <span className="num" style={{fontSize:12.5,color:S.ts}}>{feitas.length} de {plan.length} feitas ({Math.round(feitas.length/plan.length*100)}%) · {extras.length} fora do plano · km {Math.round(kmPlan)} → {Math.round(kmReal)} (linha reta ×1,3)</span>
+    </div>
+    {plan.map(t=>linha(t.org,hora(t.due),feitosIds.has(String(t.orgId))?S.ok:S.dng,feitosIds.has(String(t.orgId))?"Feita":"Pulada"))}
+    {extras.map(v=>linha(v.orgName,fT(v.checkinTime),S.gold,"Extra"))}
+  </section>);
+}
+
+function RotasRealizado({sel,setSel,visits,dayBases,user,plocs,token}){
   const[routes,setRoutes]=useState([]);const[lo,setLo]=useState(false);
   const startBase=getBase(dayBases,sel,user?.id);
   const endBase=getEnd(dayBases,sel,user?.id);
@@ -56,6 +83,7 @@ function RotasRealizado({sel,setSel,visits,dayBases,user,plocs}){
       <Kpi k="Visitas" v={dv.length}/>
       <Kpi k="Trechos de base" v={routes.filter(r=>r.tp==="bs"||r.tp==="be").reduce((s,r)=>s+r.km,0).toFixed(1)} u="km"/>
     </div>}
+    <PlanejadoRealizado token={token} user={user} sel={sel} dvAll={dvAll} plocs={plocs}/>
     {lo&&<p style={{color:S.ts,textAlign:"center",padding:"1rem 0"}}>Calculando rotas...</p>}{!dvAll.length&&!lo&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma visita</p>}
     {dvAll.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"18px 20px"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:10,flexWrap:"wrap"}}>

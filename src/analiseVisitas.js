@@ -6,6 +6,8 @@
 //  • quem não é admin só vê o veredito (rentável / aguardar / não rentável), nunca valores.
 // Função pura (sem React/fetch) — conferível fora do app.
 
+import { TRAM_TAXA_CLIENTE } from "./tramTaxas.js";
+
 export const INDUSTRIAS = ["TRAMONTINA", "PADO", "Zagonel", "Plastilit", "Santana", "Festcolor", "Ruvolo", "Hiper Têxtil"];
 // Plastilit tem taxa por linha: tubos (categoria "Tubos") × conexões e demais — vira duas "contas" no cálculo
 export const CONTAS = ["TRAMONTINA", "PADO", "Zagonel", "Plastilit Tubos", "Plastilit", "Santana", "Festcolor", "Ruvolo", "Hiper Têxtil"];
@@ -50,7 +52,10 @@ export function classeDe(fatMes, prem) {
 // taxa (%) de uma indústria para um cliente (aplica exceções por razão social)
 export function taxaDe(ind, org, P) {
   const ex = (P.excecoes || []).find(e => e.ind === ind && new RegExp(e.razao, "i").test(`${org?.legalName || ""} ${org?.name || ""}`));
-  return ex ? ex.taxa : (P.taxas?.[ind] ?? 5);
+  if (ex) return ex.taxa;
+  // Tramontina: taxa REAL do cliente nos extratos (mix de linhas/promoções), quando houver
+  if (ind === "TRAMONTINA" && P.tramPorCliente !== false) { const t = TRAM_TAXA_CLIENTE[k14(org?.cnpj)]; if (t) return t; }
+  return P.taxas?.[ind] ?? 5;
 }
 // comissão estimada de um cliente sobre {industria: valor}
 export const comissaoDe = (porInd, org, P) => Object.entries(porInd || {}).reduce((s, [ind, v]) => s + (+v || 0) * taxaDe(ind, org, P) / 100, 0);
@@ -65,7 +70,9 @@ export const VEREDITO = ["Rentável visitar", "Aguardar", "Atender a distância"
  * @param fat12Ind {cnpj14: {industria: valor dos últimos 12 meses}}
  * @param dataVendas "YYYY-MM-DD" — última venda carregada (horas do retorno contam só até aqui)
  */
-export function analisar({ visitas, carteira, vendInd, fat12Ind, rfv, prem = PREMISSAS_PADRAO, hoje, dataVendas }) {
+export function analisar({ visitas, carteira, carteiraValor, ultimaEquipe, vendInd, fat12Ind, rfv, prem = PREMISSAS_PADRAO, hoje, dataVendas }) {
+  // carteiraValor: clientes do vendedor para o valor da hora (padrão = carteira).
+  // ultimaEquipe: {orgId: "AAAA-MM-DD"} última visita de QUALQUER usuário — conta para "aguardar" (cliente já atendido).
   const P = { ...PREMISSAS_PADRAO, ...prem, taxas: { ...PREMISSAS_PADRAO.taxas, ...(prem?.taxas || {}) } };
   const esc = soDig(P.cnpjEscritorio), ini = P.inicio, ateV = dataVendas && dataVendas < hoje ? dataVendas : hoje;
   const vs = (visitas || []).map(v => { const ms = msD1(v.criado_em); return { ...v, ms, dia: diaCba(ms), cn: k14(v.cnpj),
@@ -92,7 +99,7 @@ export function analisar({ visitas, carteira, vendInd, fat12Ind, rfv, prem = PRE
 
   // ── valor da hora do vendedor = comissão gerada pela carteira ÷ horas de campo (mesma janela das vendas) ──
   const hJanela = diasCampo.filter(d => d.dia <= ateV).reduce((s, d) => s + d.visitas * (hDia.get(d.dia) || 0), 0);
-  const comJanela = (carteira || []).reduce((s, o) => s + comissaoDe(vendInd?.[k14(o.cnpj)], o, P), 0);
+  const comJanela = (carteiraValor || carteira || []).reduce((s, o) => s + comissaoDe(vendInd?.[k14(o.cnpj)], o, P), 0);
   const valorHora = hJanela > 0 ? comJanela / hJanela : null;
   const pocaHora = hJanela < 40;
   const limiteHora = !pocaHora && valorHora ? valorHora * P.limitePct / 100 : P.horaMin;
@@ -127,7 +134,8 @@ export function analisar({ visitas, carteira, vendInd, fat12Ind, rfv, prem = PRE
     let veredito, aPartir = null;
     if (!(fat12m > 0)) veredito = "Prospecção";
     else if (intervaloPago > P.intervaloMaxPago) veredito = "Atender a distância";
-    else { const prox = Math.max(intervaloPago, 0); if (!ultVis || diasSem >= prox) veredito = "Rentável visitar"; else { veredito = "Aguardar"; aPartir = somaDias(ultVis, prox); } }
+    else { const ue = ultimaEquipe?.[o.id]; const uRef = ue && (!ultVis || ue > ultVis) ? ue : ultVis; const dRef = uRef ? diffDias(hoje, uRef) : null;
+      const prox = Math.max(intervaloPago, 0); if (!uRef || dRef >= prox) veredito = "Rentável visitar"; else { veredito = "Aguardar"; aPartir = somaDias(uRef, prox); } }
     return { id: o.id, org: o, nome: o.nickname || o.name, cnpj: cn, cidade: o.addr?.city_name || o.addr?.city || "", bairro: o.addr?.district || "", status: o.cat || "",
       segmento: o.sector || "", fat12m, fatMes, classe: k.c, ideal: k.ideal, max: k.max, visitas: nVis, porMes, ultVis, diasSem, horas, vendido,
       ultCompra: rfvDe(o)?.ultima || null, quePagam, intervaloPago, situacao, diagnostico, indice, saude, veredito, aPartir };
@@ -147,12 +155,13 @@ export function analisar({ visitas, carteira, vendInd, fat12Ind, rfv, prem = PRE
 
 /** Sugestão de próxima visita perto do cliente recém-visitado (balão do check-out).
  *  Usa só dados que o app já tem: GPS dos PDVs, última visita (qualquer usuário), RFV e status de recompra. */
-export function sugerirProxima({ origem, orgs, plocs, visits, rfv, excluirId, raioKm = 4, hoje, prem = PREMISSAS_PADRAO }) {
+export function sugerirProxima({ origem, orgs, plocs, visits, rfv, excluirId, raioKm = 4, hoje, prem = PREMISSAS_PADRAO, vereditos = null }) {
   if (!origem || origem.lat == null) return [];
   const ult = {}; (visits || []).forEach(v => { if (v.checkoutTime && (!ult[v.orgId] || v.checkinTime > ult[v.orgId])) ult[v.orgId] = v.checkinTime; });
   const out = [];
   for (const o of orgs || []) {
     if (o.id === excluirId || o.excluido) continue;
+    if (vereditos && vereditos[o.id] && vereditos[o.id] !== "Rentável visitar") continue; // análise carregada: só quem vale visita
     const g = plocs?.[o.id]; if (!g || g.lat == null) continue;
     const km = hav(origem.lat, origem.lng, +g.lat, +g.lng); if (km > raioKm) continue;
     const r = (rfv && (rfv.byCnpj?.[k14(o.cnpj)] || rfv.byOrg?.[o.id])) || null;
