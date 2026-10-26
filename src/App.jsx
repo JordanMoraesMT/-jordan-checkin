@@ -1,7 +1,7 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight, Gauge } from "lucide-react";
-import { API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, unificarCidades } from "./lib";
+import { API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, unificarCidades, temCoord } from "./lib";
 import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 const AnaliseTab=lazy(()=>import("./tabs/AnaliseTab").then(m=>({default:m.AnaliseTab})));// v75/76: análise de visitas (vendedor vê sem valores)
@@ -62,12 +62,16 @@ export default function App(){
   const syncPush=async(data)=>{try{await fetch(`${API}?sync=${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:data})});}catch(e){console.warn("syncPush:",e);}};
   const syncClear=async()=>{try{await fetch(`${API}?sync=${user.id}`,{method:"DELETE"});}catch(e){console.warn("syncClear:",e);}};
   const syncVisitSave=async(visit)=>{try{const r=await fetch(`${API}?sync=visits_${user.id}`);const d=await r.json();const all=[visit,...(d.active||[])].slice(0,200);await fetch(`${API}?sync=visits_${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:all})});}catch(e){console.warn("syncVisitSave:",e);}};
-  const syncVisitLoad=async()=>{try{const ids=[743088,743347];let remote=[];for(const uid of ids){const r=await fetch(`${API}?sync=visits_${uid}`,{cache:"no-store"});const buf=await r.arrayBuffer();const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);const d=JSON.parse(txt);if(d.active)remote.push(...d.active.map(v=>({...v,orgName:fixMojibake(v.orgName||""),city:fixMojibake(v.city||""),note:fixMojibake(v.note||"")})));}if(remote.length){setVisits(prev=>{const chave=v=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime);
-      const remoteKeys=new Set(remote.map(chave));
-      // visita REAL (KV, com horários de verdade) expulsa a reconstruída do D1 de mesma chave
-      const base=prev.filter(v=>!(v.d1&&remoteKeys.has(chave(v))));
-      const existing=new Set(base.map(chave));
-      const newOnes=remote.filter(r=>!existing.has(chave(r)));
+  const syncVisitLoad=async()=>{try{const ids=[743088,743347];let remote=[];for(const uid of ids){const r=await fetch(`${API}?sync=visits_${uid}`,{cache:"no-store"});const buf=await r.arrayBuffer();const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);const d=JSON.parse(txt);if(d.active)remote.push(...d.active.map(v=>({...v,orgName:fixMojibake(v.orgName||""),city:fixMojibake(v.city||""),note:fixMojibake(v.note||"")})));}if(remote.length){setVisits(prev=>{const chave=(v,t)=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(t);
+      // v90: identidade da visita = cliente + usuário + HORA do check-in. Antes era cliente+dia: a 2ª visita ao mesmo
+      // cliente no dia nunca chegava aos outros aparelhos (ex.: América Santa Helena 08/10 09:18).
+      const exata=v=>v.orgId+"|"+(v.userName||"")+"|"+v.checkinTime;
+      // visita REAL (KV, com horários de verdade) expulsa a reconstruída do D1 do dia do check-in OU do check-out
+      // (check-out esquecido e fechado no dia seguinte gerava uma visita fantasma no outro dia)
+      const remoteKeys=new Set();remote.forEach(v=>{remoteKeys.add(chave(v,v.checkinTime));if(v.checkoutTime)remoteKeys.add(chave(v,v.checkoutTime));});
+      const base=prev.filter(v=>!(v.d1&&remoteKeys.has(chave(v,v.checkinTime))));
+      const existing=new Set(base.map(exata));
+      const newOnes=remote.filter(r=>!existing.has(exata(r)));
       if(newOnes.length||base.length!==prev.length)return[...base,...newOnes];return prev;});}}catch(e){console.warn("syncVisitLoad:",e);}};
   const syncPlocs=async(locs)=>{try{await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:locs})});}catch(e){console.warn("syncPlocs:",e);}};
   const syncDayBasesSave=async(bases)=>{if(!bases||!Object.keys(bases).length)return;try{await fetch(`${API}?sync=dayBases`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:bases})});}catch(e){console.warn("syncBases:",e);}};
@@ -135,7 +139,8 @@ export default function App(){
   // Check if day has visits but no active visit (can close route)
   const today=todayLocal();
   const todayVisits=useMemo(()=>visits.filter(v=>{const d=toLocalDate(v.checkinTime);return d===today&&isRealVisit(v);}),[visits,today]);
-  const hasEndBase=dayBases[user?.id+"_"+today]?.end!=null||dayBases[today]?.end!=null;
+  // v90: destino sem GPS ("Hotel (GPS ao fechar)") não conta como roteiro fechado — o aviso de fechar aparece e pede o local
+  const hasEndBase=temCoord(dayBases[user?.id+"_"+today]?.end)||temCoord(dayBases[today]?.end);
   const canCloseRoute=todayVisits.length>0&&!active&&!hasEndBase;
 
   const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{
@@ -173,9 +178,10 @@ export default function App(){
     for(const t of apiVisits){const key=(t.org_id||"")+"|"+(t.user_id||"")+"|"+toLocalDate((t.criado_em||"").replace(" ","T")+"Z");if(seen.has(key))continue;seen.add(key);deduped.push(t);}
     // criado_em do D1 é UTC "YYYY-MM-DD HH:MM:SS" SEM fuso — anexar Z para o fT/toLocalDate converterem certo (fix 13:11→09:11)
     const isoZ=(x)=>{const v=String(x||"");return v.includes("T")?v:(v.replace(" ","T")+"Z");};
-    const remote=deduped.map(t=>({orgId:t.org_id,orgName:t.org_nome||"?",city:"",checkinTime:isoZ(t.criado_em),checkoutTime:isoZ(t.criado_em),note:t.texto||"",taskType:"VISITA",synced:true,d1:true,userName:t.user_nome||""}));
-    // Merge: KV/local visits take priority (have real timestamps)
-    const existing=new Set(visits.map(v=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime)));
+    // v90: com checkin_em (v89) a cópia nasce no dia do CHECK-IN — check-out esquecido não cria visita no dia seguinte
+    const remote=deduped.map(t=>({orgId:t.org_id,orgName:t.org_nome||"?",city:"",checkinTime:isoZ(t.checkin_em||t.criado_em),checkoutTime:isoZ(t.criado_em),note:t.texto||"",taskType:"VISITA",synced:true,d1:true,userName:t.user_nome||""}));
+    // Merge: KV/local visits take priority (have real timestamps) — valem o dia do check-in e o do check-out
+    const existing=new Set();visits.forEach(v=>{const k=v.orgId+"|"+(v.userName||"")+"|";existing.add(k+toLocalDate(v.checkinTime));if(v.checkoutTime&&!v.d1)existing.add(k+toLocalDate(v.checkoutTime));});
     const newOnes=remote.filter(r=>!existing.has(r.orgId+"|"+(r.userName||"")+"|"+toLocalDate(r.checkinTime)));
     if(newOnes.length){setVisits(prev=>[...prev,...newOnes]);setSyncMsg(`+${newOnes.length} visitas`);}else setSyncMsg("Atualizado");};
   const loadHistory=async()=>{try{await loadHistoryInner();}catch(e){setSyncMsg("Erro: "+e.message);}};

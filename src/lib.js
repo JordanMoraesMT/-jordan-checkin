@@ -187,11 +187,46 @@ function fixMojibake(s){
 }
 function strip(o){const a=o.address||{};const desc=fixMojibake(o.description||"");return{id:o.id,name:fixMojibake(o.name||""),nickname:fixMojibake(o.nickname||""),legalName:fixMojibake(o.legalName||""),cnpj:o.cnpj||"",cat:o.category?.name||"",sector:o.sector?.name||"",products:(o.products||[]).map(p=>p.name).join(", "),owner:o.ownerUser?.name||"",ownerId:o.ownerUser?.id||null,grupo:desc.startsWith("Grupo:")?desc:"",addr:{street:fixMojibake(a.streetName||a.street||""),number:a.streetNumber||a.number||"",district:fixMojibake(a.district||a.neighborhood||""),city:fixMojibake(a.city||""),city_name:fixMojibake(a.city_name||a.city||""),state:a.state||""},people:(o.people||[]).map(p=>p.name).join(", "),email:o.contact?.email||"",phone:o.contact?.whatsapp||o.contact?.work||o.contact?.mobile||"",ranking:o.ranking||0};}
 async function fetchCNPJ(cnpj){const clean=cnpj.replace(/[.\-\/]/g,"");try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);if(r.ok)return r.json();}catch{}const r2=await fetch(`${API}?cnpj=${clean}`);if(!r2.ok)throw new Error("CNPJ nao encontrado");return r2.json();}
-// ─── Helper: get base for date (backward compatible) ───
-function getBase(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBases[date];if(!b)return HOMES[userId]||null;if(b.start)return b.start;return b;}
-function getEnd(dayBases,date,userId){const b=dayBases[userId+"_"+date]||dayBases[date];if(b?.end)return b.end;return getBase(dayBases,date,userId);}
+// ─── Base do dia (origem/destino) ───
+// v90: uma base só vale com coordenada. O destino "Hotel (GPS ao fechar)" nasce sem lat/lng e, se o roteiro
+// não era fechado, o cálculo usava (0,0) → ~8.300 km de "retorno". Base sem coordenada nunca entra no cálculo.
+// legado=true também lê a chave antiga sem usuário (dayBases[data]) — só para os dados do próprio usuário.
+const temCoord=b=>!!b&&b.lat!=null&&b.lng!=null&&isFinite(+b.lat)&&isFinite(+b.lng);
+const _diaSeguinte=dt=>{const d=new Date(dt+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+1);return d.toISOString().slice(0,10);};
+const _regDia=(dayBases,date,userId,legado)=>dayBases[userId+"_"+date]||(legado?dayBases[date]:null)||null;
+const _inicioReg=b=>b?(b.start||(b.lat!=null?b:null)):null;
+function getBase(dayBases,date,userId,legado=true){const s=_inicioReg(_regDia(dayBases,date,userId,legado));return temCoord(s)?s:(HOMES[userId]||null);}
+function getEnd(dayBases,date,userId,legado=true){
+  const e=_regDia(dayBases,date,userId,legado)?.end;if(temCoord(e))return e;
+  const ini=getBase(dayBases,date,userId,legado);
+  if(!e)return ini;
+  // destino marcado sem GPS e roteiro não fechado: vale onde o dia seguinte começou (casa ou o hotel)
+  const prox=_inicioReg(_regDia(dayBases,_diaSeguinte(date),userId,legado));if(temCoord(prox))return prox;
+  if(e.type!=="hotel")return ini;
+  if(ini?.type==="hotel")return ini;// já estava hospedado: mesmo hotel
+  return{...e,lat:null,lng:null};// hotel desconhecido: sem trecho de retorno (nunca inventa km)
+}
 // ─── Helper: only real visits (check-in based, not WhatsApp/calls) ───
-function isRealVisit(v){if(!v.checkoutTime)return false;if(v.taskType&&v.taskType!=="VISITA")return false;if(v.divergent)return false;return true;}
+// v90: visita com selo ⚠️ (GPS longe do cadastro) é visita real — o check-out sempre gravou dizendo que conta no relatório.
+function isRealVisit(v){if(!v.checkoutTime)return false;if(v.taskType&&v.taskType!=="VISITA")return false;return true;}
+// v90: CHECK-OUT ESQUECIDO — visita fechada em outro dia (ex.: check-in 16:38, check-out no dia seguinte em outra loja).
+// O horário e o GPS do check-out não dizem nada da visita: vale o ponto e a hora do check-in.
+const checkoutEsquecido=v=>!!(v&&v.checkinTime&&v.checkoutTime&&toLocalDate(v.checkoutTime)!==toLocalDate(v.checkinTime));
+const saidaEfetiva=v=>checkoutEsquecido(v)?v.checkinTime:v.checkoutTime;
+// v90: dedup de visitas. A MESMA visita gravada duas vezes (KV + cópia reconstruída do D1, check-in repetido) tem horários
+// sobrepostos → fica a mais longa. Duas visitas reais ao mesmo cliente no dia (saiu e voltou) não se sobrepõem e contam as duas.
+// A cópia reconstruída do D1 (d1:true, sem horários reais) sai quando há visita real do cliente no dia do check-in OU do check-out.
+function dedupVisitas(lista){
+  const nu=s=>String(s||"").toLowerCase().trim();const ch=(v,t)=>v.orgId+"|"+nu(v.userName)+"|"+toLocalDate(t);
+  const reais=new Set();(lista||[]).forEach(v=>{if(v.d1)return;reais.add(ch(v,v.checkinTime));if(v.checkoutTime)reais.add(ch(v,v.checkoutTime));});
+  const ord=(lista||[]).filter(v=>!(v.d1&&reais.has(ch(v,v.checkinTime)))).sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+  const out=[];const ult=new Map();
+  for(const v of ord){const k=ch(v,v.checkinTime);const i=ult.get(k);
+    if(i!=null){const w=out[i];if(new Date(v.checkinTime)<=new Date(saidaEfetiva(w))){
+      if(new Date(saidaEfetiva(v))-new Date(v.checkinTime)>new Date(saidaEfetiva(w))-new Date(w.checkinTime))out[i]=v;continue;}}
+    ult.set(k,out.length);out.push(v);}
+  return out;
+}
 
 // ─── Google Agenda: monta o link "Adicionar evento" pré-preenchido (sem OAuth) ───
 function gcalUrl({titulo,detalhes,inicio,duracaoMin=60,local}){
@@ -206,7 +241,7 @@ function gcalUrl({titulo,detalhes,inicio,duracaoMin=60,local}){
 
 // ─── Helper: resolve GPS from visit directly OR from plocs by orgId ───
 function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs&&v.orgId&&plocs[v.orgId])return{lat:plocs[v.orgId].lat,lng:plocs[v.orgId].lng};return null;}
-function getVEndCoord(v,plocs){if(v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
+function getVEndCoord(v,plocs){if(!checkoutEsquecido(v)&&v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export {_bk as chaveTexto, normBusca, contemBusca, cidadeCanon, unificarCidades, PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl };
+export {_bk as chaveTexto, normBusca, contemBusca, cidadeCanon, unificarCidades, PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl, temCoord, checkoutEsquecido, saidaEfetiva, dedupVisitas };

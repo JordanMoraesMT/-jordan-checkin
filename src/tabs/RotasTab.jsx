@@ -1,6 +1,6 @@
 // TeamCheck — aba RotasTab
 import { useState, useEffect, useMemo } from "react";
-import { LUNCH_START, LUNCH_END, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hourDec, roadKm, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, DASH, hav } from "../lib";
+import { LUNCH_START, LUNCH_END, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hourDec, roadKm, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, DASH, hav, temCoord } from "../lib";
 import { Kpi, DateField, SegTabs } from "../components";
 import { PlanejarRota } from "./PlanejarRota";
 
@@ -53,18 +53,19 @@ function RotasRealizado({sel,setSel,visits,dayBases,user,plocs,token}){
     return visits.filter(v=>new Date(v.checkinTime).toDateString()===t&&v.checkoutTime&&(!v.taskType||v.taskType==="VISITA")&&(!v.userName||v.userName===user?.name))
       .sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
   },[visits,sel,user?.name]);
-  const dv=useMemo(()=>dvAll.filter(v=>!v.divergent),[dvAll]);
+  // v90: visita com selo ⚠️ conta no trajeto (o selo é só para conferir o cadastro do cliente)
+  const dv=dvAll;
   useEffect(()=>{if(!dv.length){setRoutes([]);return;}let c=false;setLo(true);(async()=>{const s=[];
     const fc=getVCoord(dv[0],plocs);
     // Start base → first PDV
-    if(startBase&&fc)s.push({f:startBase.label||"Base",t:dv[0].orgName,tp:"bs",...await roadKm(startBase.lat,startBase.lng,fc.lat,fc.lng)});
+    if(temCoord(startBase)&&fc)s.push({f:startBase.label||"Base",t:dv[0].orgName,tp:"bs",...await roadKm(startBase.lat,startBase.lng,fc.lat,fc.lng)});
     // Between PDVs — skip same orgId consecutive
     for(let i=0;i<dv.length-1;i++){const a=dv[i],b=dv[i+1];
       if(a.orgId===b.orgId)continue;
       const ca=getVEndCoord(a,plocs),cb=getVCoord(b,plocs);
       if(ca&&cb)s.push({f:a.orgName,t:b.orgName,tp:hourDec(a.checkoutTime)>=LUNCH_START&&hourDec(b.checkinTime)<=LUNCH_END+1?"lch":"tr",...await roadKm(ca.lat,ca.lng,cb.lat,cb.lng)});}
     // Last PDV → end base
-    const last=dv[dv.length-1];const eb=endBase||startBase;
+    const last=dv[dv.length-1];const eb=temCoord(endBase)?endBase:null;
     const lc=getVEndCoord(last,plocs);
     if(eb&&lc)s.push({f:last.orgName,t:eb.label||"Base",tp:"be",...await roadKm(lc.lat,lc.lng,eb.lat,eb.lng)});
     if(!c){setRoutes(s);setLo(false);}})();return()=>{c=true;};},[dv,startBase,endBase,plocs]);
@@ -88,7 +89,7 @@ function RotasRealizado({sel,setSel,visits,dayBases,user,plocs,token}){
     {dvAll.length>0&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"18px 20px"}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,gap:10,flexWrap:"wrap"}}>
         <span style={{fontSize:14,fontWeight:600,color:S.txt}}>Roteiro do dia</span>
-        {startBase&&dv.length>0&&<a href={`https://www.google.com/maps/dir/${startBase.lat},${startBase.lng}/${dv.map(v=>`${v.lat},${v.lng}`).join("/")}/${(endBase||startBase).lat},${(endBase||startBase).lng}`} target="_blank" rel="noopener" style={{fontSize:12.5,fontWeight:500,color:S.pl,textDecoration:"none"}}>📍 Abrir no Google Maps</a>}
+        {startBase&&dv.length>0&&<a href={`https://www.google.com/maps/dir/${startBase.lat},${startBase.lng}/${dv.map(v=>`${v.lat},${v.lng}`).join("/")}/${(temCoord(endBase)?endBase:startBase).lat},${(temCoord(endBase)?endBase:startBase).lng}`} target="_blank" rel="noopener" style={{fontSize:12.5,fontWeight:500,color:S.pl,textDecoration:"none"}}>📍 Abrir no Google Maps</a>}
       </div>
       {routes.find(r=>r.tp==="bs")&&<div style={{fontSize:12,color:S.pl,fontWeight:600,padding:"6px 0 10px",borderBottom:`1px dashed ${S.brd}`,marginBottom:6}}>{startBase?.label||"Casa"} → 1º PDV · {routes.find(r=>r.tp==="bs").km.toFixed(1)} km</div>}
       <div style={{position:"relative",paddingLeft:4}}>
@@ -98,7 +99,7 @@ function RotasRealizado({sel,setSel,visits,dayBases,user,plocs,token}){
             <div style={{position:"relative",zIndex:1,width:24,height:24,borderRadius:"50%",background:v.divergent?S.dng:"var(--chrome)",color:"#fff",fontSize:12,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:"0 0 0 3px var(--card-solid)"}}>{v.divergent?"!":i+1}</div>
             <div style={{flex:1,minWidth:0}}>
               <p style={{fontSize:13.5,fontWeight:600,margin:0,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.orgName}{v.divergent&&<span style={{fontSize:10,color:S.dng,marginLeft:6,fontWeight:500}}>(deslocado {v.divDist}m)</span>}</p>
-              <p className="mono" style={{fontSize:11,color:S.td,margin:"2px 0 0"}}>{fT(v.checkinTime)} → {fT(v.checkoutTime)} · {hrsMin(mins(v.checkinTime,v.checkoutTime))}{v.divergent?" · não contabilizada":""}</p>
+              <p className="mono" style={{fontSize:11,color:S.td,margin:"2px 0 0"}}>{fT(v.checkinTime)} → {fT(v.checkoutTime)} · {hrsMin(mins(v.checkinTime,v.checkoutTime))}{v.divergent?" · conferir GPS do cadastro":""}</p>
             </div>
             {seg&&<span className="mono" style={{fontSize:12,fontWeight:600,color:seg.tp==="lch"?S.gold:S.t2,flexShrink:0}}>{seg.tp==="lch"?"🍽 ":""}{seg.km.toFixed(1)} km</span>}
           </div>

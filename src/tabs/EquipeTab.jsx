@@ -1,6 +1,6 @@
 // TeamCheck — aba EquipeTab (unificada com o Relatório: mesma base de visitas check-in/out)
 import { useState, useMemo, useEffect } from "react";
-import { toLocalDate, todayLocal, USERS, HOMES, S, fT, fD, fD1, mins, hrsMin, hav, csv, getBase, getVCoord, getVEndCoord, DASH } from "../lib";
+import { toLocalDate, todayLocal, USERS, S, fT, fD, fD1, mins, hrsMin, hav, csv, getBase, getEnd, getVCoord, getVEndCoord, DASH, temCoord, saidaEfetiva, dedupVisitas } from "../lib";
 import { Kpi, DateField, SearchSelect } from "../components";
 
 function EquipeTab({sel,setSel,plocs,dayBases,user,visits,token,bump}){
@@ -18,28 +18,24 @@ function EquipeTab({sel,setSel,plocs,dayBases,user,visits,token,bump}){
       if(nrm(v.userName)!==nrm(selUser.n))return false;
       return toLocalDate(v.checkinTime)===sel;
     });
-    // dedup por orgId|usuário|dia — mantém a de maior duração (idêntico ao Relatório)
-    const map=new Map();
-    for(const v of filt){const key=v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(v.checkinTime);const ex=map.get(key);
-      if(!ex){map.set(key,v);continue;}
-      const ed=new Date(ex.checkoutTime)-new Date(ex.checkinTime),vd=new Date(v.checkoutTime)-new Date(v.checkinTime);
-      if(vd>ed)map.set(key,v);}
-    return [...map.values()].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+    // v90: mesmo dedup do Relatório (sobreposição de horário)
+    return dedupVisitas(filt);
   },[visits,sel,selUser.n]);
 
   // Base do dia (origem/destino) — mesma resolução do Relatório (chave uid_data → HOMES → getBase)
-  const baseDe=(dt)=>{const k=uid+"_"+dt;if(dayBases[k]?.start)return dayBases[k].start;if(dayBases[k]&&dayBases[k].lat!=null)return dayBases[k];return HOMES[uid]||getBase(dayBases,dt,uid)||null;};
-  const endDe=(dt)=>{const k=uid+"_"+dt;if(dayBases[k]?.end)return dayBases[k].end;return baseDe(dt);};
+  // v90: base só com coordenada (lib.getBase/getEnd) — destino "GPS ao fechar" sem GPS não vira (0,0)
+  const baseDe=(dt)=>getBase(dayBases,dt,uid,false);
+  const endDe=(dt)=>getEnd(dayBases,dt,uid,false);
 
   // KM: base → 1º PDV → entre PDVs → último PDV → base (×1.3) — idêntico ao calcDayKm do Relatório
   const km=useMemo(()=>{const s=dayVisits;if(!s.length)return 0;let k=0;const b=baseDe(sel),eb=endDe(sel);
-    const fc=getVCoord(s[0],plocs);if(b&&fc)k+=hav(b.lat,b.lng,fc.lat,fc.lng)*1.3;
+    const fc=getVCoord(s[0],plocs);if(temCoord(b)&&fc)k+=hav(b.lat,b.lng,fc.lat,fc.lng)*1.3;
     for(let i=1;i<s.length;i++){if(s[i].orgId===s[i-1].orgId)continue;const ca=getVEndCoord(s[i-1],plocs),cb=getVCoord(s[i],plocs);if(ca&&cb)k+=hav(ca.lat,ca.lng,cb.lat,cb.lng)*1.3;}
-    const l=s[s.length-1];const endB=eb||b;const lc=getVEndCoord(l,plocs);if(endB&&lc)k+=hav(lc.lat,lc.lng,endB.lat,endB.lng)*1.3;
+    const l=s[s.length-1];const endB=eb||b;const lc=getVEndCoord(l,plocs);if(temCoord(endB)&&lc)k+=hav(lc.lat,lc.lng,endB.lat,endB.lng)*1.3;
     return k;},[dayVisits,dayBases,plocs,uid,sel]);
 
   // Jornada: 1º check-in → último check-out − 60 (almoço) — idêntico ao Relatório
-  const workH=useMemo(()=>{if(!dayVisits.length)return 0;const a=dayVisits[0].checkinTime,b=dayVisits[dayVisits.length-1].checkoutTime;if(!a||!b)return 0;return Math.max(0,mins(a,b)-60);},[dayVisits]);
+  const workH=useMemo(()=>{if(!dayVisits.length)return 0;const a=dayVisits[0].checkinTime,b=saidaEfetiva(dayVisits[dayVisits.length-1]);if(!a||!b)return 0;return Math.max(0,mins(a,b)-60);},[dayVisits]);
   const firstCheckin=dayVisits.length?fT(dayVisits[0].checkinTime):"-";
   const withGps=dayVisits.filter(v=>getVCoord(v,plocs)).length;
 
