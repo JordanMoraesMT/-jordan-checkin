@@ -173,7 +173,10 @@ export function analisar({ visitas, carteira, carteiraValor, ultimaEquipe, vendI
 // v91: sugestão da próxima visita — só na CIDADE onde o vendedor está (a do cliente recém-visitado) e na ordem de
 // importância da Matriz RFV (Campeão → Leal → Em Crescimento → Em Risco → Inativo); dentro da mesma classe, o mais próximo.
 const RFV_ORDEM = { "Campeão": 0, "Leal": 1, "Em Crescimento": 2, "Em Risco": 3, "Inativo": 4 };
-const chaveCid = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[-/.'’´`]/g, " ").replace(/\s+/g, " ").trim();
+// v92: Cuiabá e Várzea Grande contam como UMA área (conurbação)
+const AREA_CID = { "cuiaba": "cuiaba+vg", "varzea grande": "cuiaba+vg" };
+const chaveCid = s => { const k = String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[-/.'’´`]/g, " ").replace(/\s+/g, " ").trim(); return AREA_CID[k] || k; };
+export const rotuloArea = c => chaveCid(c) === "cuiaba+vg" ? "Cuiabá/VG" : c;
 export function sugerirProxima({ origem, orgs, plocs, visits, rfv, excluirId, cidade = null, raioKm = 4, hoje, prem = PREMISSAS_PADRAO, vereditos = null, max = 5 }) {
   if (!origem || origem.lat == null) return [];
   const kCid = cidade ? chaveCid(cidade) : null;

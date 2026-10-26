@@ -5,7 +5,7 @@ import { API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S
 import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 const AnaliseTab=lazy(()=>import("./tabs/AnaliseTab").then(m=>({default:m.AnaliseTab})));// v75/76: análise de visitas (vendedor vê sem valores)
-import { sugerirProxima, analisar } from "./analiseVisitas.js";
+import { sugerirProxima, analisar, rotuloArea } from "./analiseVisitas.js";
 import { carregarBase, carregarPremissas } from "./analiseDados.js";
 const RelatorioTab=lazy(()=>import("./tabs/RelatorioTab").then(m=>({default:m.RelatorioTab})));// recharts só carrega ao abrir o Relatório
 import { EquipeTab } from "./tabs/EquipeTab";
@@ -460,7 +460,7 @@ export default function App(){
       <div style={{pointerEvents:"auto",width:"100%",maxWidth:460,background:S.cardSolid,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",boxShadow:"0 10px 30px rgba(0,0,0,.35)"}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
           <div style={{flex:1,minWidth:0}}>
-            <p style={{margin:0,fontSize:12.5,color:S.t2}}>Próxima visita{sugestao.cidade?` em ${sugestao.cidade}`:""}{x.rfv?` · ${x.rfv}`:""}{sugestao.itens.length>1?` · ${sugestao.i+1} de ${sugestao.itens.length}`:""}</p>
+            <p style={{margin:0,fontSize:12.5,color:S.t2}}>Próxima visita{sugestao.cidade?` em ${rotuloArea(sugestao.cidade)}`:""}{x.rfv?` · ${x.rfv}`:""}{sugestao.itens.length>1?` · ${sugestao.i+1} de ${sugestao.itens.length}`:""}</p>
             <p style={{margin:"2px 0 0",fontSize:15.5,fontWeight:700,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.nickname||o.name}</p>
             <p className="num" style={{margin:"3px 0 0",fontSize:12,color:S.ts}}>{x.km<1?`${Math.round(x.km*1000)} m`:`${x.km.toFixed(1).replace(".",",")} km`} · {x.dSem==null?"nunca visitado":`última visita ${x.dSem}d`}{x.recompra==="Atrasado"?" · recompra atrasada":x.recompra==="Momento de Recompra"?" · momento de recompra":""}</p>
           </div>
