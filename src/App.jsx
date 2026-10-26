@@ -276,11 +276,14 @@ export default function App(){
     if(next?.nextDate&&next?.nextDesc){const nt=(next.nextType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(nt)?nt:"VISITA";crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:tipoOk,texto:next.nextDesc,origem:"tarefa",due_em:`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`});}
     syncVisitSave(done);
     setVisits(p=>[done,...p]);setActive(null);syncClear();setCoTarget(null);setLdId(null);
-    // v76: balão "perto daqui" — cliente com potencial próximo do que acabou de ser visitado (até 17h, dispensável no dia)
-    try{if(new Date().getHours()<17&&sL("jc:semSugestao","")!==todayLocal()){const ref=g&&g.lat!=null?{lat:g.lat,lng:g.lng}:plocs[active.orgId];
+    // v91: balão da próxima visita — mesma CIDADE do cliente recém-visitado (onde o vendedor está), ordem da Matriz RFV
+    // e, dentro da mesma classe, o mais próximo (até 17h, dispensável no dia). Check-out no escritório não sugere.
+    try{const oVis=(allOrgs||[]).find(o=>o.id===active.orgId);const escrit=/^44185799000103$/.test(String(oVis?.cnpj||"").replace(/\D/g,""))||/JORDAN REPRESENTA/i.test(done.orgName||"");
+      if(!escrit&&new Date().getHours()<17&&sL("jc:semSugestao","")!==todayLocal()){const ref=g&&g.lat!=null?{lat:g.lat,lng:g.lng}:plocs[active.orgId];
+      const cidade=oVis?.addr?.city_name||oVis?.addr?.city||null;
       const meus=(allOrgs||[]).filter(o=>(o.owner||"")===user?.name);
-      const sug=sugerirProxima({origem:ref,orgs:meus.length?meus:allOrgs,plocs,visits:[done,...visits],rfv:rfvMap,excluirId:active.orgId,hoje:todayLocal(),vereditos});
-      if(sug.length)setTimeout(()=>setSugestao({de:done.orgName,itens:sug,i:0}),divergent?400:250);}}catch(e){console.warn("sugestão:",e);}
+      const sug=sugerirProxima({origem:ref,orgs:meus.length?meus:allOrgs,plocs,visits:[done,...visits],rfv:rfvMap,excluirId:active.orgId,cidade,hoje:todayLocal(),vereditos});
+      if(sug.length)setTimeout(()=>setSugestao({de:done.orgName,cidade,itens:sug,i:0}),divergent?400:250);}}catch(e){console.warn("sugestão:",e);}
     if(divergent)setTimeout(()=>alert(`ℹ️ Visita registrada.\nO GPS ficou a ${divDist}m do ponto salvo do cliente — a visita foi gravada normalmente e conta no relatório; fica só um selo ⚠️ para você conferir o cadastro depois.`),100);
     else{const m=[];if(next?.nextDate&&next?.nextDesc)m.push("✓ Próximo passo agendado.");if(novas.length)m.push(`📌 ${novas.length} pendência(s) para a próxima visita — vão aparecer no próximo check-in.`);if(resolv.length)m.push(`✓ ${resolv.length} pendência(s) marcada(s) como resolvida(s).`);if(m.length)setTimeout(()=>alert(m.join("\n")),100);}
     setPendAtivas([]);setTimeout(()=>setCrmBump(b=>b+1),800);
@@ -457,9 +460,9 @@ export default function App(){
       <div style={{pointerEvents:"auto",width:"100%",maxWidth:460,background:S.cardSolid,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",boxShadow:"0 10px 30px rgba(0,0,0,.35)"}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
           <div style={{flex:1,minWidth:0}}>
-            <p style={{margin:0,fontSize:12.5,color:S.t2}}>Perto daqui{sugestao.itens.length>1?` · ${sugestao.i+1} de ${sugestao.itens.length}`:""}</p>
+            <p style={{margin:0,fontSize:12.5,color:S.t2}}>Próxima visita{sugestao.cidade?` em ${sugestao.cidade}`:""}{x.rfv?` · ${x.rfv}`:""}{sugestao.itens.length>1?` · ${sugestao.i+1} de ${sugestao.itens.length}`:""}</p>
             <p style={{margin:"2px 0 0",fontSize:15.5,fontWeight:700,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{o.nickname||o.name}</p>
-            <p className="num" style={{margin:"3px 0 0",fontSize:12,color:S.ts}}>{x.km<1?`${Math.round(x.km*1000)} m`:`${x.km.toFixed(1).replace(".",",")} km`} · {x.dSem==null?"nunca visitado":`última visita ${x.dSem}d`}{x.recompra==="Atrasado"?" · recompra atrasada":x.recompra==="Momento de Recompra"?" · momento de recompra":""}{x.rfv?` · ${x.rfv}`:""}</p>
+            <p className="num" style={{margin:"3px 0 0",fontSize:12,color:S.ts}}>{x.km<1?`${Math.round(x.km*1000)} m`:`${x.km.toFixed(1).replace(".",",")} km`} · {x.dSem==null?"nunca visitado":`última visita ${x.dSem}d`}{x.recompra==="Atrasado"?" · recompra atrasada":x.recompra==="Momento de Recompra"?" · momento de recompra":""}</p>
           </div>
           <button onClick={()=>setSugestao(null)} aria-label="Fechar sugestão" style={{width:36,height:36,border:"none",background:"transparent",color:S.ts,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:18}}>×</button>
         </div>

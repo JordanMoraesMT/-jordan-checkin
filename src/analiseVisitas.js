@@ -170,25 +170,28 @@ export function analisar({ visitas, carteira, carteiraValor, ultimaEquipe, vendI
 
 /** Sugestão de próxima visita perto do cliente recém-visitado (balão do check-out).
  *  Usa só dados que o app já tem: GPS dos PDVs, última visita (qualquer usuário), RFV e status de recompra. */
-export function sugerirProxima({ origem, orgs, plocs, visits, rfv, excluirId, raioKm = 4, hoje, prem = PREMISSAS_PADRAO, vereditos = null }) {
+// v91: sugestão da próxima visita — só na CIDADE onde o vendedor está (a do cliente recém-visitado) e na ordem de
+// importância da Matriz RFV (Campeão → Leal → Em Crescimento → Em Risco → Inativo); dentro da mesma classe, o mais próximo.
+const RFV_ORDEM = { "Campeão": 0, "Leal": 1, "Em Crescimento": 2, "Em Risco": 3, "Inativo": 4 };
+const chaveCid = s => String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[-/.'’´`]/g, " ").replace(/\s+/g, " ").trim();
+export function sugerirProxima({ origem, orgs, plocs, visits, rfv, excluirId, cidade = null, raioKm = 4, hoje, prem = PREMISSAS_PADRAO, vereditos = null, max = 5 }) {
   if (!origem || origem.lat == null) return [];
+  const kCid = cidade ? chaveCid(cidade) : null;
   const ult = {}; (visits || []).forEach(v => { if (v.checkoutTime && (!ult[v.orgId] || v.checkinTime > ult[v.orgId])) ult[v.orgId] = v.checkinTime; });
   const out = [];
   for (const o of orgs || []) {
     if (o.id === excluirId || o.excluido) continue;
     if (vereditos && vereditos[o.id] && vereditos[o.id] !== "Rentável visitar") continue; // análise carregada: só quem vale visita
+    if (kCid && chaveCid(o.addr?.city_name || o.addr?.city) !== kCid) continue;     // só a cidade onde o vendedor está
     const g = plocs?.[o.id]; if (!g || g.lat == null) continue;
-    const km = hav(origem.lat, origem.lng, +g.lat, +g.lng); if (km > raioKm) continue;
+    const km = hav(origem.lat, origem.lng, +g.lat, +g.lng); if (!kCid && km > raioKm) continue;   // sem cidade: raio (reserva)
     const r = (rfv && (rfv.byCnpj?.[k14(o.cnpj)] || rfv.byOrg?.[o.id])) || null;
     const fat12m = +r?.fat12m || 0; if (!(fat12m > 0)) continue;              // só quem já compra (potencial comprovado)
     const k = classeDe(fat12m / 12, prem);
     const uv = ult[o.id] ? diaCba(Date.parse(ult[o.id])) : null; const dSem = uv ? diffDias(hoje, uv) : null;
     if (dSem != null && dSem < Math.min(k.max, 15)) continue;                    // visitado há pouco
-    let score = Math.log10(fat12m + 10) * 10;
-    if (r?.status === "Atrasado") score += 25; else if (r?.status === "Momento de Recompra") score += 18;
-    if (dSem == null) score += 15; else if (dSem > k.max) score += Math.min(20, (dSem - k.max) / 2);
-    score -= km * 3;
-    out.push({ org: o, km, dSem, classe: k.c, recompra: r?.status || null, rfv: r?.rfv || null, score });
+    const nivel = RFV_ORDEM[r?.rfv] ?? 9;
+    out.push({ org: o, km, dSem, classe: k.c, recompra: r?.status || null, rfv: r?.rfv || null, nivel });
   }
-  return out.sort((a, b) => b.score - a.score).slice(0, 3);
+  return out.sort((a, b) => (a.nivel - b.nivel) || (a.km - b.km)).slice(0, max);
 }
