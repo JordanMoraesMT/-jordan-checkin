@@ -1,4 +1,4 @@
-// TeamCheck — Rotas › PLANEJAR (v68)
+// TeamCheck — Rotas › PLANEJAR (v68; v98 filtros de marca/UF/segmento/grupo + Google Maps por parada e no fim)
 // Escolhe quem visitar (cidade, bairro, status, RFV, recompra, dias sem visita), prioriza,
 // e monta o roteiro na ORDEM MAIS CURTA (OSRM /trip — "caixeiro-viajante") a partir de casa
 // ou de onde você está. Mostra mapa, km, tempo, horário previsto de chegada, abre no Google Maps
@@ -7,7 +7,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { Route, Navigation, Home, Crosshair, CalendarPlus, ArrowLeft, X, Check } from "lucide-react";
-import { S, CC, CATS, CANAIS, USERS, HOMES, OSRM, DASH, hav, gps, sL, sS, todayLocal, fD, fixMojibake } from "../lib";
+import { S, CC, CATS, CANAIS, USERS, HOMES, OSRM, DASH, SECTORS, hav, gps, sL, sS, todayLocal, fD, fixMojibake, marcasCadastro, chaveMarca } from "../lib";
 import { MultiSelect, Kpi, DateField } from "../components";
 import { analisar } from "../analiseVisitas.js";
 import { carregarBase, carregarPremissas } from "../analiseDados.js";
@@ -100,7 +100,9 @@ function Pill({ t, cor }) {
   return <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 5, color: tom(cor), background: cor + "1c", border: `1px solid ${cor}44`, whiteSpace: "nowrap" }}>{t}</span>;
 }
 
-function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pendMapa }) {
+const grupoDe = o => fixMojibake(String(o.grupo || "").replace("Grupo: ", "").trim());
+
+function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pendMapa, prospDe }) {
   const PREF = `jc:rotaPlan:${user?.id || "x"}`;
   const p0 = useMemo(() => sL(PREF, {}), []); // eslint-disable-line
   const mob = typeof window !== "undefined" && window.innerWidth <= 768;
@@ -112,6 +114,12 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   const [fRfv, setFRfv] = useState(p0.fRfv || []);
   const [fSr, setFSr] = useState(p0.fSr || []);
   const [canal, setCanal] = useState(p0.canal || []);
+  // v98: mesmos filtros de PDVs — UF, Segmento, Grupo, Indústria e Situação na marca
+  const [uf, setUf] = useState(p0.uf || []);
+  const [seg, setSeg] = useState(p0.seg || []);
+  const [grp, setGrp] = useState(p0.grp || []);
+  const [fInd, setFInd] = useState(p0.fInd || []);
+  const [fSit, setFSit] = useState(p0.fSit || []);
   const [dias, setDias] = useState(p0.dias || "todos");
   const [ordem, setOrdem] = useState(p0.ordem || "prio");
   const [sel, setSel] = useState(() => new Set(p0.sel || []));
@@ -130,8 +138,8 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   const [base, setBase] = useState(null); const [prem, setPrem] = useState(null);
   useEffect(() => { let vivo = true; carregarPremissas().then(p => { if (!vivo) return; setPrem(p); if (token) carregarBase(token, p.inicio, todayLocal()).then(b => { if (vivo) setBase(b); }).catch(() => {}); }); return () => { vivo = false; }; }, [token]);
 
-  useEffect(() => { sS(PREF, { owner, cid, bai, cat, fRfv, fSr, canal, dias, ordem, sel: [...sel], partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist }); },
-    [owner, cid, bai, cat, fRfv, fSr, canal, dias, ordem, sel, partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist]); // eslint-disable-line
+  useEffect(() => { sS(PREF, { owner, cid, bai, cat, fRfv, fSr, canal, uf, seg, grp, fInd, fSit, dias, ordem, sel: [...sel], partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist }); },
+    [owner, cid, bai, cat, fRfv, fSr, canal, uf, seg, grp, fInd, fSit, dias, ordem, sel, partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist]); // eslint-disable-line
 
   const rfvDe = useCallback(o => { if (!rfv) return null; const k = (o.cnpj || "").replace(/\D/g, ""); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; }, [rfv]);
   // Última visita da EQUIPE (qualquer usuário) — a mesma que aparece no cartão do PDV
@@ -142,7 +150,11 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
 
   // Opções dos filtros
   const owners = useMemo(() => { const s = new Set(USERS.map(u => u.n)); orgs.forEach(o => o.owner && s.add(o.owner)); return [...s].sort(); }, [orgs]);
-  const cidades = useMemo(() => { const m = {}; orgs.forEach(o => { const c = cidadeDe(o); if (c && (!owner.length || owner.includes(o.owner))) m[c] = (m[c] || 0) + 1; }); return Object.keys(m).sort((a, b) => a.localeCompare(b)).map(c => [c, `${c} (${m[c]})`]); }, [orgs, owner]);
+  const ufs = useMemo(() => { const s = new Set(); orgs.forEach(o => { if (o.addr?.state) s.add(o.addr.state); }); return [...s].sort(); }, [orgs]);
+  const segmentos = useMemo(() => { const s = new Set((SECTORS || []).map(x => x.n)); orgs.forEach(o => { if (o.sector) s.add(o.sector); }); return [...s].filter(Boolean).sort(); }, [orgs]);
+  const grupos = useMemo(() => { const s = new Set(); orgs.forEach(o => { const g = grupoDe(o); if (g) s.add(g); }); return [...s].sort(); }, [orgs]);
+  const marcas = useMemo(() => marcasCadastro(), [orgs, rfv]); // recalcula quando o cadastro já carregou
+  const cidades = useMemo(() => { const m = {}; orgs.forEach(o => { const c = cidadeDe(o); if (c && (!owner.length || owner.includes(o.owner)) && (!uf.length || uf.includes(o.addr?.state))) m[c] = (m[c] || 0) + 1; }); return Object.keys(m).sort((a, b) => a.localeCompare(b)).map(c => [c, `${c} (${m[c]})`]); }, [orgs, owner, uf]);
   const bairros = useMemo(() => {
     if (!cid.length) return [];
     const g = {};
@@ -173,6 +185,11 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
     if (bai.length) l = l.filter(o => bai.includes(`${cidadeDe(o)}|${bk(fixMojibake(o.addr?.district || ""))}`));
     if (cat.length) l = l.filter(o => cat.includes(o.cat));
     if (canal.length) l = l.filter(o => canal.includes(o.canal || "Presencial"));
+    if (uf.length) l = l.filter(o => uf.includes(o.addr?.state));
+    if (seg.length) l = l.filter(o => seg.includes(o.sector));
+    if (grp.length) l = l.filter(o => grp.includes(grupoDe(o)));
+    const mk = (fInd.length || fSit.length) ? new Set((fInd.length ? fInd : marcas).map(chaveMarca)) : null;
+    const querC = !fSit.length || fSit.includes("Compra"), querP = !fSit.length || fSit.includes("Prospecção");
     const out = l.map(o => {
       const r = rfvDe(o); const uv = ultVisita[o.id]; const d = diasDesde(uv); const g = plocs?.[o.id];
       const { s, mot } = prioridade(r, d);
@@ -184,6 +201,8 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
       if (ocultaDist && x.ver?.v === "Atender a distância") return false;
       if (fRfv.length && !fRfv.includes(x.rfv?.rfv)) return false;
       if (fSr.length && !fSr.includes(x.rfv?.status)) return false;
+      // v98: Indústria × Situação na marca (Compra = já compra pela RFV; Prospecção = marcada no check-out)
+      if (mk) { const compra = String(x.rfv?.inds || "").split(",").some(i => mk.has(chaveMarca(i))); const pr = prospDe ? prospDe(x.o).some(p => mk.has(chaveMarca(p.industria))) : false; if (!((querC && compra) || (querP && pr))) return false; }
       if (dias === "nunca") return x.dias == null;
       if (dias !== "todos") return x.dias == null || x.dias >= Number(dias);
       return true;
@@ -191,7 +210,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
     if (ordem === "perto" && partida) out.forEach(x => { x.dist = x.temGps ? hav(partida.lat, partida.lng, x.lat, x.lng) : Infinity; });
     out.sort((a, b) => ordem === "az" ? a.nome.localeCompare(b.nome) : ordem === "perto" && partida ? a.dist - b.dist : b.prio - a.prio || a.nome.localeCompare(b.nome));
     return out;
-  }, [orgs, owner, cid, bai, cat, canal, fRfv, fSr, dias, ordem, rfvDe, ultVisita, plocs, partida?.lat, partida?.lng, vereditos, ocultaDist, pendMapa]); // eslint-disable-line
+  }, [orgs, owner, cid, bai, cat, canal, uf, seg, grp, fInd, fSit, marcas, prospDe, fRfv, fSr, dias, ordem, rfvDe, ultVisita, plocs, partida?.lat, partida?.lng, vereditos, ocultaDist, pendMapa]); // eslint-disable-line
 
   const comGps = lista.filter(x => x.temGps);
   const selLista = useMemo(() => { const m = new Map(lista.map(x => [x.id, x])); const out = []; sel.forEach(id => { const x = m.get(id) || (() => { const o = orgs.find(z => z.id === id); if (!o) return null; const g = plocs?.[id]; const r = rfvDe(o); return { id, o, nome: o.nickname || o.name, cidade: cidadeDe(o), bairro: fixMojibake(o.addr?.district || ""), rfv: r, dias: diasDesde(ultVisita[id]), lat: g?.lat, lng: g?.lng, temGps: g?.lat != null }; })(); if (x) out.push(x); }); return out; }, [sel, lista, orgs, plocs, rfvDe, ultVisita]);
@@ -200,7 +219,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
 
   const tog = id => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const selTodos = () => setSel(s => { const n = new Set(s); comGps.slice(0, MAX_PARADAS).forEach(x => n.add(x.id)); return n; });
-  const limparFiltros = () => { setCid([]); setBai([]); setCat([]); setFRfv([]); setFSr([]); setCanal([]); setDias("todos"); };
+  const limparFiltros = () => { setCid([]); setBai([]); setCat([]); setFRfv([]); setFSr([]); setCanal([]); setUf([]); setSeg([]); setGrp([]); setFInd([]); setFSit([]); setDias("todos"); };
 
   const pegarAqui = async () => { setMsg("Obtendo sua localização…"); try { const g = await gps(); setAqui({ lat: g.lat, lng: g.lng }); setPartidaTipo("aqui"); setMsg(""); } catch { setMsg("Não consegui sua localização. Verifique a permissão de GPS."); } };
 
@@ -317,10 +336,15 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
             <p style={{ margin: "2px 0 0", fontSize: 11.5, color: S.ts }}>{[p.bairro, p.cidade].filter(Boolean).join(" · ")}</p>
             <p className="mono" style={{ margin: "3px 0 0", fontSize: 11, color: S.td }}>+{fmtKm(p.leg.km)} km · {fmtMin(p.leg.min)} · chega <b style={{ color: S.t2 }}>{hhmm(p.chega)}</b> · sai {hhmm(p.sai)}{p.dias == null ? " · nunca visitado" : ` · última visita ${quando(p.dias)}`}</p>
           </div>
+          <a href={`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`} target="_blank" rel="noopener" title="Abrir no Google Maps" style={{ padding: "7px 9px", borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: S.inp, color: S.pl, fontSize: 11.5, fontWeight: 700, textDecoration: "none" }}>Maps</a>
           <a href={`https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`} target="_blank" rel="noopener" title="Abrir no Waze" style={{ padding: "7px 9px", borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: S.inp, color: S.pl, fontSize: 11.5, fontWeight: 700, textDecoration: "none" }}>Waze</a>
           <button onClick={() => tirar(p.id)} disabled={lo} title="Tirar do roteiro" style={{ padding: 6, borderRadius: 8, border: `1px solid ${S.dng}44`, background: "transparent", cursor: "pointer", display: "flex" }}><X size={15} color={S.dng} /></button>
         </div>))}
         {roteiro.volta && <div style={{ fontSize: 12, color: S.pl, fontWeight: 600, padding: "10px 0 2px" }}>🏠 Volta · +{fmtKm(roteiro.volta.km)} km · {fmtMin(roteiro.volta.min)} · chega {hhmm(roteiro.fim)}</div>}
+        {/* v98: no fim do roteiro, abrir a rota completa no Google Maps */}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+          {trechos.map((t, i) => <a key={i} href={t.url} target="_blank" rel="noopener" style={{ flex: trechos.length === 1 ? 1 : "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "11px 16px", fontSize: 13.5, fontWeight: 800, borderRadius: 11, background: "#0578A6", color: "#fff", textDecoration: "none" }}><Navigation size={16} /> {trechos.length > 1 ? `Google Maps · ${rotTrecho(t)}` : "Abrir rota no Google Maps"}</a>)}
+        </div>
       </div>
       <div style={card}>
         <p style={{ margin: "0 0 10px", fontSize: 14, fontWeight: 700, color: S.txt }}>Lançar na Agenda</p>
@@ -344,12 +368,17 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
       </div>
       <div style={grid}>
         <MultiSelect values={owner} onChange={setOwner} placeholder="Responsável" allLabel="Todos" options={owners} />
+        <MultiSelect values={uf} onChange={v => { setUf(v); setCid([]); setBai([]); setVc(60); }} placeholder="UF" allLabel="Todas" options={ufs} />
         <MultiSelect values={cid} onChange={v => { setCid(v); setVc(60); }} placeholder="Cidade" allLabel="Todas" options={cidades} />
         {cid.length > 0 && <MultiSelect values={bai} onChange={v => { setBai(v); setVc(60); }} placeholder="Bairro" allLabel="Todos" options={bairros} />}
         <MultiSelect values={cat} onChange={setCat} placeholder="Status" allLabel="Todos" colorFor={c => CC[c] || S.pri} options={CATS.filter(c => c !== "Excluido")} />
         <MultiSelect values={fRfv} onChange={setFRfv} placeholder="Classe RFV" allLabel="Todas" colorFor={c => RFV_COR[c]} options={RFV_ORD} />
         <MultiSelect values={fSr} onChange={setFSr} placeholder="Recompra" allLabel="Todas" colorFor={c => SR_COR[c]} options={["Atrasado", "Momento de Recompra", "Em Dia"]} />
         <MultiSelect values={canal} onChange={setCanal} placeholder="Canal" allLabel="Todos" options={CANAIS} />
+        <MultiSelect values={seg} onChange={v => { setSeg(v); setVc(60); }} placeholder="Segmento" allLabel="Todos" options={segmentos} />
+        <MultiSelect values={grp} onChange={v => { setGrp(v); setVc(60); }} placeholder="Grupo" allLabel="Todos" options={grupos} />
+        <MultiSelect values={fInd} onChange={v => { setFInd(v); setVc(60); }} placeholder="Indústria" allLabel="Todas" options={marcas} />
+        <MultiSelect values={fSit} onChange={v => { setFSit(v); setVc(60); }} placeholder="Situação na marca" allLabel="Todas" options={["Compra", "Prospecção"]} />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
         <span style={{ fontSize: 11.5, color: S.ts, marginRight: 2 }}>Sem visita:</span>

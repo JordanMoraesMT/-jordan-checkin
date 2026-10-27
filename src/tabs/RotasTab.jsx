@@ -11,7 +11,7 @@ function RotasTab(props){
   return(<div>
     <div style={{maxWidth:320,marginBottom:16}}><SegTabs items={[["planejar","Planejar"],["realizado","Realizado"]]} value={modo} onChange={setModo} size={12.5}/></div>
     {modo==="planejar"
-      ?<PlanejarRota orgs={props.orgs||[]} plocs={props.plocs} visits={props.visits} rfv={props.rfv} user={props.user} token={props.token} onOpenFicha={props.onOpenFicha} pendMapa={props.pendMapa}/>
+      ?<PlanejarRota orgs={props.orgs||[]} plocs={props.plocs} visits={props.visits} rfv={props.rfv} user={props.user} token={props.token} onOpenFicha={props.onOpenFicha} pendMapa={props.pendMapa} prospDe={props.prospDe}/>
       :<RotasRealizado {...props}/>}
   </div>);
 }
