@@ -1,10 +1,9 @@
 // TeamCheck — aba PdvsTab
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { MapPin, Search, SlidersHorizontal, X } from "lucide-react";
-import { PG, toLocalDate, todayLocal, CATS, CANAIS, CC, USERS, SECTORS, BRANDS, geoEstimate, S, fD, fDS, hav, DASH, gps, roadKm, csv, fixMojibake, normBusca } from "../lib";
+import { PG, toLocalDate, todayLocal, CATS, CANAIS, CC, USERS, SECTORS, BRANDS, geoEstimate, S, fD, fDS, hav, DASH, gps, roadKm, csv, fixMojibake, normBusca, chaveMarca, marcasCadastro } from "../lib";
 import { OrgCard, MultiSelect, DateField } from "../components";
 
-const MARCAS_TODAS=["TRAMONTINA","PADO","Zagonel","Ruvolo","Santana","Festcolor","Plastilit","Hiper Têxtil"];
 function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,onOpenFicha,focusReq,rfv,excl,pendMapa,prospDe}){
   const[search,setSearch]=useState("");
   // Todos os filtros de seleção são multi-seleção (combináveis). Vazio = todos.
@@ -40,8 +39,8 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
     if(fRfv.length||fSr.length||fInd.length||fSit.length){list=list.filter(o=>{const r=rfvDe(o);
       if((fRfv.length||fSr.length)&&!r)return false;if(fRfv.length&&!fRfv.includes(r.rfv))return false;if(fSr.length&&!fSr.includes(r.status))return false;
       // v95: Indústria × "Situação na marca" (Compra / Prospecção). Sem indústria escolhida = qualquer marca.
-      if(fInd.length||fSit.length){const marcas=fInd.length?fInd:MARCAS_TODAS;
-        const compra=String(r?.inds||"").split(",").some(i=>marcas.includes(i.trim()));const pr=prospDe?prospDe(o).some(x=>marcas.includes(x.industria)):false;
+      if(fInd.length||fSit.length){const mk=new Set((fInd.length?fInd:marcasCadastro()).map(chaveMarca));
+        const compra=String(r?.inds||"").split(",").some(i=>mk.has(chaveMarca(i)));const pr=prospDe?prospDe(o).some(x=>mk.has(chaveMarca(x.industria))):false;
         const querC=!fSit.length||fSit.includes("Compra"),querP=!fSit.length||fSit.includes("Prospecção");
         if(!((querC&&compra)||(querP&&pr)))return false;}
       return true;});}
@@ -106,7 +105,7 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
             <MultiSelect values={canalSel} onChange={v=>{setCanalSel(v);setVc(PG);}} placeholder="Canal" allLabel="Todos" options={CANAIS}/>
             <MultiSelect values={fRfv} onChange={v=>{setFRfv(v);setVc(PG);}} placeholder="Classe RFV" allLabel="Todas" options={["Campeão","Leal","Em Crescimento","Em Risco","Inativo"]}/>
             <MultiSelect values={fSr} onChange={v=>{setFSr(v);setVc(PG);}} placeholder="Recompra" allLabel="Todos" options={["Em Dia","Momento de Recompra","Atrasado"]}/>
-            <MultiSelect values={fInd} onChange={v=>{setFInd(v);setVc(PG);}} placeholder="Indústria" allLabel="Todas" options={MARCAS_TODAS}/>
+            <MultiSelect values={fInd} onChange={v=>{setFInd(v);setVc(PG);}} placeholder="Indústria" allLabel="Todas" options={marcasCadastro()}/>
             <MultiSelect values={fSit} onChange={v=>{setFSit(v);setVc(PG);}} placeholder="Situação na marca" allLabel="Todas" options={["Compra","Prospecção"]}/>
           </div>
           <div>

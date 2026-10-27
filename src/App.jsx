@@ -1,7 +1,7 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight, Gauge } from "lucide-react";
-import { HOMES, API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, unificarCidades, temCoord } from "./lib";
+import { chaveMarca, HOMES, API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, unificarCidades, temCoord } from "./lib";
 import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 const AnaliseTab=lazy(()=>import("./tabs/AnaliseTab").then(m=>({default:m.AnaliseTab})));// v75/76: análise de visitas (vendedor vê sem valores)
@@ -93,7 +93,7 @@ export default function App(){
   const[prospMap,setProspMap]=useState({});
   const k14p=x=>String(x||"").replace(/\D/g,"").padStart(14,"0");
   const chaveProsp=o=>{const c=String(o?.cnpj||"").replace(/\D/g,"");return c?k14p(c):"org:"+o?.id;};
-  const prospDe=useMemo(()=>o=>{if(!o)return [];const c=String(o?.cnpj||"").replace(/\D/g,"");const a=prospMap[c?c.padStart(14,"0"):"org:"+o?.id]||[];if(!a.length)return a;const compra=new Set(String(rfvMap?.byCnpj?.[c.padStart(14,"0")]?.inds||"").split(",").map(x=>x.trim().toUpperCase()).filter(Boolean));return a.filter(x=>!compra.has(String(x.industria).toUpperCase()));},[prospMap,rfvMap]);
+  const prospDe=useMemo(()=>o=>{if(!o)return [];const c=String(o?.cnpj||"").replace(/\D/g,"");const a=prospMap[c?c.padStart(14,"0"):"org:"+o?.id]||[];if(!a.length)return a;const compra=new Set(String(rfvMap?.byCnpj?.[c.padStart(14,"0")]?.inds||"").split(",").map(chaveMarca).filter(Boolean));return a.filter(x=>!compra.has(chaveMarca(x.industria)));},[prospMap,rfvMap]);
   const marcasCompraDe=o=>String((o&&rfvMap?.byCnpj?.[k14p(o.cnpj)]?.inds)||"").split(",").map(x=>x.trim()).filter(Boolean);
   const loadProsp=async()=>{try{
       const fila=sL("jc:prospFila",[]);if(fila.length){const resto=[];for(const b of fila){try{const r=await fetch(`${DASH_CRM}/api/crm/prospeccoes`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(b)});if(!r.ok)resto.push(b);}catch{resto.push(b);}}sS("jc:prospFila",resto);}

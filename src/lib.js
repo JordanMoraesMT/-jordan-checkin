@@ -14,6 +14,12 @@ const crmFire=(token,path,body,method="POST")=>{try{fetch(DASH+path,{method,head
 let CATS=["Ativo","Prospecção","Perdido","Prospectar","Somente Visita","Inativo","Online - B2B"];
 let CARGOS=["Comprador","Conferente","Financeiro","Fiscal","Gerente de Vendas","Marketing","Proprietário","Recebimento","Repositor","Vendedor"]; // sobrescrito por loadCatalogos (catálogo "Cargos") // v28: default; sobrescrito por loadCatalogos(). Excluído fica fora do PDV
 let BRANDS=["TRAMONTINA","PADO","HIPER TEXTIL","PLASTILIT","FESTCOLOR","ZAGONEL","RUVOLO","SANTANA"];
+// v97: marcas para PROSPECÇÃO/filtros = cadastro de Indústrias (Configurações). As 8 com vendas mantêm o nome das vendas
+// (itens) para casar com "quem já compra"; marcas novas (ex.: TINTAS DACAR) entram com o nome do cadastro.
+const MARCAS_VENDAS=["TRAMONTINA","PADO","Zagonel","Plastilit","Ruvolo","Santana","Festcolor","Hiper Têxtil"];
+const chaveMarca=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/\s+/g," ").trim();
+function marcasCadastro(){const out=[],seen=new Set();const add=v=>{const k=chaveMarca(v);if(k&&!seen.has(k)){seen.add(k);out.push(v);}};
+  (BRANDS||[]).forEach(b=>add(MARCAS_VENDAS.find(m=>chaveMarca(m)===chaveMarca(b))||b));MARCAS_VENDAS.forEach(add);return out;}
 let SECTORS=[{id:4512997,n:"Açougues"},{id:4513651,n:"Agropecuarias"},{id:4513000,n:"Atacados"},{id:4512998,n:"Decoração"},{id:4513649,n:"Eletromoveis"},{id:4724740,n:"Embalagens"},{id:4513001,n:"Garden"},{id:4512999,n:"Mat. Construção"},{id:4513019,n:"Outros"},{id:4513020,n:"Papelaria"},{id:4513650,n:"Presenteiros"},{id:4512995,n:"Supermercados"},{id:4512996,n:"Variedades"}];
 let CARGOS_IND=["Coordenador","Promotor","Representante Comercial"]; // catálogo "cargo_industria"
 const SEG_INDUSTRIA="Indústria"; // empresas com este segmento usam CARGOS_IND, não CARGOS
@@ -244,4 +250,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(!checkoutEsquecido(v)&&v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export {_bk as chaveTexto, normBusca, contemBusca, cidadeCanon, unificarCidades, PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl, temCoord, checkoutEsquecido, saidaEfetiva, dedupVisitas };
+export {chaveMarca, marcasCadastro, _bk as chaveTexto, normBusca, contemBusca, cidadeCanon, unificarCidades, PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl, temCoord, checkoutEsquecido, saidaEfetiva, dedupVisitas };
