@@ -1,4 +1,4 @@
-// TeamCheck — Rotas › PLANEJAR (v68; v101 incluir/sugestões na tela do roteiro; v100 partida em hotel/outro local; v99 busca, ▲▼ ordem, abrir/atualizar roteiro da Agenda; v98 filtros de marca/UF/segmento/grupo + Google Maps por parada e no fim)
+// TeamCheck — Rotas › PLANEJAR (v68; v102 alerta visita recente/já agendado + confirmação; v101 incluir/sugestões na tela do roteiro; v100 partida em hotel/outro local; v99 busca, ▲▼ ordem, abrir/atualizar roteiro da Agenda; v98 filtros de marca/UF/segmento/grupo + Google Maps por parada e no fim)
 // Escolhe quem visitar (cidade, bairro, status, RFV, recompra, dias sem visita), prioriza,
 // e monta o roteiro na ORDEM MAIS CURTA (OSRM /trip — "caixeiro-viajante") a partir de casa
 // ou de onde você está. Mostra mapa, km, tempo, horário previsto de chegada, abre no Google Maps
@@ -7,7 +7,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Route, Navigation, Home, Crosshair, Hotel, MapPin, Plus, Sparkles, CalendarPlus, ArrowLeft, X, Check, ChevronUp, ChevronDown, Search, CalendarDays, Shuffle } from "lucide-react";
+import { Route, Navigation, Home, Crosshair, Hotel, MapPin, Plus, Sparkles, AlertTriangle, CalendarPlus, ArrowLeft, X, Check, ChevronUp, ChevronDown, Search, CalendarDays, Shuffle } from "lucide-react";
 import { S, CC, CATS, CANAIS, USERS, HOMES, OSRM, DASH, SECTORS, hav, gps, sL, sS, todayLocal, fD, fixMojibake, marcasCadastro, chaveMarca, contemBusca } from "../lib";
 import { MultiSelect, Kpi, DateField } from "../components";
 import { analisar, chaveArea, rotuloArea } from "../analiseVisitas.js";
@@ -190,6 +190,27 @@ function LocalModal({ atual, locais, onUsar, onRemover, onFechar }) {
   </div>, document.body);
 }
 
+// v102: confirmação antes de incluir cliente visitado há pouco (≤ 30 dias) ou já agendado em outra data
+const RECENTE_DIAS = 30;
+function ConfirmaModal({ itens, onIncluir, onDeixar }) {
+  const varios = itens.length > 1;
+  return createPortal(<div onMouseDown={e => { if (e.target === e.currentTarget) onDeixar(); }} style={{ position: "fixed", inset: 0, background: "rgba(4,10,18,.66)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+    <div role="dialog" aria-label="Confirmar inclusão" style={{ width: "100%", maxWidth: 480, maxHeight: "calc(100vh - 24px)", overflowY: "auto", background: "var(--card-solid)", border: `1px solid ${S.gold}66`, borderRadius: 16, padding: 16, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><AlertTriangle size={19} color={S.gold} /><span style={{ fontSize: 15, fontWeight: 800, color: S.txt }}>{varios ? `${itens.length} clientes com alerta` : "Confirmar inclusão"}</span></div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14 }}>
+        {itens.map(x => <div key={x.id} style={{ border: `1px solid ${S.brd}`, borderRadius: 10, padding: "9px 11px" }}>
+          <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: S.txt }}>{x.nome}</p>
+          {x.alertas.map((a, i) => <p key={i} style={{ margin: "3px 0 0", fontSize: 12, color: tom(a.cor) }}>{a.tipo === "visita" ? "🕑 " : "📅 "}{a.longo}</p>)}
+        </div>)}
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+        <button onClick={onDeixar} style={{ padding: "10px 14px", fontSize: 13, borderRadius: 10, border: `1px solid ${S.inpBdr}`, background: S.inp, color: S.t2, cursor: "pointer" }}>{varios ? "Deixar de fora" : "Cancelar"}</button>
+        <button onClick={onIncluir} autoFocus style={{ padding: "10px 16px", fontSize: 13, fontWeight: 800, borderRadius: 10, border: "none", background: S.gold, color: "#fff", cursor: "pointer" }}>{varios ? "Incluir todos mesmo assim" : "Incluir mesmo assim"}</button>
+      </div>
+    </div>
+  </div>, document.body);
+}
+
 const grupoDe = o => fixMojibake(String(o.grupo || "").replace("Grupo: ", "").trim());
 
 function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pendMapa, prospDe }) {
@@ -236,6 +257,23 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   const [sgOrd, setSgOrd] = useState("encaixe");
   const [sgVc, setSgVc] = useState(8);
   const [sgMsg, setSgMsg] = useState("");
+  // v102: visitas já agendadas (abertas, de hoje em diante, de toda a equipe) → alerta ao incluir
+  const [agendados, setAgendados] = useState({});
+  const [confirma, setConfirma] = useState(null); // { itens, ok }
+  const carregarAgendados = useCallback(async () => {
+    if (!token) return;
+    try {
+      const hoje = todayLocal();
+      const r = await fetch(`${DASH}/api/crm/tarefas?desde=${hoje}&limit=3000`, { headers: { "X-Session": token }, cache: "no-store" });
+      const j = await r.json(); if (!j?.ok) return;
+      const m = {};
+      (j.tarefas || []).forEach(t => { if (t.done || String(t.type || "").toUpperCase() !== "VISITA" || !t.orgId) return; const d = String(t.due || "").slice(0, 10); if (!d || d < hoje) return;
+        (m[t.orgId] = m[t.orgId] || []).push({ dia: d, hora: (String(t.due).match(/T(\d{2}:\d{2})/) || [])[1] || "", user: t.userName || "", roteiro: ehRoteiro(t), d1: t.d1_id }); });
+      Object.values(m).forEach(a => a.sort((x, y) => (x.dia + x.hora).localeCompare(y.dia + y.hora)));
+      setAgendados(m);
+    } catch {}
+  }, [token]);
+  useEffect(() => { carregarAgendados(); }, [carregarAgendados]);
   const [plano, setPlano] = useState(p0.plano || null);
   const [lo, setLo] = useState(false);
   const [msg, setMsg] = useState("");
@@ -250,7 +288,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
 
   const rfvDe = useCallback(o => { if (!rfv) return null; const k = (o.cnpj || "").replace(/\D/g, ""); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; }, [rfv]);
   // Última visita da EQUIPE (qualquer usuário) — a mesma que aparece no cartão do PDV
-  const ultVisita = useMemo(() => { const m = {}; (visits || []).forEach(v => { if (v.checkoutTime && (!m[v.orgId] || v.checkinTime > m[v.orgId])) m[v.orgId] = v.checkinTime; }); return m; }, [visits]);
+  const [ultVisita, ultQuem] = useMemo(() => { const m = {}, q = {}; (visits || []).forEach(v => { if (v.checkoutTime && (!m[v.orgId] || v.checkinTime > m[v.orgId])) { m[v.orgId] = v.checkinTime; q[v.orgId] = v.userName || ""; } }); return [m, q]; }, [visits]);
 
   const casa = HOMES[user?.id] || null;
   const partida = partidaTipo === "aqui" && aqui ? { ...aqui, label: "Onde estou" } : partidaTipo === "outro" && outro ? { lat: outro.lat, lng: outro.lng, label: outro.label } : casa ? { ...casa, label: casa.label || "Casa" } : aqui ? { ...aqui, label: "Onde estou" } : null;
@@ -294,6 +332,25 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
     return { id: o.id, o, nome: o.nickname || o.name, cidade: cidadeDe(o), bairro: fixMojibake(o.addr?.district || ""), rfv: r, dias: d, uv, lat: g?.lat, lng: g?.lng, geoEst: !!g?.geo, temGps: g?.lat != null && g?.lng != null, prio: pr, mot, ver, pend };
   }, [rfvDe, ultVisita, plocs, vereditos, pendMapa]);
 
+  // v102: alertas do cliente — visita recente (≤ 30 dias, qualquer pessoa) e visita já agendada (exceto no próprio roteiro aberto)
+  const prim = n => String(n || "").split(" ")[0];
+  const alertasDe = useCallback(id => {
+    const out = []; const d = diasDesde(ultVisita[id]);
+    if (d != null && d <= RECENTE_DIAS) { const q = ultQuem[id]; out.push({ tipo: "visita", cor: S.gold, curto: `Visitado ${quando(d)}`, longo: `Visitado ${quando(d)}${q ? ` por ${prim(q)}` : ""} (menos de ${RECENTE_DIAS} dias).` }); }
+    const eu = String(user?.name || "").toLowerCase();
+    const ag = (agendados[id] || []).filter(a => !(plano?.agenda?.dia === a.dia && a.roteiro && String(a.user).toLowerCase() === eu && plano.ids.includes(id)));
+    if (ag.length) { const a = ag[0]; out.push({ tipo: "agenda", cor: S.purple, curto: `Agendado ${ddmm(a.dia)}${ag.length > 1 ? ` +${ag.length - 1}` : ""}`, longo: `Já agendado: ${ag.map(a => `${ddmm(a.dia)}${a.hora ? " " + a.hora : ""} · ${prim(a.user)}${a.roteiro ? " (roteiro)" : ""}`).join("; ")}.` }); }
+    return out;
+  }, [ultVisita, ultQuem, agendados, plano, user?.name]);
+  // Pede confirmação quando algum cliente tem alerta; os sem alerta seguem direto
+  const comConfirmacao = (xs, fazer) => {
+    const al = xs.map(x => ({ ...x, alertas: alertasDe(x.id) }));
+    const ok = al.filter(x => !x.alertas.length), av = al.filter(x => x.alertas.length);
+    if (!av.length) { fazer(xs); return; }
+    if (ok.length) fazer(ok);
+    setConfirma({ itens: av, ok: () => { setConfirma(null); fazer(av); } });
+  };
+
   // Lista filtrada e priorizada
   const lista = useMemo(() => {
     let l = orgs;
@@ -328,8 +385,9 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   const selGps = selLista.filter(x => x.temGps);
   const selSemGps = selLista.length - selGps.length;
 
-  const tog = id => setSel(s => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
-  const selTodos = () => setSel(s => { const n = new Set(s); comGps.slice(0, MAX_PARADAS).forEach(x => n.add(x.id)); return n; });
+  const addSel = xs => setSel(s => { const n = new Set(s); xs.forEach(x => n.add(x.id)); return n; });
+  const tog = x => { if (sel.has(x.id)) { setSel(s => { const n = new Set(s); n.delete(x.id); return n; }); return; } comConfirmacao([x], addSel); };
+  const selTodos = () => { const novos = comGps.slice(0, MAX_PARADAS).filter(x => !sel.has(x.id)); if (novos.length) comConfirmacao(novos, addSel); };
   const limparFiltros = () => { setCid([]); setBai([]); setCat([]); setFRfv([]); setFSr([]); setCanal([]); setUf([]); setSeg([]); setGrp([]); setFInd([]); setFSit([]); setBusca(""); setDias("todos"); };
 
   const usarLocal = (l, salvar) => {
@@ -402,7 +460,8 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
     setPlano(p => ({ ...p, ids: r.ordem.map(x => x.id), legs: r.legs, geo: r.geo, estimado: r.estimado, manual: false, sujo: !!p.agenda })); setLo(false);
   };
   // v101: incluir um cliente no roteiro aberto — encaixa no ponto de menor desvio, sem mexer na ordem das demais
-  const incluir = async x => {
+  const incluir = x => { if (!plano || plano.ids.includes(x.id) || !x.temGps) return; comConfirmacao([x], xs => incluirJa(xs[0])); };
+  const incluirJa = async x => {
     if (!plano || plano.ids.includes(x.id) || !x.temGps) return;
     if (plano.ids.length >= MAX_PARADAS) { setSgMsg(`Máximo de ${MAX_PARADAS} paradas por roteiro.`); return; }
     const pt = id => ({ id, lat: plocs[id].lat, lng: plocs[id].lng });
@@ -513,7 +572,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
         if (r.ok) ok++;
       } catch {}
     }
-    if (ok) setPlano(pl => pl ? { ...pl, agenda: { dia }, sujo: ok !== paradas.length } : pl);
+    if (ok) { setPlano(pl => pl ? { ...pl, agenda: { dia }, sujo: ok !== paradas.length } : pl); carregarAgendados(); }
     setLo(false); setMsg(ok === paradas.length ? `✓ ${antigas.length ? `Roteiro de ${ddmm(dia)} atualizado na Agenda: ${ok} visita(s)` : `${ok} visita(s) lançadas na Agenda`}${feitas.size ? ` (${feitas.size} já concluída(s) mantida(s))` : ""}.` : `Lancei ${ok} de ${paradas.length}. Toque de novo para tentar o restante.`);
   };
 
@@ -525,6 +584,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   if (plano && roteiro && !editar) {
     const ganho = plano.ganho;
     return (<div>
+      {confirma && <ConfirmaModal itens={confirma.itens} onIncluir={confirma.ok} onDeixar={() => setConfirma(null)} />}
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
         <button onClick={() => { setSel(new Set(plano.ids)); setEditar(true); setMsg(""); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, borderRadius: 9, border: `1px solid ${S.inpBdr}`, background: S.inp, color: S.t2, cursor: "pointer" }}><ArrowLeft size={15} /> Editar seleção</button>
         <button onClick={() => { setPlano(null); setSel(new Set()); setMsg(""); }} style={{ padding: "8px 12px", fontSize: 12.5, borderRadius: 9, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.ts, cursor: "pointer" }}>Novo roteiro</button>
@@ -612,6 +672,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
                 {r?.rfv && <Pill t={r.rfv} cor={RFV_COR[r.rfv] || S.ts} />}
                 {x.ver && <Pill t={x.ver.v} cor={VER_COR[x.ver.v] || S.ts} />}
                 {x.pend && <Pill t={x.pend.length === 1 ? `Pendência: ${x.pend[0]}` : `${x.pend.length} pendências`} cor="#C8964E" />}
+                {alertasDe(x.id).map(a => <Pill key={a.tipo} t={`⚠ ${a.curto}`} cor={a.cor} />)}
                 {x.mot.slice(0, 2).map(([t, c]) => <Pill key={t} t={t} cor={c} />)}
               </div>
               <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.ts }}>{[x.bairro, x.cidade].filter(Boolean).join(" · ")}{x.dias != null ? ` · última visita ${quando(x.dias)}` : " · nunca visitado"}</p>
@@ -644,6 +705,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
     {outro && <button onClick={() => setLocalAberto(true)} title="Escolher outro local" aria-label="Escolher outro local" style={{ ...chip(false), padding: "6px 8px" }}>⋯</button>}
   </>;
   return (<div>
+    {confirma && <ConfirmaModal itens={confirma.itens} onIncluir={confirma.ok} onDeixar={() => setConfirma(null)} />}
     {localAberto && <LocalModal atual={null} locais={locais} onUsar={usarLocal} onRemover={removerLocal} onFechar={() => setLocalAberto(false)} />}
     {editar && plano && <div style={{ ...card, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", borderColor: S.pri + "88", background: S.pri + "10" }}>
       <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: S.t2 }}>✏️ <b>Editando o roteiro</b>{plano.agenda?.dia ? ` de ${ddmm(plano.agenda.dia)}` : ""} ({plano.ids.length} paradas). Marque ou desmarque clientes e toque em <b>Atualizar roteiro</b>.{plano.manual ? " A sua ordem é mantida; os novos entram no melhor ponto." : ""}</span>
@@ -706,7 +768,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       {lista.slice(0, vc).map(x => {
         const on = sel.has(x.id); const r = x.rfv;
-        return (<div key={x.id} onClick={() => x.temGps && tog(x.id)} style={{ display: "flex", alignItems: "center", gap: 11, background: on ? S.pri + "12" : S.card, border: `1px solid ${on ? S.pri + "88" : S.brd}`, borderRadius: 12, padding: "10px 12px", cursor: x.temGps ? "pointer" : "default", opacity: x.temGps ? 1 : .62 }}>
+        return (<div key={x.id} onClick={() => x.temGps && tog(x)} style={{ display: "flex", alignItems: "center", gap: 11, background: on ? S.pri + "12" : S.card, border: `1px solid ${on ? S.pri + "88" : S.brd}`, borderRadius: 12, padding: "10px 12px", cursor: x.temGps ? "pointer" : "default", opacity: x.temGps ? 1 : .62 }}>
           <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, border: `1.5px solid ${on ? S.pri : S.inpBdr}`, background: on ? S.pri : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <Check size={13} color="#fff" strokeWidth={3} />}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -715,6 +777,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
               {r?.rfv && <Pill t={r.rfv} cor={RFV_COR[r.rfv] || S.ts} />}
               {x.ver && <Pill t={x.ver.v === "Aguardar" && x.ver.aPartir ? `Aguardar · ${x.ver.aPartir.slice(8, 10)}/${x.ver.aPartir.slice(5, 7)}` : x.ver.v} cor={VER_COR[x.ver.v] || S.ts} />}
               {x.pend && <Pill t={x.pend.length === 1 ? `Pendência: ${x.pend[0]}` : `${x.pend.length} pendências`} cor="#C8964E" />}
+              {!on && alertasDe(x.id).map(a => <Pill key={a.tipo} t={`⚠ ${a.curto}`} cor={a.cor} />)}
               {x.mot.map(([t, c]) => <Pill key={t} t={t} cor={c} />)}
             </div>
             <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.ts }}>{[x.bairro, x.cidade].filter(Boolean).join(" · ")}{x.dist != null && isFinite(x.dist) ? ` · ${fmtKm(x.dist)} km` : ""}</p>
