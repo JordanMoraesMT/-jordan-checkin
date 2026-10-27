@@ -176,6 +176,7 @@ const RFV_ORDEM = { "Campeão": 0, "Leal": 1, "Em Crescimento": 2, "Em Risco": 3
 // v92: Cuiabá e Várzea Grande contam como UMA área (conurbação)
 const AREA_CID = { "cuiaba": "cuiaba+vg", "varzea grande": "cuiaba+vg" };
 const chaveCid = s => { const k = String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[-/.'’´`]/g, " ").replace(/\s+/g, " ").trim(); return AREA_CID[k] || k; };
+export const chaveArea = c => chaveCid(c);
 export const rotuloArea = c => chaveCid(c) === "cuiaba+vg" ? "Cuiabá/VG" : c;
 export function sugerirProxima({ origem, orgs, plocs, visits, rfv, excluirId, cidade = null, raioKm = 4, hoje, prem = PREMISSAS_PADRAO, vereditos = null, max = 5 }) {
   if (!origem || origem.lat == null) return [];

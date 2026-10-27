@@ -1,11 +1,11 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight, Gauge } from "lucide-react";
-import { API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, unificarCidades, temCoord } from "./lib";
+import { HOMES, API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, unificarCidades, temCoord } from "./lib";
 import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 const AnaliseTab=lazy(()=>import("./tabs/AnaliseTab").then(m=>({default:m.AnaliseTab})));// v75/76: análise de visitas (vendedor vê sem valores)
-import { sugerirProxima, analisar, rotuloArea } from "./analiseVisitas.js";
+import { sugerirProxima, analisar, rotuloArea, chaveArea } from "./analiseVisitas.js";
 import { carregarBase, carregarPremissas } from "./analiseDados.js";
 const RelatorioTab=lazy(()=>import("./tabs/RelatorioTab").then(m=>({default:m.RelatorioTab})));// recharts só carrega ao abrir o Relatório
 import { EquipeTab } from "./tabs/EquipeTab";
@@ -241,6 +241,16 @@ export default function App(){
   useEffect(()=>{if(token&&user)carregaPend();},[token,user,crmBump]);// eslint-disable-line
   // v79: veredito da análise para o usuário (balão "perto daqui" e cartão da semana) — carrega em segundo plano
   const[vereditos,setVereditos]=useState(null);const[semana,setSemana]=useState(null);const[atrasados,setAtrasados]=useState(null);
+  // v96: o cartão da semana mostra a CIDADE onde o vendedor está (Cuiabá+VG juntas): cidade do último check-out de hoje
+  // (inclui o escritório); sem check-out hoje, a cidade do cliente mais próximo da casa do vendedor. Botão para ver todas.
+  const[todasCid,setTodasCid]=useState(false);
+  const cidadeAtual=useMemo(()=>{try{const hoje=todayLocal();const meus=(visits||[]).filter(v=>v.checkoutTime&&toLocalDate(v.checkoutTime)===hoje&&(!v.userName||v.userName===user?.name)).sort((a,b)=>String(b.checkoutTime).localeCompare(String(a.checkoutTime)));
+    const o=meus.length?(allOrgs||[]).find(x=>x.id===meus[0].orgId):null;const c=o?.addr?.city_name||o?.addr?.city;if(c)return c;
+    const h=HOMES[user?.id];if(!h)return null;let best=null,bd=1e9;for(const x of allOrgs||[]){const g=plocs[x.id];if(!g||g.lat==null||g.geo)continue;const d=hav(h.lat,h.lng,+g.lat,+g.lng);if(d<bd){bd=d;best=x;}}return best?.addr?.city_name||best?.addr?.city||null;}catch{return null;}},[visits,allOrgs,plocs,user?.id,user?.name]);
+  const areaK=cidadeAtual?chaveArea(cidadeAtual):null;
+  const naArea=l=>!areaK||chaveArea(l.cidade)===areaK;
+  const atrasadosV=(atrasados||[]).filter(l=>todasCid||naArea(l));const semanaV=(semana||[]).filter(l=>todasCid||naArea(l));
+  const foraArea=areaK&&!todasCid?((atrasados||[]).length+(semana||[]).length)-(atrasadosV.length+semanaV.length):0;
   const semanaChave=(()=>{const d=new Date();const dia=(d.getDay()+6)%7;d.setDate(d.getDate()-dia);return d.toISOString().slice(0,10);})();
   const[semanaFechada,setSemanaFechada]=useState(()=>sL("jc:semanaFechada","")===semanaChave);
   useEffect(()=>{if(!token||!user||!allOrgs.length||!rfvMap)return;let vivo=true;const t=setTimeout(async()=>{try{
@@ -417,21 +427,24 @@ export default function App(){
           <span style={{fontSize:13,fontWeight:600,color:S.gold,whiteSpace:"nowrap"}}>Ir ao cliente</span>
         </button>}
       </section>}
-      {tab==="pdvs"&&!semanaFechada&&((semana&&semana.length>0)||(atrasados&&atrasados.length>0))&&<section aria-label="Valem visita esta semana" style={{border:`1px solid ${atrasados&&atrasados.length?S.gold+"88":S.brd}`,borderRadius:10,background:S.card,padding:"12px 14px",marginBottom:12}}>
+      {tab==="pdvs"&&!semanaFechada&&((semana&&semana.length>0)||(atrasados&&atrasados.length>0))&&<section aria-label="Valem visita esta semana" style={{border:`1px solid ${atrasadosV.length?S.gold+"88":S.brd}`,borderRadius:10,background:S.card,padding:"12px 14px",marginBottom:12}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
           <div style={{flex:1,minWidth:0}}>
-            {atrasados&&atrasados.length>0&&<div style={{marginBottom:semana&&semana.length?10:0}}>
-              <p style={{margin:0,fontSize:15,fontWeight:700,color:S.gold}}>Clientes importantes sem visita: {atrasados.length}</p>
-              <p style={{margin:"3px 0 0",fontSize:13,color:S.t2,lineHeight:1.45}}>{atrasados.slice(0,5).map(l=>`${l.nome} (${l.dEq==null?"nunca visitado":l.dEq+"d"})`).join(" · ")}{atrasados.length>5?` e mais ${atrasados.length-5}`:""}</p>
-              <p style={{margin:"3px 0 0",fontSize:11.5,color:S.ts}}>Classe A ou B acima do intervalo máximo ({[...new Map(atrasados.map(l=>[l.classe,l.max])).entries()].sort().map(([c,m])=>`${c}: ${m} dias`).join(" · ")}), contando visitas de toda a equipe.</p>
+            {areaK&&<p style={{margin:"0 0 6px",fontSize:12,color:S.ts}}>{todasCid?"Todas as cidades":`Em ${rotuloArea(cidadeAtual)} — onde você está agora`}</p>}
+            {atrasadosV.length===0&&semanaV.length===0&&<p style={{margin:0,fontSize:14,color:S.t2}}>Nada pendente em {rotuloArea(cidadeAtual)} esta semana.</p>}
+            {atrasadosV.length>0&&<div style={{marginBottom:semanaV.length?10:0}}>
+              <p style={{margin:0,fontSize:15,fontWeight:700,color:S.gold}}>Clientes importantes sem visita: {atrasadosV.length}</p>
+              <p style={{margin:"3px 0 0",fontSize:13,color:S.t2,lineHeight:1.45}}>{atrasadosV.slice(0,5).map(l=>`${l.nome} (${l.dEq==null?"nunca visitado":l.dEq+"d"})${todasCid?` · ${l.cidade}`:""}`).join(" · ")}{atrasadosV.length>5?` e mais ${atrasadosV.length-5}`:""}</p>
+              <p style={{margin:"3px 0 0",fontSize:11.5,color:S.ts}}>Classe A ou B acima do intervalo máximo ({[...new Map(atrasadosV.map(l=>[l.classe,l.max])).entries()].sort().map(([c,m])=>`${c}: ${m} dias`).join(" · ")}), contando visitas de toda a equipe.</p>
             </div>}
-            {semana&&semana.length>0&&<><p style={{margin:0,fontSize:15,fontWeight:700,color:S.txt}}>Valem visita esta semana: {semana.length}</p>
-            <p style={{margin:"3px 0 0",fontSize:13,color:S.t2,lineHeight:1.45}}>{semana.slice(0,5).map(l=>l.nome).join(" · ")}{semana.length>5?` e mais ${semana.length-5}`:""}</p></>}
+            {semanaV.length>0&&<><p style={{margin:0,fontSize:15,fontWeight:700,color:S.txt}}>Valem visita esta semana: {semanaV.length}</p>
+            <p style={{margin:"3px 0 0",fontSize:13,color:S.t2,lineHeight:1.45}}>{semanaV.slice(0,5).map(l=>todasCid?`${l.nome} · ${l.cidade}`:l.nome).join(" · ")}{semanaV.length>5?` e mais ${semanaV.length-5}`:""}</p></>}
           </div>
           <button onClick={()=>{sS("jc:semanaFechada",semanaChave);setSemanaFechada(true);}} aria-label="Dispensar esta semana" style={{width:36,height:36,border:"none",background:"transparent",color:S.ts,fontSize:18,flexShrink:0}}>×</button>
         </div>
         <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
-          <button onClick={()=>{const K=`jc:rotaPlan:${user?.id||"x"}`;const p=sL(K,{});const ids=[...new Set([...(atrasados||[]),...(semana||[])].filter(l=>plocs[l.id]).map(l=>l.id))].slice(0,30);sS(K,{...p,owner:[user.name],sel:ids,plano:null});try{localStorage.setItem("jc:rotasModo","planejar");}catch{}setTab("rotas");}} style={{height:40,padding:"0 14px",fontSize:13.5,fontWeight:600,background:S.pri,border:"none",color:"#fff"}}>Planejar rota com eles</button>
+          <button onClick={()=>{const K=`jc:rotaPlan:${user?.id||"x"}`;const p=sL(K,{});const ids=[...new Set([...atrasadosV,...semanaV].filter(l=>plocs[l.id]).map(l=>l.id))].slice(0,30);sS(K,{...p,owner:[user.name],sel:ids,plano:null});try{localStorage.setItem("jc:rotasModo","planejar");}catch{}setTab("rotas");}} style={{height:40,padding:"0 14px",fontSize:13.5,fontWeight:600,background:S.pri,border:"none",color:"#fff"}}>Planejar rota com eles</button>
+          {areaK&&(foraArea>0||todasCid)&&<button onClick={()=>setTodasCid(v=>!v)} style={{height:40,padding:"0 14px",fontSize:13.5}}>{todasCid?`Só ${rotuloArea(cidadeAtual)}`:`Outras cidades (${foraArea})`}</button>}
           <button onClick={()=>setTab("analise")} style={{height:40,padding:"0 14px",fontSize:13.5}}>Ver a lista</button>
         </div>
       </section>}
