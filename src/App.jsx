@@ -89,6 +89,23 @@ export default function App(){
   const[rfvMap,setRfvMap]=useState(null);
   const loadRfv=async()=>{try{const r=await fetch(`${DASH_CRM}/api/crm/rfv`,{headers:{"X-Session":token}});const d=await r.json();if(d&&d.ok&&d.clientes){const byOrg={};for(const k in d.clientes){const x=d.clientes[k];if(x.org_id)byOrg[x.org_id]=x;}setRfvMap({byCnpj:d.clientes,byOrg,ref:d.ref});}}catch(e){console.warn("rfv:",e);}};
   useEffect(()=>{if(token&&user)loadRfv();},[token,user]);
+  // ─── v93: PROSPECÇÃO por marca (D1 crm_prospeccao, Dashboard v337). Fila local se a gravação falhar. ───
+  const[prospMap,setProspMap]=useState({});
+  const k14p=x=>String(x||"").replace(/\D/g,"").padStart(14,"0");
+  const chaveProsp=o=>{const c=String(o?.cnpj||"").replace(/\D/g,"");return c?k14p(c):"org:"+o?.id;};
+  const prospDe=useMemo(()=>o=>{if(!o)return [];const c=String(o?.cnpj||"").replace(/\D/g,"");const a=prospMap[c?c.padStart(14,"0"):"org:"+o?.id]||[];if(!a.length)return a;const compra=new Set(String(rfvMap?.byCnpj?.[c.padStart(14,"0")]?.inds||"").split(",").map(x=>x.trim().toUpperCase()).filter(Boolean));return a.filter(x=>!compra.has(String(x.industria).toUpperCase()));},[prospMap,rfvMap]);
+  const marcasCompraDe=o=>String((o&&rfvMap?.byCnpj?.[k14p(o.cnpj)]?.inds)||"").split(",").map(x=>x.trim()).filter(Boolean);
+  const loadProsp=async()=>{try{
+      const fila=sL("jc:prospFila",[]);if(fila.length){const resto=[];for(const b of fila){try{const r=await fetch(`${DASH_CRM}/api/crm/prospeccoes`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(b)});if(!r.ok)resto.push(b);}catch{resto.push(b);}}sS("jc:prospFila",resto);}
+      const r=await fetch(`${DASH_CRM}/api/crm/prospeccoes`,{headers:{"X-Session":token},cache:"no-store"});if(!r.ok)return;const d=await r.json();if(!d||!d.ok)return;
+      const m={};(d.prospeccoes||[]).forEach(x=>{(m[x.chave]=m[x.chave]||[]).push(x);});setProspMap(m);}catch(e){console.warn("prospecção:",e);}};
+  useEffect(()=>{if(token&&user)loadProsp();},[token,user]);
+  const gravaProsp=(o,marcas)=>{if(!o||!marcas||!marcas.length)return;const cn=String(o.cnpj||"").replace(/\D/g,"")||null;
+    const body={org_id:o.id||null,cnpj:cn,industrias:marcas,user_id:user?.id||null,user_nome:user?.name||null};
+    const k=chaveProsp(o);const agora=new Date().toISOString().replace("T"," ").slice(0,19);
+    setProspMap(p=>{const a=(p[k]||[]).filter(x=>!marcas.includes(x.industria));return{...p,[k]:[...marcas.map(m=>({chave:k,industria:m,user_nome:user?.name||"",atualizado_em:agora})),...a]};});
+    fetch(`${DASH_CRM}/api/crm/prospeccoes`,{method:"POST",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify(body)})
+      .then(r=>{if(!r.ok)throw new Error(r.status);}).catch(()=>{sS("jc:prospFila",[...sL("jc:prospFila",[]),body]);});};
   const[syncStatus,setSyncStatus]=useState("");
   const syncPull=async()=>{try{
     const r=await fetch(`${API}?sync=${user.id}`);const d=await r.json();
@@ -247,8 +264,9 @@ export default function App(){
   const quickAction=(org)=>{if(!org)return;const cn=(org.cnpj||"").replace(/\D/g,"");setRemTarget({org,pend:[],lo:true});
     pendenciasDe(token,org.id,cn).then(pl=>setRemTarget(t=>t&&t.org.id===org.id?{...t,pend:pl,lo:false}:t)).catch(()=>setRemTarget(t=>t?{...t,lo:false}:t));};
   const remoteSave=(note,type,next,sale,extra)=>{const t=remTarget;if(!t)return;const o=t.org;const cn=(o.cnpj||"").replace(/\D/g,"")||null;const nome=o.nickname||o.name;
-    const resolv=(extra?.resolvidas)||[],novas=(extra?.novas)||[];const quem={user_id:user?.id||null,user_nome:user?.name||null};
-    crmLog({org_id:o.id,cnpj:cn,org_nome:nome,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:"")+resolv.map(x=>`\n✓ Pendência resolvida: ${x.txt}`).join(""),origem:"teamcheck",...quem});
+    const resolv=(extra?.resolvidas)||[],novas=(extra?.novas)||[],prosp=(extra?.prosp)||[];const quem={user_id:user?.id||null,user_nome:user?.name||null};
+    if(prosp.length)gravaProsp(o,prosp);
+    crmLog({org_id:o.id,cnpj:cn,org_nome:nome,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:"")+resolv.map(x=>`\n✓ Pendência resolvida: ${x.txt}`).join("")+(prosp.length?`\n🎯 Prospecção: ${prosp.join(", ")}`:""),origem:"teamcheck",...quem});
     novas.forEach(tx=>crmLog({org_id:o.id,cnpj:cn,org_nome:nome,tipo:"VISITA",texto:PEND_PREFIXO+tx,origem:"tarefa",...quem}));
     resolv.forEach(x=>{try{fetch(`${DASH_CRM}/api/crm/tarefa-concluir`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({id:x.id})}).catch(()=>{});}catch{}});
     if(next?.nextDate&&next?.nextDesc){const nt=(next.nextType||"LIGACAO").toUpperCase();crmLog({org_id:o.id,cnpj:cn,org_nome:nome,tipo:nt,texto:next.nextDesc,origem:"tarefa",due_em:`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`,...quem});}
@@ -269,8 +287,9 @@ export default function App(){
     // SEMPRE grava (D1 + KV). A visita conta no relatório; "divergent" é só um selo de conferência.
     done.synced=true;
     const oRef=(allOrgs||[]).find(o=>o.id===active.orgId);const cnpjRef=oRef?(oRef.cnpj||"").replace(/\D/g,""):null;
-    const resolv=(extra?.resolvidas)||[],novas=(extra?.novas)||[];
-    crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:"")+resolv.map(x=>`\n✓ Pendência resolvida: ${x.txt}`).join(""),lat:g?.lat,lng:g?.lng,origem:"checkout",checkin_em:active.checkinTime||null});
+    const resolv=(extra?.resolvidas)||[],novas=(extra?.novas)||[],prosp=(extra?.prosp)||[];
+    if(prosp.length)gravaProsp(oRef||{id:active.orgId,cnpj:cnpjRef},prosp);
+    crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:type,texto:note+(sale?.brand&&sale?.value?`\n[Venda ${sale.brand} R$ ${sale.value}]`:"")+resolv.map(x=>`\n✓ Pendência resolvida: ${x.txt}`).join("")+(prosp.length?`\n🎯 Prospecção: ${prosp.join(", ")}`:""),lat:g?.lat,lng:g?.lng,origem:"checkout",checkin_em:active.checkinTime||null});
     novas.forEach(t=>crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:"VISITA",texto:PEND_PREFIXO+t,origem:"tarefa"}));
     resolv.forEach(x=>{try{fetch(`${DASH_CRM}/api/crm/tarefa-concluir`,{method:"PUT",headers:{"X-Session":token,"Content-Type":"application/json"},body:JSON.stringify({id:x.id})}).catch(()=>{});}catch{}});
     if(next?.nextDate&&next?.nextDesc){const nt=(next.nextType||"VISITA").toUpperCase();const tipoOk=["VISITA","LIGACAO","EMAIL","REUNIAO","WHATSAPP","PROPOSTA","NOTA"].includes(nt)?nt:"VISITA";crmLog({org_id:active.orgId,cnpj:cnpjRef,org_nome:done.orgName,tipo:tipoOk,texto:next.nextDesc,origem:"tarefa",due_em:`${next.nextDate}T${next.nextTime||"09:00"}:00-04:00`});}
@@ -422,8 +441,8 @@ export default function App(){
 
       {canCloseRoute&&tab!=="config"&&<div style={{background:S.acc+"18",border:`1px solid ${S.acc}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.acc,margin:"0 0 8px"}}>{todayVisits.length} visita(s) hoje — fechar o roteiro?</p><button onClick={()=>setShowEndDay(true)} style={{width:"100%",padding:10,fontSize:13,background:S.acc,border:"none",fontWeight:600,borderRadius:8,color:"#fff"}}>Fechar roteiro do dia</button></div>}
 
-      <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}} focusReq={focusReq} rfv={rfvMap} excl={exclOrgs} pendMapa={pendMapa}/>
-      <CrmTab visible={tab.startsWith("crm")} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs} pessoasQ={pessoaQ0} onRemoto={quickAction}/>
+      <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}} focusReq={focusReq} rfv={rfvMap} excl={exclOrgs} pendMapa={pendMapa} prospDe={prospDe}/>
+      <CrmTab visible={tab.startsWith("crm")} prospDe={prospDe} onProspFim={x=>{fetch(`${DASH_CRM}/api/crm/prospeccoes?id=${x.id}`,{method:"DELETE",headers:{"X-Session":token}}).catch(()=>{});setProspMap(p=>{const n={...p};n[x.chave]=(n[x.chave]||[]).filter(y=>y.id!==x.id);return n;});}} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs} pessoasQ={pessoaQ0} onRemoto={quickAction}/>
       <Suspense fallback={null}>{mapaLigado&&<MapaTab visible={tab==="mapa"} orgs={orgs} plocs={plocs} user={user} rfv={rfvMap} excl={exclOrgs} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}</Suspense>
       {tab==="rotas"&&<RotasTab sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs} orgs={orgs} rfv={rfvMap} token={token} pendMapa={pendMapa} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}
       {tab==="analise"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando análise…</p>}><AnaliseTab token={token} allOrgs={allOrgs} rfv={rfvMap} user={user} isAdmin={isAdmin} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/></Suspense>}
@@ -455,7 +474,7 @@ export default function App(){
     {/* BOTTOM NAV — só no celular (agilidade de campo); no desktop a navegação é a sidebar */}
     {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=>{const act=navAtivo(t.id);return <button key={t.id} onClick={()=>{if(t.id==="mapa")setMapaLigado(true);setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:act?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:act?700:400,color:act?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={act?2.2:1.6}/>{t.l}</button>;})}</div></div>}
 
-    {coTarget&&<NoteModal token={token} org={coTarget} pendencias={active&&coTarget.id===active.orgId?pendAtivas:[]} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
+    {coTarget&&<NoteModal token={token} marcasCompra={marcasCompraDe((allOrgs||[]).find(o=>o.id===coTarget.id)||coTarget)} marcasProsp={prospDe((allOrgs||[]).find(o=>o.id===coTarget.id)||coTarget).map(x=>x.industria)} org={coTarget} pendencias={active&&coTarget.id===active.orgId?pendAtivas:[]} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
     {sugestao&&sugestao.itens[sugestao.i]&&(()=>{const x=sugestao.itens[sugestao.i];const o=x.org;const g=plocs[o.id];return(<div role="status" aria-live="polite" style={{position:"fixed",left:12,right:12,bottom:mob?88:24,zIndex:55,display:"flex",justifyContent:"center",pointerEvents:"none"}}>
       <div style={{pointerEvents:"auto",width:"100%",maxWidth:460,background:S.cardSolid,border:`1px solid ${S.brd}`,borderRadius:12,padding:"12px 14px",boxShadow:"0 10px 30px rgba(0,0,0,.35)"}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
@@ -473,7 +492,7 @@ export default function App(){
           <button onClick={()=>{sS("jc:semSugestao",todayLocal());setSugestao(null);}} style={{flex:"1 1 100px",height:40,fontSize:12.5,border:"none",color:S.ts}}>Não sugerir hoje</button>
         </div>
       </div></div>);})()}
-    {remTarget&&<NoteModal remoto token={token} org={remTarget.org} pendencias={remTarget.pend} carregandoPend={remTarget.lo} onSave={remoteSave} onCancel={()=>setRemTarget(null)}/>}
+    {remTarget&&<NoteModal remoto token={token} marcasCompra={marcasCompraDe(remTarget.org)} marcasProsp={prospDe(remTarget.org).map(x=>x.industria)} org={remTarget.org} pendencias={remTarget.pend} carregandoPend={remTarget.lo} onSave={remoteSave} onCancel={()=>setRemTarget(null)}/>}
     {pendAlerta&&<PendenciasAlerta dados={pendAlerta} onClose={()=>setPendAlerta(null)}/>}
     {showDB&&<JourneyModal user={user} onSave={j=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const n={...p,[k]:{start:j.start,end:j.end}};sS("jc:dayBases",n);return n;});setShowDB(false);}} onCancel={()=>setShowDB(false)}/>}
     {showEndDay&&<DayEndModal user={user} onSave={b=>{const t=todayLocal();const k=user.id+"_"+t;setDayBases(p=>{const cur=p[k]||{};const n={...p,[k]:{...cur,end:b}};sS("jc:dayBases",n);return n;});setShowEndDay(false);}} onCancel={()=>setShowEndDay(false)}/>}

@@ -371,7 +371,7 @@ const RFVC={"Campeão":S.gold,"Leal":S.ok,"Em Crescimento":S.pri,"Em Risco":"#E7
 // Quadradinho de ação 32px com borda (padrão do mockup)
 const IQ={width:32,height:32,borderRadius:8,border:`1px solid ${S.inpBdr}`,background:S.inp,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",padding:0};
 const SRC_={"Em Dia":S.ok,"Momento de Recompra":S.gold,"Atrasado":S.dng};
-const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,onQuick,onOpen,ldId,plocs,lastVisit,lastOrder,nearRoad,rfvInfo,pend}){
+const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,onQuick,onOpen,ldId,plocs,lastVisit,lastOrder,nearRoad,rfvInfo,pend,prosp}){
   // v74: linha (não cartão) — nome, local, números em fonte fixa; ações numa fileira discreta
   const isA=active?.orgId===org.id;const a=org.addr||{};const loc=[a.district,[a.city_name||a.city,a.state].filter(Boolean).join("/")].filter(Boolean).join(" · ");
   const catColor=CC[org.cat]||S.ts;const dV=lastVisit?Math.floor((Date.now()-new Date(lastVisit.time))/86400000):null;
@@ -384,6 +384,7 @@ const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,o
           <span title={org.cat||""} style={{width:8,height:8,borderRadius:4,background:catColor,flexShrink:0}}/>
           <button onClick={()=>onOpen&&onOpen(org)} title="Abrir ficha do cliente" style={{background:"transparent",border:"none",padding:0,margin:0,cursor:onOpen?"pointer":"default",textAlign:"left",fontWeight:600,fontSize:15,color:S.txt,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",minWidth:0}}>{org.name||org.nickname}</button>
           {pend&&pend.length>0&&<span title={pend.join(" · ")} style={{flexShrink:0,fontSize:11.5,fontWeight:600,color:S.gold,border:`1px solid ${S.gold}66`,borderRadius:4,padding:"0 6px",lineHeight:"18px"}}>{pend.length>1?`${pend.length} pendências`:"pendência"}</span>}
+          {prosp&&prosp.length>0&&<span title={"Em prospecção: "+prosp.join(", ")} style={{flexShrink:0,fontSize:11.5,fontWeight:600,color:S.acc,border:`1px solid ${S.acc}66`,borderRadius:4,padding:"0 6px",lineHeight:"18px",maxWidth:160,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>prospecção {prosp.length>2?`${prosp.length} marcas`:prosp.join(", ")}</span>}
         </div>
         <p style={{fontSize:13,color:S.t2,margin:"3px 0 0 16px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{loc||"Sem endereço"}{org.sector?` · ${org.sector}`:""}</p>
         <div className="num" style={{display:"flex",flexWrap:"wrap",gap:"2px 12px",margin:"4px 0 0 16px",fontSize:11.5,color:S.ts}}>
@@ -411,7 +412,11 @@ const OrgCard=memo(function OrgCardBase({org,active,onIn,onOut,onEdit,onPerson,o
 function Banner({v,orgs,onClick}){const o=orgs.find(x=>x.id===v.orgId);const[el,setEl]=useState(0);useEffect(()=>{const fn=()=>setEl(mins(v.checkinTime,new Date()));fn();const iv=setInterval(fn,15000);return()=>clearInterval(iv);},[v.checkinTime]);return(<div onClick={onClick} style={{background:S.cl,border:`1px solid ${S.pri}`,borderRadius:12,padding:"10px 14px",marginBottom:12,cursor:"pointer"}}><div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,borderRadius:"50%",background:S.ok}}/><p style={{fontSize:13,fontWeight:500,color:S.pl,margin:0}}>{o?.name||o?.nickname||v.orgName}</p></div><span style={{fontSize:11,color:S.acc}}>Ir ao cliente →</span></div><p style={{fontSize:12,color:S.ts,margin:"3px 0 0 16px"}}>{fT(v.checkinTime)} — {hrsMin(el)}</p></div>);}
 // Pendência: sugestões rápidas (o texto é livre)
 const PEND_SUGEST=["Enviar expositor","Levar amostras","Material de PDV","Cobrar retorno do pedido","Conferir gôndola","Treinar equipe"];
-function NoteModal({org,onSave,onCancel,pendencias,remoto=false,carregandoPend=false,token}){
+const MARCAS_PROSP=["TRAMONTINA","PADO","Zagonel","Plastilit","Ruvolo","Santana","Festcolor","Hiper Têxtil"];
+function NoteModal({org,onSave,onCancel,pendencias,remoto=false,carregandoPend=false,token,marcasCompra=[],marcasProsp=[]}){
+  // v93: marcas PROSPECTADAS neste atendimento → cliente entra como prospecção da marca (filtro Indústria)
+  const[querProsp,setQuerProsp]=useState(null);const[prosp,setProsp]=useState([]);
+  const compraSet=new Set((marcasCompra||[]).map(x=>String(x).trim().toUpperCase()));const prospSet=new Set((marcasProsp||[]).map(x=>String(x).toUpperCase()));
   // v85: cliente SEM nenhuma pessoa de contato → pede um contato (opcional) no encerramento
   const[semCtt,setSemCtt]=useState(false);const[cN,setCN]=useState("");const[cCargo,setCCargo]=useState("Comprador");const[cW,setCW]=useState("");const[cE,setCE]=useState("");
   useEffect(()=>{if(!token||!org?.id)return;let vivo=true;const cn=(org.cnpj||"").replace(/\D/g,"");
@@ -432,7 +437,8 @@ function NoteModal({org,onSave,onCancel,pendencias,remoto=false,carregandoPend=f
   const today=todayLocal();
   const dateValid=nd>=today;const pendVazia=querPend===true&&!novas.length&&!novaTxt.trim();
   const proxOk=querProx===false||(querProx===true&&nd&&dateValid&&!!ndsc.trim());
-  const ok=!!n.trim()&&proxOk&&!pendVazia;
+  const prospVazia=querProsp===true&&!prosp.length;
+  const ok=!!n.trim()&&proxOk&&!pendVazia&&!prospVazia;
   const Obrig=({t="Preenchimento obrigatório"})=><p style={{fontSize:11.5,color:S.dng,margin:"4px 0 0"}}>{t}</p>;
   const Lbl=({c,children,cor})=><p style={{fontSize:13,fontWeight:600,color:cor||S.t2,margin:"0 0 8px"}}>{children}{c&&<span style={{fontWeight:400,color:S.ts}}> · {c}</span>}</p>;
   const sel=(on)=>({height:44,borderRadius:8,fontSize:14,border:`1px solid ${on?S.txt:S.inpBdr}`,background:on?S.txt:"transparent",color:on?S.bg:S.txt,fontWeight:on?600:400});
@@ -442,7 +448,7 @@ function NoteModal({org,onSave,onCancel,pendencias,remoto=false,carregandoPend=f
   </div>;
   const enviar=()=>{if(!ok)return;const pendNovas=[...novas,...(querPend===true&&novaTxt.trim()&&!novas.includes(novaTxt.trim())?[novaTxt.trim()]:[])];
     if(semCtt&&cttOk){const dig=cW.replace(/\D/g,"");crmFire(token,"/api/crm/contatos",{org_id:org.id,cnpj:(org.cnpj||"").replace(/\D/g,"")||null,nome:cN.trim(),cargo:cCargo||null,telefone:dig||null,whatsapp:dig||null,email:cE.trim()||null});}
-    onSave(n,tp,querProx?{nextType:nt,nextDate:nd,nextTime:nh,nextDesc:ndsc}:null,sale?{brand,value:parseFloat(saleVal)||0}:null,{resolvidas:pend.filter(x=>res[x.id]),novas:pendNovas});};
+    onSave(n,tp,querProx?{nextType:nt,nextDate:nd,nextTime:nh,nextDesc:ndsc}:null,sale?{brand,value:parseFloat(saleVal)||0}:null,{resolvidas:pend.filter(x=>res[x.id]),novas:pendNovas,prosp:querProsp===true?prosp:[]});};
   return createPortal(<div onClick={e=>{if(e.target===e.currentTarget)onCancel();}} style={{position:"fixed",inset:0,background:"rgba(4,10,18,0.66)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:60}}>
   <div role="dialog" aria-modal="true" aria-label={remoto?"Atendimento a distância":"Encerrar visita"} style={{background:S.cardSolid,borderRadius:"16px 16px 0 0",padding:"8px 16px 20px",width:"100%",maxWidth:520,maxHeight:"94vh",overflowY:"auto",display:"flex",flexDirection:"column",gap:18}}>
   <div style={{width:36,height:4,borderRadius:2,background:S.inpBdr,alignSelf:"center"}}/>
@@ -460,6 +466,15 @@ function NoteModal({org,onSave,onCancel,pendencias,remoto=false,carregandoPend=f
   <div>
     <label style={{display:"flex",alignItems:"center",justifyContent:"space-between",minHeight:44,borderTop:`1px solid ${S.brd}`,borderBottom:sale?"none":`1px solid ${S.brd}`,cursor:"pointer"}}><span style={{fontSize:15,color:S.txt}}>Houve venda</span><input type="checkbox" checked={sale} onChange={()=>setSale(!sale)} style={{width:22,height:22,accentColor:S.pri}}/></label>
     {sale&&<div style={{display:"flex",gap:6,paddingBottom:10,borderBottom:`1px solid ${S.brd}`}}><select value={brand} onChange={e=>setBrand(e.target.value)} style={{flex:1,height:44}}><option value="">Marca</option>{BRANDS.map(b=><option key={b}>{b}</option>)}</select><input type="number" inputMode="decimal" value={saleVal} onChange={e=>setSaleVal(e.target.value)} placeholder="R$ valor" style={{width:120,height:44,boxSizing:"border-box"}}/></div>}
+  </div>
+  <div><Lbl>Alguma marca prospectada?</Lbl>
+    <SimNao v={querProsp} set={v=>{setQuerProsp(v);if(!v)setProsp([]);}}/>
+    {querProsp===true&&<div style={{marginTop:10}}>
+      <div style={{display:"flex",flexWrap:"wrap",gap:6}}>{MARCAS_PROSP.map(m=>{const compra=compraSet.has(m.toUpperCase());const on=prosp.includes(m);const ja=prospSet.has(m.toUpperCase());
+        return <button key={m} type="button" disabled={compra} aria-pressed={on} onClick={()=>setProsp(p=>p.includes(m)?p.filter(x=>x!==m):[...p,m])} title={compra?"O cliente já compra esta marca":ja?"Já está em prospecção — marcar de novo atualiza a data":""}
+          style={{height:36,padding:"0 12px",borderRadius:18,fontSize:13,border:`1px solid ${on?S.txt:S.inpBdr}`,background:on?S.txt:"transparent",color:compra?S.td:on?S.bg:S.t2,fontWeight:on?600:400,opacity:compra?.5:1,cursor:compra?"default":"pointer"}}>{m}{compra?" · compra":ja?" · já em prospecção":""}</button>;})}</div>
+      {prospVazia&&<Obrig t="Escolha a(s) marca(s) prospectada(s)"/>}
+    </div>}
   </div>
   {semCtt&&<div>
     <Lbl c="opcional" cor={S.gold}>Cliente sem contato cadastrado</Lbl>

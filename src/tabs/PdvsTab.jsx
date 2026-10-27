@@ -4,7 +4,7 @@ import { MapPin, Search, SlidersHorizontal, X } from "lucide-react";
 import { PG, toLocalDate, todayLocal, CATS, CANAIS, CC, USERS, SECTORS, BRANDS, geoEstimate, S, fD, fDS, hav, DASH, gps, roadKm, csv, fixMojibake, normBusca } from "../lib";
 import { OrgCard, MultiSelect, DateField } from "../components";
 
-function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,onOpenFicha,focusReq,rfv,excl,pendMapa}){
+function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,user,token,syncing,syncMsg,onSync,onCheckin,onCheckout,onEdit,onPerson,onQuick,onOpenFicha,focusReq,rfv,excl,pendMapa,prospDe}){
   const[search,setSearch]=useState("");
   // Todos os filtros de seleção são multi-seleção (combináveis). Vazio = todos.
   const[catSel,setCatSel]=useState([]);const[citySel,setCitySel]=useState([]);const[ufSel,setUfSel]=useState([]);const[segSel,setSegSel]=useState([]);const[ownerSel,setOwnerSel]=useState(()=>user?.name?[user.name]:[]);/* v43: Responsável já abre no usuário logado */const[grupoSel,setGrupoSel]=useState([]);
@@ -35,7 +35,11 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
     if(visitMode==="not_visited"){list=list.filter(o=>{const vl=visitsByOrg[o.id];if(!vl)return true;return !vl.some(v=>{const d=toLocalDate(v.time);return d>=visitFrom&&d<=visitTo;});});
       list=list.sort((a,b)=>{const la=lastVisits[a.id]?.time||"0";const lb=lastVisits[b.id]?.time||"0";return la.localeCompare(lb);});}
     if(canalSel.length)list=list.filter(o=>canalSel.includes(o.canal||"Presencial"));
-    if(fRfv.length||fSr.length||fInd.length){list=list.filter(o=>{const r=rfvDe(o);if(!r)return false;if(fRfv.length&&!fRfv.includes(r.rfv))return false;if(fSr.length&&!fSr.includes(r.status))return false;if(fInd.length&&!(r.inds||"").split(",").some(i=>fInd.includes(i.trim())))return false;return true;});}
+    // v93: Indústria = marcas que o cliente COMPRA ou está em PROSPECÇÃO (marcada no check-out)
+    if(fRfv.length||fSr.length||fInd.length){list=list.filter(o=>{const r=rfvDe(o);
+      if((fRfv.length||fSr.length)&&!r)return false;if(fRfv.length&&!fRfv.includes(r.rfv))return false;if(fSr.length&&!fSr.includes(r.status))return false;
+      if(fInd.length){const compra=String(r?.inds||"").split(",").some(i=>fInd.includes(i.trim()));const pr=prospDe?prospDe(o).some(x=>fInd.includes(x.industria)):false;if(!compra&&!pr)return false;}
+      return true;});}
     if(search.trim()){const q=normBusca(search).replace(/[.\-\/]/g,"");const casa=o=>normBusca([o.name,o.nickname,o.legalName,o.cnpj?.replace(/[.\-\/]/g,""),o.addr?.city,o.addr?.city_name,o.addr?.district,o.addr?.state,o.cat,o.sector,o.products,o.people].filter(Boolean).join(" ")).replace(/[.\-\/]/g,"").includes(q);list=list.filter(casa);}
     if(sortMode==="near"&&nearMe){
       const withGPS=list.filter(o=>plocs[o.id]).map(o=>({...o,dist:hav(nearMe.lat,nearMe.lng,plocs[o.id].lat,plocs[o.id].lng),distType:"gps"}));
@@ -51,7 +55,7 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
       }).map(x=>x.o);
     }else{list=list.sort((a,b)=>(a.name||"").localeCompare(b.name||""));}
     return list;
-  },[orgs,search,catSel,citySel,ufSel,segSel,ownerSel,grupoSel,canalSel,visitMode,visitFrom,visitTo,visitsByOrg,lastVisits,nearMe,plocs,sortMode,rfvDe,fRfv,fSr,fInd,excl]);
+  },[orgs,search,catSel,citySel,ufSel,segSel,ownerSel,grupoSel,canalSel,visitMode,visitFrom,visitTo,visitsByOrg,lastVisits,nearMe,plocs,sortMode,rfvDe,fRfv,fSr,fInd,excl,prospDe]);
 
   useEffect(()=>{
     if(sortMode!=="near"||!nearMe||!fo.length)return;
@@ -125,7 +129,7 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
             {[["alpha","A–Z"],["near",nearLoading?"…":"Perto"],["rfv","RFV"]].map(([m,l],i)=><button key={m} aria-pressed={sortMode===m} onClick={async()=>{if(m==="near"){if(sortMode==="near"){setSortMode("alpha");setNearMe(null);return;}setNearLoading(true);try{const g=await gps();setNearMe(g);setSortMode("near");setVc(PG);}catch{alert("GPS indisponível");}setNearLoading(false);return;}setSortMode(m);setNearMe(null);setVc(PG);}} style={{height:34,padding:"0 12px",fontSize:12.5,border:"none",borderLeft:i?`1px solid ${S.inpBdr}`:"none",borderRadius:0,background:sortMode===m?S.cl:"transparent",color:sortMode===m?S.txt:S.ts,fontWeight:sortMode===m?600:400,display:"flex",alignItems:"center",gap:5}}>{m==="near"&&<MapPin size={13} strokeWidth={1.9}/>}{l}</button>)}
           </div>
         </div>
-          <div style={{display:"flex",flexDirection:"column"}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={onCheckin} onOut={handleOut} onEdit={handleEdit} onPerson={handlePerson} onQuick={onQuick} onOpen={onOpenFicha} ldId={ldId} plocs={plocs} lastVisit={lastVisits[o.id]||null} rfvInfo={rfvDe(o)} lastOrder={null} nearRoad={nearRoad} pend={pendMapa?.[o.id]||null}/>)}</div>
+          <div style={{display:"flex",flexDirection:"column"}}>{fo.slice(0,vc).map(o=><OrgCard key={o.id} org={o} active={active} onIn={onCheckin} onOut={handleOut} onEdit={handleEdit} onPerson={handlePerson} onQuick={onQuick} onOpen={onOpenFicha} ldId={ldId} plocs={plocs} lastVisit={lastVisits[o.id]||null} rfvInfo={rfvDe(o)} lastOrder={null} nearRoad={nearRoad} pend={pendMapa?.[o.id]||null} prosp={prospDe?prospDe(o).map(x=>x.industria):null}/>)}</div>
           {vc<fo.length&&<button onClick={()=>setVc(p=>p+PG)} style={{width:"100%",marginTop:12,padding:14,fontSize:14,fontWeight:500}}>Ver mais ({fo.length-vc})</button>}
           <button onClick={()=>{const rows=[["Nome","CNPJ","Endereço","Bairro","Cidade","UF","Categoria","Canal","Segmento","Produtos","Responsável","Grupo","Dt Última Visita","Visitado por","Dias s/ Visita","Classe RFV","Status Recompra","Última Compra","Fat. 12m"]];fo.forEach(o=>{const lv=lastVisits[o.id];const dias=lv?Math.floor((Date.now()-new Date(lv.time))/86400000):"";const rv=rfvDe(o);rows.push([o.name,o.cnpj||"",`${o.addr?.street||""} ${o.addr?.number||""}`.trim(),o.addr?.district||"",o.addr?.city_name||o.addr?.city||"",o.addr?.state||"",o.cat||"",o.canal||"Presencial",o.sector||"",o.products||"",o.owner||"",o.grupo?.replace("Grupo: ","")||"",lv?fD(lv.time):"Sem visita",lv?lv.who:"",dias,rv?rv.rfv:"",rv?rv.status:"",rv&&rv.ultima?fD(rv.ultima+"T12:00"):"",rv?rv.fat12m:""]);});csv(rows,`clientes-filtrados-${fD(new Date())}.csv`);}} style={{width:"100%",marginTop:10,height:44,fontSize:13.5,color:S.t2}}>Exportar {fo.length} clientes (Excel)</button>
           {search.replace(/[.\-\/]/g,"").length>=11&&fo.length===0&&<button onClick={async()=>{try{const r=await fetch(`${DASH}/api/crm/clientes?q=${search.replace(/[.\-\/]/g,"")}&limit=20`,{headers:{"X-Session":token},cache:"no-store"});const d=await r.json();if(d&&d.ok&&d.clientes?.length)setOrgs(p=>{const ids=new Set(p.map(o=>o.id));return[...d.clientes.filter(f=>!ids.has(f.id)),...p];});}catch(e){console.warn("cnpjSearch:",e);}}} style={{width:"100%",marginTop:8,padding:14,background:S.acc,border:"none",fontWeight:500}}>Buscar CNPJ no cadastro</button>}

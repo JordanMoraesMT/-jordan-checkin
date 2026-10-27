@@ -3,7 +3,7 @@
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal, Link2 } from "lucide-react";
-import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca } from "../lib";
+import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
 const DASH = "https://dashboard.jordanmt.com";
@@ -123,7 +123,7 @@ function AtvCard({ a, onOrg, onDel, canDel, onFinish }) {
 // ─────────────────────────────────────────────────────────────
 //  Tela do cliente — cabeçalho + Histórico | Contatos | Fotos | Dados
 // ─────────────────────────────────────────────────────────────
-function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange, backLabel, onRemoto, allOrgs }) {
+function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange, backLabel, onRemoto, allOrgs, prospDe, onProspFim }) {
   const [sub, setSub] = useState("hist");
   const [info, setInfo] = useState(null);           // /api/crm/cliente
   const [atvs, setAtvs] = useState([]); const [ldA, setLdA] = useState(false);
@@ -370,6 +370,14 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
         <button onClick={() => finalizar(x)} style={{ height: 38, padding: "0 12px", fontSize: 13, fontWeight: 600, border: `1px solid ${S.gold}77`, background: "transparent", color: S.txt, flexShrink: 0 }}>Resolver</button>
       </div>)}
       {pendAbertas.length > 4 && <p style={{ margin: "4px 0 0", fontSize: 12, color: S.ts }}>+{pendAbertas.length - 4} no histórico</p>}
+    </section>}
+    {/* v93: marcas em PROSPECÇÃO (marcadas no check-out); somem sozinhas quando o cliente compra a marca */}
+    {prospDe && prospDe(org).length > 0 && <section aria-label="Prospecção" style={{ marginTop: 10, border: `1px solid ${S.acc}55`, background: S.acc + "12", borderRadius: 10, padding: "10px 12px" }}>
+      <p style={{ margin: "0 0 4px", fontSize: 12.5, fontWeight: 600, color: S.acc }}>Em prospecção</p>
+      {prospDe(org).map(x => <div key={x.industria} style={{ display: "flex", alignItems: "center", gap: 10, padding: "5px 0", borderTop: `1px solid ${S.acc}22` }}>
+        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 600, color: S.txt }}>{x.industria}<span style={{ fontWeight: 400, fontSize: 12, color: S.ts }}> · {(x.user_nome || "—").split(" ")[0]} · desde {fD1(x.criado_em || x.atualizado_em)}</span></span>
+        {x.id && onProspFim && <button onClick={() => { if (confirm(`Encerrar a prospecção de ${x.industria} neste cliente?`)) onProspFim(x); }} style={{ height: 32, padding: "0 10px", fontSize: 12, border: `1px solid ${S.inpBdr}`, borderRadius: 8, background: "transparent", color: S.t2, cursor: "pointer" }}>Encerrar</button>}
+      </div>)}
     </section>}
 
     {/* GPS — uma linha */}
@@ -839,7 +847,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
 // ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl, pessoasQ, onRemoto }) {
+export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl, pessoasQ, onRemoto, prospDe, onProspFim }) {
   // secao controlada pelo menu lateral do App: inicio | empresas | pessoas
   const [sel, setSel] = useState(null);
   // Abrir a ficha de um cliente vindo de outra tela (ex.: clique no card em PDVs)
@@ -889,7 +897,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   };
 
   if (!visible) return null;
-  if (sel) return <ClienteCRM org={sel} allOrgs={allOrgs} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
+  if (sel) return <ClienteCRM org={sel} allOrgs={allOrgs} prospDe={prospDe} onProspFim={onProspFim} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
 
   return (<div>
     {secao === "empresas" && <EmpresasView token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}
