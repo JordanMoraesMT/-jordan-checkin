@@ -279,10 +279,11 @@ function MonthCalendar({value,onSelect,marks={},today,compact}){
       <div style={{fontSize:compact?13:14.5,fontWeight:700,color:S.pl,letterSpacing:.3}}>{MON[ym.m]} <span style={{color:S.ts,fontWeight:500}}>{ym.y}</span></div>
       <button type="button" onClick={next} style={navBtn}>›</button>
     </div>
-    <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:compact?3:5}}>
+    {/* v100: minmax(0,1fr) + padding 0 — o padding global dos botões (9px 12px) impedia as 7 colunas de caber e cortava o sábado */}
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(0,1fr))",gap:compact?3:5}}>
       {WD.map((w,i)=><div key={i} style={{textAlign:"center",fontSize:10,fontWeight:700,color:S.td,textTransform:"uppercase",letterSpacing:.5,padding:"2px 0"}}>{w}</div>)}
       {cells.map((d,i)=>{if(d===null)return <div key={i}/>;const ds=fmt(d);const isSel=value===ds;const isToday=today===ds;const mk=marks[ds];
-        return(<button key={i} type="button" onClick={()=>onSelect&&onSelect(ds)} style={{position:"relative",height:cell,borderRadius:9,border:`1px solid ${isSel?S.pri:isToday?S.pri+"77":"transparent"}`,background:isSel?S.pri:isToday?S.pri+"14":"transparent",color:isSel?"#fff":S.txt,fontSize:compact?12:13,fontWeight:isSel||isToday?700:500,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .1s"}}>
+        return(<button key={i} type="button" onClick={()=>onSelect&&onSelect(ds)} style={{position:"relative",height:cell,minWidth:0,padding:0,borderRadius:9,border:`1px solid ${isSel?S.pri:isToday?S.pri+"77":"transparent"}`,background:isSel?S.pri:isToday?S.pri+"14":"transparent",color:isSel?"#fff":S.txt,fontSize:compact?12:13,fontWeight:isSel||isToday?700:500,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"background .1s"}}>
           {d}
           {mk&&<span style={{position:"absolute",bottom:4,left:"50%",transform:"translateX(-50%)",display:"flex",gap:2}}>
             <span style={{width:5,height:5,borderRadius:"50%",background:isSel?"#fff":(typeof mk==="string"?mk:S.gold)}}/>
@@ -297,7 +298,7 @@ function DateField({value,onChange,placeholder="Data",today,marks,style}){
   const[open,setOpen]=useState(false);
   const[btnRef,rect]=useAnchorRect(open);const panelRef=useRef(null);
   useOutside(open,()=>setOpen(false),btnRef,panelRef);
-  const W=300;const left=rect?Math.max(8,Math.min(rect.left,window.innerWidth-W-8)):0;
+  const W=Math.min(320,window.innerWidth-16);const left=rect?Math.max(8,Math.min(rect.left,window.innerWidth-W-8)):0;
   // v76: perto do rodapé (ex.: folha de check-out no celular) o calendário abre para CIMA — antes saía da tela
   const PH=400;const top=rect?(rect.bottom+6+PH>window.innerHeight&&rect.top-6-PH>=8?rect.top-6-PH:Math.max(8,Math.min(rect.bottom+6,window.innerHeight-PH-8))):0;
   return(<div style={{position:"relative",...style}}>

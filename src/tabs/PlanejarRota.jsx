@@ -1,12 +1,13 @@
-// TeamCheck — Rotas › PLANEJAR (v68; v99 busca, ▲▼ ordem, abrir/atualizar roteiro da Agenda; v98 filtros de marca/UF/segmento/grupo + Google Maps por parada e no fim)
+// TeamCheck — Rotas › PLANEJAR (v68; v100 partida em hotel/outro local; v99 busca, ▲▼ ordem, abrir/atualizar roteiro da Agenda; v98 filtros de marca/UF/segmento/grupo + Google Maps por parada e no fim)
 // Escolhe quem visitar (cidade, bairro, status, RFV, recompra, dias sem visita), prioriza,
 // e monta o roteiro na ORDEM MAIS CURTA (OSRM /trip — "caixeiro-viajante") a partir de casa
 // ou de onde você está. Mostra mapa, km, tempo, horário previsto de chegada, abre no Google Maps
 // (em trechos) ou Waze, e pode lançar as visitas como tarefas na Agenda.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { createPortal } from "react-dom";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { Route, Navigation, Home, Crosshair, CalendarPlus, ArrowLeft, X, Check, ChevronUp, ChevronDown, Search, CalendarDays, Shuffle } from "lucide-react";
+import { Route, Navigation, Home, Crosshair, Hotel, MapPin, CalendarPlus, ArrowLeft, X, Check, ChevronUp, ChevronDown, Search, CalendarDays, Shuffle } from "lucide-react";
 import { S, CC, CATS, CANAIS, USERS, HOMES, OSRM, DASH, SECTORS, hav, gps, sL, sS, todayLocal, fD, fixMojibake, marcasCadastro, chaveMarca, contemBusca } from "../lib";
 import { MultiSelect, Kpi, DateField } from "../components";
 import { analisar } from "../analiseVisitas.js";
@@ -132,6 +133,63 @@ function Pill({ t, cor }) {
   return <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 5, color: tom(cor), background: cor + "1c", border: `1px solid ${cor}44`, whiteSpace: "nowrap" }}>{t}</span>;
 }
 
+// v100: partida em hotel / outro local (viagens). Endereço pelo OpenStreetMap (Nominatim), GPS ou coordenadas coladas.
+// Os locais ficam salvos no aparelho para reaproveitar ("Hotel Pantanal · Sinop").
+const MT_VIEWBOX = "-61.7,-7.3,-50.2,-18.1";
+const coordsDe = t => { const m = String(t || "").match(/(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)/); return m ? { lat: Number(m[1]), lng: Number(m[2]) } : null; };
+function LocalModal({ atual, locais, onUsar, onRemover, onFechar }) {
+  const [nome, setNome] = useState(atual?.label || "");
+  const [q, setQ] = useState("");
+  const [res, setRes] = useState([]);
+  const [pt, setPt] = useState(atual ? { lat: atual.lat, lng: atual.lng, end: atual.end || "" } : null);
+  const [lo, setLo] = useState(false), [err, setErr] = useState("");
+  const buscar = async () => {
+    const c = coordsDe(q); if (c) { setPt({ ...c, end: `${c.lat.toFixed(5)}, ${c.lng.toFixed(5)}` }); setRes([]); setErr(""); return; }
+    if (q.trim().length < 3) return; setLo(true); setErr(""); setRes([]);
+    try {
+      const r = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&countrycodes=br&accept-language=pt-BR&viewbox=${MT_VIEWBOX}&q=${encodeURIComponent(q.trim())}`);
+      const j = await r.json(); const out = (j || []).map(x => ({ lat: Number(x.lat), lng: Number(x.lon), end: x.display_name, nome: x.name || String(x.display_name || "").split(",")[0] }));
+      setRes(out); if (!out.length) setErr("Nada encontrado. Tente nome do hotel + cidade, um endereço, ou cole as coordenadas (ex.: -11.86, -55.50).");
+    } catch { setErr("A busca de endereço não respondeu. Use \"Onde estou agora\" ou cole as coordenadas."); }
+    setLo(false);
+  };
+  const aqui = async () => { setLo(true); setErr(""); try { const g = await gps(); setPt({ lat: g.lat, lng: g.lng, end: "Minha localização atual" }); } catch { setErr("Não consegui sua localização. Verifique a permissão de GPS."); } setLo(false); };
+  const inp = { width: "100%", boxSizing: "border-box", height: 38, fontSize: 13 };
+  const b = (on) => ({ padding: "8px 12px", fontSize: 12.5, fontWeight: 700, borderRadius: 9, border: on ? "none" : `1px solid ${S.inpBdr}`, background: on ? "#0578A6" : S.inp, color: on ? "#fff" : S.t2, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 });
+  return createPortal(<div onMouseDown={e => { if (e.target === e.currentTarget) onFechar(); }} style={{ position: "fixed", inset: 0, background: "rgba(4,10,18,.66)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+    <div role="dialog" aria-label="Ponto de partida" style={{ width: "100%", maxWidth: 460, maxHeight: "calc(100vh - 24px)", overflowY: "auto", background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 16, padding: 16, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+        <Hotel size={18} color={S.pl} /><span style={{ flex: 1, fontSize: 15, fontWeight: 800, color: S.txt }}>Partida: hotel ou outro local</span>
+        <button onClick={onFechar} aria-label="Fechar" style={{ padding: 6, border: "none", display: "flex" }}><X size={17} color={S.ts} /></button>
+      </div>
+      {locais.length > 0 && <div style={{ marginBottom: 14 }}>
+        <p style={{ margin: "0 0 6px", fontSize: 11.5, color: S.ts, fontWeight: 600 }}>Locais salvos</p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {locais.map(l => <div key={l.label} style={{ display: "flex", alignItems: "center", gap: 8, border: `1px solid ${S.brd}`, borderRadius: 10, padding: "8px 10px" }}>
+            <MapPin size={14} color={S.pl} style={{ flexShrink: 0 }} />
+            <button onClick={() => onUsar(l)} style={{ flex: 1, minWidth: 0, textAlign: "left", border: "none", padding: 0, fontSize: 13, fontWeight: 700, color: S.txt, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.label}<span style={{ display: "block", fontSize: 11, fontWeight: 400, color: S.ts, overflow: "hidden", textOverflow: "ellipsis" }}>{l.end || `${l.lat.toFixed(4)}, ${l.lng.toFixed(4)}`}</span></button>
+            <button onClick={() => onRemover(l)} title="Apagar local" aria-label={`Apagar ${l.label}`} style={{ padding: 5, border: "none", display: "flex" }}><X size={14} color={S.dng} /></button>
+          </div>)}
+        </div>
+      </div>}
+      <p style={{ margin: "0 0 6px", fontSize: 11.5, color: S.ts, fontWeight: 600 }}>Novo local</p>
+      <input value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome (ex.: Hotel Pantanal · Sinop)" style={{ ...inp, marginBottom: 8 }} />
+      <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+        <input value={q} onChange={e => setQ(e.target.value)} onKeyDown={e => { if (e.key === "Enter") buscar(); }} placeholder="Endereço, hotel + cidade ou coordenadas" style={{ ...inp, flex: 1 }} />
+        <button onClick={buscar} disabled={lo} style={b(true)}>{lo ? "…" : "Buscar"}</button>
+      </div>
+      <button onClick={aqui} disabled={lo} style={{ ...b(false), marginBottom: 8 }}><Crosshair size={14} /> Onde estou agora</button>
+      {res.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 4, marginBottom: 8 }}>
+        {res.map((r, i) => <button key={i} onClick={() => { setPt(r); if (!nome.trim()) setNome(r.nome); setRes([]); }} style={{ textAlign: "left", fontSize: 12, padding: "8px 10px", borderRadius: 8, border: `1px solid ${S.brd}`, color: S.t2 }}>{r.end}</button>)}
+      </div>}
+      {err && <p style={{ margin: "0 0 8px", fontSize: 12, color: tom(S.gold) }}>{err}</p>}
+      {pt && <p style={{ margin: "0 0 10px", fontSize: 12, color: tom(S.acc) }}>📍 {pt.end || `${pt.lat.toFixed(5)}, ${pt.lng.toFixed(5)}`}</p>}
+      <button onClick={() => onUsar({ label: nome.trim(), lat: pt.lat, lng: pt.lng, end: pt.end || "" }, true)} disabled={!pt || !nome.trim()} style={{ ...b(!!pt && !!nome.trim()), width: "100%", justifyContent: "center", padding: "11px 12px", opacity: pt && nome.trim() ? 1 : .55 }}>Salvar e usar como partida</button>
+      <p style={{ margin: "8px 0 0", fontSize: 11, color: S.td }}>Com "Voltar ao fim" marcado, o roteiro termina neste local. Os locais ficam salvos neste aparelho.</p>
+    </div>
+  </div>, document.body);
+}
+
 const grupoDe = o => fixMojibake(String(o.grupo || "").replace("Grupo: ", "").trim());
 
 function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pendMapa, prospDe }) {
@@ -164,6 +222,10 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   const [minVisita, setMinVisita] = useState(p0.minVisita || 30);
   const [dia, setDia] = useState(p0.dia && p0.dia >= todayLocal() ? p0.dia : todayLocal());
   const [aqui, setAqui] = useState(null);
+  const LOCAIS = `jc:rotaLocais:${user?.id || "x"}`;
+  const [outro, setOutro] = useState(p0.outro || null); // v100: hotel / outro local
+  const [locais, setLocais] = useState(() => sL(LOCAIS, []));
+  const [localAberto, setLocalAberto] = useState(false);
   const [plano, setPlano] = useState(p0.plano || null);
   const [lo, setLo] = useState(false);
   const [msg, setMsg] = useState("");
@@ -173,15 +235,15 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   const [base, setBase] = useState(null); const [prem, setPrem] = useState(null);
   useEffect(() => { let vivo = true; carregarPremissas().then(p => { if (!vivo) return; setPrem(p); if (token) carregarBase(token, p.inicio, todayLocal()).then(b => { if (vivo) setBase(b); }).catch(() => {}); }); return () => { vivo = false; }; }, [token]);
 
-  useEffect(() => { sS(PREF, { owner, cid, bai, cat, fRfv, fSr, canal, uf, seg, grp, fInd, fSit, dias, ordem, sel: [...sel], partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist }); },
-    [owner, cid, bai, cat, fRfv, fSr, canal, uf, seg, grp, fInd, fSit, dias, ordem, sel, partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist]); // eslint-disable-line
+  useEffect(() => { sS(PREF, { outro, owner, cid, bai, cat, fRfv, fSr, canal, uf, seg, grp, fInd, fSit, dias, ordem, sel: [...sel], partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist }); },
+    [outro, owner, cid, bai, cat, fRfv, fSr, canal, uf, seg, grp, fInd, fSit, dias, ordem, sel, partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist]); // eslint-disable-line
 
   const rfvDe = useCallback(o => { if (!rfv) return null; const k = (o.cnpj || "").replace(/\D/g, ""); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; }, [rfv]);
   // Última visita da EQUIPE (qualquer usuário) — a mesma que aparece no cartão do PDV
   const ultVisita = useMemo(() => { const m = {}; (visits || []).forEach(v => { if (v.checkoutTime && (!m[v.orgId] || v.checkinTime > m[v.orgId])) m[v.orgId] = v.checkinTime; }); return m; }, [visits]);
 
   const casa = HOMES[user?.id] || null;
-  const partida = partidaTipo === "aqui" && aqui ? { ...aqui, label: "Onde estou" } : casa ? { ...casa, label: casa.label || "Casa" } : aqui ? { ...aqui, label: "Onde estou" } : null;
+  const partida = partidaTipo === "aqui" && aqui ? { ...aqui, label: "Onde estou" } : partidaTipo === "outro" && outro ? { lat: outro.lat, lng: outro.lng, label: outro.label } : casa ? { ...casa, label: casa.label || "Casa" } : aqui ? { ...aqui, label: "Onde estou" } : null;
 
   // Opções dos filtros
   const owners = useMemo(() => { const s = new Set(USERS.map(u => u.n)); orgs.forEach(o => o.owner && s.add(o.owner)); return [...s].sort(); }, [orgs]);
@@ -257,6 +319,11 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   const selTodos = () => setSel(s => { const n = new Set(s); comGps.slice(0, MAX_PARADAS).forEach(x => n.add(x.id)); return n; });
   const limparFiltros = () => { setCid([]); setBai([]); setCat([]); setFRfv([]); setFSr([]); setCanal([]); setUf([]); setSeg([]); setGrp([]); setFInd([]); setFSit([]); setBusca(""); setDias("todos"); };
 
+  const usarLocal = (l, salvar) => {
+    setOutro(l); setPartidaTipo("outro"); setLocalAberto(false); setMsg("");
+    if (salvar) { const n = [l, ...locais.filter(x => x.label.toLowerCase() !== l.label.toLowerCase())].slice(0, 15); setLocais(n); sS(LOCAIS, n); }
+  };
+  const removerLocal = l => { const n = locais.filter(x => x.label !== l.label); setLocais(n); sS(LOCAIS, n); if (outro?.label === l.label) { setOutro(null); if (partidaTipo === "outro") setPartidaTipo("casa"); } };
   const pegarAqui = async () => { setMsg("Obtendo sua localização…"); try { const g = await gps(); setAqui({ lat: g.lat, lng: g.lng }); setPartidaTipo("aqui"); setMsg(""); } catch { setMsg("Não consegui sua localização. Verifique a permissão de GPS."); } };
 
   const criar = async () => {
@@ -462,7 +529,15 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   }
 
   // ───────── SELEÇÃO ─────────
+  const noOutro = partidaTipo === "outro" && !!outro;
+  const partidaChips = <>
+    {casa && <button onClick={() => setPartidaTipo("casa")} style={chip(partidaTipo === "casa")}><Home size={12} style={{ verticalAlign: -2 }} /> {mob ? "Casa" : (casa.label || "Casa")}</button>}
+    <button onClick={pegarAqui} style={chip(partidaTipo === "aqui" && !!aqui)}><Crosshair size={12} style={{ verticalAlign: -2 }} /> Onde estou</button>
+    <button onClick={() => (outro && !noOutro ? setPartidaTipo("outro") : setLocalAberto(true))} title={noOutro ? "Trocar o local de partida" : "Partir de um hotel ou outro local"} style={{ ...chip(noOutro), maxWidth: mob ? 150 : 230, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><Hotel size={12} style={{ verticalAlign: -2 }} /> {outro ? outro.label : "Hotel / outro"}</button>
+    {outro && <button onClick={() => setLocalAberto(true)} title="Escolher outro local" aria-label="Escolher outro local" style={{ ...chip(false), padding: "6px 8px" }}>⋯</button>}
+  </>;
   return (<div>
+    {localAberto && <LocalModal atual={null} locais={locais} onUsar={usarLocal} onRemover={removerLocal} onFechar={() => setLocalAberto(false)} />}
     {editar && plano && <div style={{ ...card, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", borderColor: S.pri + "88", background: S.pri + "10" }}>
       <span style={{ flex: 1, minWidth: 200, fontSize: 13, color: S.t2 }}>✏️ <b>Editando o roteiro</b>{plano.agenda?.dia ? ` de ${ddmm(plano.agenda.dia)}` : ""} ({plano.ids.length} paradas). Marque ou desmarque clientes e toque em <b>Atualizar roteiro</b>.{plano.manual ? " A sua ordem é mantida; os novos entram no melhor ponto." : ""}</span>
       <button onClick={() => setEditar(false)} style={chip(false)}>Voltar ao roteiro</button>
@@ -471,6 +546,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
       <CalendarDays size={18} color={S.pl} />
       <span style={{ fontSize: 13, fontWeight: 700, color: S.txt, flex: mob ? "1 1 100%" : "none" }}>Roteiro já lançado?</span>
       <DateField value={diaAg} onChange={d => setDiaAg(d || amanha())} today={todayLocal()} placeholder="Dia" style={{ minWidth: 170 }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", flex: mob ? "1 1 100%" : "none" }}><span style={{ fontSize: 11.5, color: S.ts }}>Partida:</span>{partidaChips}</div>
       <button onClick={abrirAgenda} disabled={lo || !token} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 13px", fontSize: 12.5, fontWeight: 700, borderRadius: 9, border: "none", background: "#0578A6", color: "#fff", cursor: "pointer" }}>{lo ? "Abrindo…" : "Abrir da Agenda para editar"}</button>
       {msg && !sel.size && <span style={{ fontSize: 12, color: tom(S.gold), flex: "1 1 100%" }}>{msg}</span>}
     </div>}
@@ -547,14 +623,13 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
       {(() => {
         const partidaUI = <>
           {!mob && <span style={{ fontSize: 11.5, color: S.ts }}>Partida:</span>}
-          {casa && <button onClick={() => setPartidaTipo("casa")} style={chip(partidaTipo === "casa")}><Home size={12} style={{ verticalAlign: -2 }} /> {casa.label || "Casa"}</button>}
-          <button onClick={pegarAqui} style={chip(partidaTipo === "aqui" && !!aqui)}><Crosshair size={12} style={{ verticalAlign: -2 }} /> Onde estou</button>
+          {partidaChips}
         </>;
         const voltarUI = <label style={{ fontSize: 11.5, color: S.ts, display: "flex", alignItems: "center", gap: 5, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}><input type="checkbox" checked={voltar} onChange={e => setVoltar(e.target.checked)} /> Voltar ao fim</label>;
         const botao = <button onClick={criar} disabled={lo || !selGps.length} style={{ flex: mob ? 1 : "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "11px 18px", fontSize: 13.5, fontWeight: 800, borderRadius: 11, border: "none", background: selGps.length ? "#0578A6" : S.cl, color: "#fff", cursor: "pointer", whiteSpace: "nowrap" }}><Route size={16} /> {lo ? "Calculando…" : `${editar ? "Atualizar roteiro" : "Criar roteiro"} (${selGps.length})`}</button>;
         return mob
           ? <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>{partidaUI}</div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>{partidaUI}</div>
               <div style={{ display: "flex", gap: 10, alignItems: "center" }}>{voltarUI}{botao}</div>
             </div>
           : <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
