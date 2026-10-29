@@ -741,7 +741,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
         <MultiSelect values={canal} onChange={setCanal} placeholder="Canal" allLabel="Todos" options={CANAIS} />
         <MultiSelect values={seg} onChange={v => { setSeg(v); setVc(60); }} placeholder="Segmento" allLabel="Todos" options={segmentos} />
         <MultiSelect values={grp} onChange={v => { setGrp(v); setVc(60); }} placeholder="Grupo" allLabel="Todos" options={grupos} />
-        <MultiSelect values={fInd} onChange={v => { setFInd(v); setVc(60); }} placeholder="Indústria" allLabel="Todas" options={marcas} />
+        <MultiSelect values={fInd} onChange={v => { setFInd(v); setVc(60); }} placeholder="Marca" allLabel="Todas" options={marcas} />
         <MultiSelect values={fSit} onChange={v => { setFSit(v); setVc(60); }} placeholder="Situação na marca" allLabel="Todas" options={["Compra", "Prospecção"]} />
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>

@@ -3,7 +3,7 @@
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal, Link2 } from "lucide-react";
-import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca } from "../lib";
+import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca, toLocalDate, marcasCadastro, chaveMarca } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
 const DASH = "https://dashboard.jordanmt.com";
@@ -23,7 +23,7 @@ const fCep = (c) => { const d = soDig(c); return d.length === 8 ? d.slice(0, 5) 
 
 // ─── Planilhas de EMPRESAS — padrão único: CNPJ é SEMPRE a 1ª coluna ───
 const COLS_IMP = ["CNPJ", "Nome Fantasia", "Razão Social", "Grupo", "UF", "Cidade", "Bairro", "Endereço", "CEP", "Categoria", "Canal", "Responsável", "Telefone", "E-mail"];
-const COLS_EMP = [...COLS_IMP.slice(0, 12), "Contato Principal", "Cargo", "Telefone", "E-mail", "Pessoa 2", "Telefone 2", "Pessoa 3", "Telefone 3", "Pessoa 4", "Telefone 4"];
+const COLS_EMP = [...COLS_IMP.slice(0, 12), "Contato Principal", "Cargo", "Telefone", "E-mail", "Pessoa 2", "Telefone 2", "Pessoa 3", "Telefone 3", "Pessoa 4", "Telefone 4", "Última visita", "Visitado por", "Última compra", "Marcas que compra", "Prospecção"];
 const norm = (s) => String(s || "").replace(/^\uFEFF/, "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 // Parser de CSV que respeita aspas — casa com o export (delimitador ; e aspas)
 function parseCSVEmp(text) {
@@ -643,7 +643,11 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
   </div>);
 }
 
-function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user, onCrmChange }) {
+// v103: datas da última visita / última compra (dd/mm/aa + "há N dias")
+const diasAte = d => { if (!d) return null; const t = Date.parse(d + "T12:00:00"); return isNaN(t) ? null : Math.max(0, Math.round((Date.parse(todayLocal() + "T12:00:00") - t) / 86400000)); };
+const dmy = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}` : "";
+const haDias = n => n == null ? "" : n === 0 ? "hoje" : n === 1 ? "ontem" : `há ${n} dias`;
+function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user, onCrmChange, visits, prospDe }) {
   const rfvDe = (o) => { if (!rfv) return null; const k = soDig(o.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; };
   const PREF = "jc:empresas-prefs";
   const p0 = sL(PREF, {});
@@ -653,14 +657,24 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const [fRfv, setFRfv] = useState(arr(p0.fRfv)); const [fGrp, setFGrp] = useState(arr(p0.fGrp)); const [fSr, setFSr] = useState(arr(p0.fSr)); const [fCid, setFCid] = useState(arr(p0.fCid)); // v41: Grupo no lugar da Curva ABC
   const [fCanal, setFCanal] = useState(arr(p0.fCanal)); // v64: canal de venda
   const [fCtt, setFCtt] = useState(arr(p0.fCtt)); // v85: com/sem pessoa de contato
+  const [fInd, setFInd] = useState(arr(p0.fInd)); const [fSit, setFSit] = useState(arr(p0.fSit)); // v103: marca × situação (Compra / Prospecção)
+  // v103: última visita de cada cliente — histórico completo do servidor (por CNPJ) + visitas do app (cobre quem não tem CNPJ e o dia de hoje)
+  const [uvSrv, setUvSrv] = useState(null);
+  useEffect(() => { if (!token) return; let vivo = true; crm(token, "/api/crm/ultimas-visitas").then(d => { if (vivo) setUvSrv(d.visitas || {}); }).catch(() => { if (vivo) setUvSrv({}); }); return () => { vivo = false; }; }, [token]);
+  const uvLocal = useMemo(() => { const m = {}; (visits || []).forEach(v => { if (!v.checkoutTime || /JORDAN REPRESENTA/i.test(v.orgName || "")) return; const d = toLocalDate(v.checkinTime); if (!m[v.orgId] || d > m[v.orgId].d) m[v.orgId] = { d, u: v.userName || "" }; }); return m; }, [visits]);
+  const uvDe = o => { const k = soDig(o.cnpj); const a = k ? uvSrv?.[k.padStart(14, "0")] : null; const b = uvLocal[o.id]; if (a && b) return b.d > a.d ? { ...a, d: b.d, u: b.u || a.u } : a; return a || b || null; };
+  const ucDe = o => rfvDe(o)?.ultima || null;
   const [filtAberto, setFiltAberto] = useState(false);
-  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt]);
+  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit]);
   // v85: quem tem pessoa de contato (carrega só quando o filtro de contato é usado)
   const [cttSet, setCttSet] = useState(null);
   useEffect(() => { if (!fCtt.length || cttSet || !token) return; let vivo = true;
     crm(token, "/api/crm/contatos-todos?limit=5000").then(d => { if (!vivo) return; const ids = new Set(), cn = new Set(); (d.contatos || []).forEach(c => { if (c.org_id) ids.add(Number(c.org_id)); const k = soDig(c.cnpj); if (k) cn.add(k); }); setCttSet({ ids, cn }); }).catch(() => setCttSet({ ids: new Set(), cn: new Set() }));
     return () => { vivo = false; }; }, [fCtt, cttSet, token]);
   const [ordem, setOrdem] = useState(1); // 1 = A→Z, -1 = Z→A
+  const [ordKey, setOrdKey] = useState("nome"); // v103: nome | uv (última visita) | uc (última compra)
+  const ordenar = k => { if (ordKey === k) setOrdem(o => -o); else { setOrdKey(k); setOrdem(k === "nome" ? 1 : -1); } };
+  const seta = k => ordKey === k ? (ordem === 1 ? " ▲" : " ▼") : "";
   const [vc, setVc] = useState(60);
   const resps = useMemo(() => { const s = new Set(USERS.map(u => u.n)); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
   const cidades = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const c = o.addr?.city_name || o.addr?.city; if (c) s.add(c); }); return [...s].sort(); }, [allOrgs]);
@@ -679,8 +693,14 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       l = l.filter(o => (fCtt.includes("Com pessoa de contato") && tem(o)) || (fCtt.includes("Sem pessoa de contato") && !tem(o))); }
     if (fRfv.length || fSr.length) l = l.filter(o => { const r = rfvDe(o); if (!r) return false;
       if (fRfv.length && !fRfv.includes(r.rfv)) return false; if (fSr.length && !fSr.includes(r.status)) return false; return true; });
-    return [...l].sort((a, b) => ordem * (a.nickname || a.name || "").localeCompare(b.nickname || b.name || ""));
-  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, fCtt, cttSet, ordem, rfv]);
+    // v103: Marca × Situação na marca — mesma regra de PDVs (sem situação = compra OU prospecção)
+    if (fInd.length || fSit.length) { const mk = new Set((fInd.length ? fInd : marcasCadastro()).map(chaveMarca)); const qC = !fSit.length || fSit.includes("Compra"), qP = !fSit.length || fSit.includes("Prospecção");
+      l = l.filter(o => { const compra = String(rfvDe(o)?.inds || "").split(",").some(i => mk.has(chaveMarca(i))); const pr = prospDe ? prospDe(o).some(x => mk.has(chaveMarca(x.industria))) : false; return (qC && compra) || (qP && pr); }); }
+    const nome = o => o.nickname || o.name || "";
+    if (ordKey === "nome") return [...l].sort((a, b) => ordem * nome(a).localeCompare(nome(b)));
+    const val = o => ordKey === "uv" ? (uvDe(o)?.d || "") : (ucDe(o) || "");
+    return [...l].sort((a, b) => { const va = val(a), vb = val(b); if (!va && !vb) return nome(a).localeCompare(nome(b)); if (!va) return 1; if (!vb) return -1; return ordem * va.localeCompare(vb) || nome(a).localeCompare(nome(b)); });
+  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, fCtt, fInd, fSit, prospDe, cttSet, ordem, ordKey, uvSrv, uvLocal, rfv]); // eslint-disable-line
   const th = { textAlign: "left", padding: "10px 10px", fontSize: 12.5, fontWeight: 600, color: S.t2, whiteSpace: "nowrap", borderBottom: `1px solid ${S.brd}`, position: "sticky", top: 0, background: S.cardSolid, zIndex: 1 };
   const td = { padding: "10px 10px", fontSize: 13, color: S.txt, borderBottom: `1px solid ${S.brd}`, whiteSpace: "nowrap", verticalAlign: "middle" };
 
@@ -711,7 +731,8 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
         p1 ? p1.nome : "", p1 ? (p1.cargo || "") : "", txtCel(p1 ? (p1.telefone || p1.whatsapp || o.phone || "") : (o.phone || "")), p1 ? (p1.email || o.email || "") : (o.email || ""),
         fmtP(ps[1]), txtCel(ps[1] ? (ps[1].telefone || ps[1].whatsapp || "") : ""),
         fmtP(ps[2]), txtCel(ps[2] ? (ps[2].telefone || ps[2].whatsapp || "") : ""),
-        fmtP(ps[3]), txtCel(ps[3] ? (ps[3].telefone || ps[3].whatsapp || "") : "")]); });
+        fmtP(ps[3]), txtCel(ps[3] ? (ps[3].telefone || ps[3].whatsapp || "") : ""),
+        uvDe(o)?.d ? dmy(uvDe(o).d) : "", uvDe(o)?.u || "", ucDe(o) ? dmy(ucDe(o)) : "", String(rfvDe(o)?.inds || "").split(",").filter(Boolean).join(", "), prospDe ? prospDe(o).map(x => x.industria).join(", ") : ""]); });
     csv(rows, `empresas-${new Date().toISOString().slice(0, 10)}.csv`);
   };
 
@@ -771,7 +792,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Nome, CNPJ, bairro, cidade, e-mail ou telefone" aria-label="Buscar empresa" style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", padding: 0, fontSize: 15 }} />
       {q && <button onClick={() => { setQ(""); setVc(60); }} aria-label="Limpar busca" style={{ border: "none", padding: 4, color: S.ts, display: "flex", background: "transparent" }}><X size={16} /></button>}
     </div>
-    {(() => { const grupos = [[fCat, setFCat], [fResp, setFResp], [fCid, setFCid], [fCanal, setFCanal], [fGrp, setFGrp], [fRfv, setFRfv], [fSr, setFSr], [fCtt, setFCtt]];
+    {(() => { const grupos = [[fCat, setFCat], [fResp, setFResp], [fCid, setFCid], [fCanal, setFCanal], [fGrp, setFGrp], [fRfv, setFRfv], [fSr, setFSr], [fCtt, setFCtt], [fInd, setFInd], [fSit, setFSit]];
       const chips = grupos.flatMap(([vals, set]) => vals.map(v => ({ k: v, l: v, tira: () => { set(vals.filter(x => x !== v)); setVc(60); } })));
       const limpar = () => { grupos.forEach(([, set]) => set([])); setVc(60); };
       return (<>
@@ -789,14 +810,19 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
           <MultiSelect values={fRfv} onChange={v => { setFRfv(v); setVc(60); }} placeholder="Classe RFV" allLabel="Todas" options={["Campeão", "Leal", "Em Crescimento", "Em Risco", "Inativo"]} />
           <MultiSelect values={fSr} onChange={v => { setFSr(v); setVc(60); }} placeholder="Recompra" allLabel="Todos" options={["Em Dia", "Momento de Recompra", "Atrasado"]} />
           <MultiSelect values={fCtt} onChange={v => { setFCtt(v); setVc(60); }} placeholder="Contato" allLabel="Todos" options={["Sem pessoa de contato", "Com pessoa de contato"]} />
+          <MultiSelect values={fInd} onChange={v => { setFInd(v); setVc(60); }} placeholder="Marca" allLabel="Todas" options={marcasCadastro()} />
+          <MultiSelect values={fSit} onChange={v => { setFSit(v); setVc(60); }} placeholder="Situação na marca" allLabel="Todas" options={["Compra", "Prospecção"]} />
         </div>}
         {fCtt.length > 0 && !cttSet && <p style={{ fontSize: 12, color: S.ts, margin: "0 0 8px" }}>Carregando contatos…</p>}
       </>); })()}
     <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10 }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 900 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1080 }}>
         <thead><tr>
-          <th style={{ ...th, cursor: "pointer" }} onClick={() => setOrdem(o => -o)}>Nome {ordem === 1 ? "▲" : "▼"}</th>
-          <th style={th}>Categoria · canal</th><th style={th}>Bairro</th><th style={th}>Cidade</th><th style={th}>RFV</th><th style={th}>Responsável</th><th style={th}>Contato</th><th style={th}></th>
+          <th style={{ ...th, cursor: "pointer" }} onClick={() => ordenar("nome")}>Nome{seta("nome")}</th>
+          <th style={th}>Categoria · canal</th><th style={th}>Bairro</th><th style={th}>Cidade</th><th style={th}>RFV</th>
+          <th style={{ ...th, cursor: "pointer" }} onClick={() => ordenar("uv")} title="Ordenar pela última visita">Últ. visita{seta("uv")}</th>
+          <th style={{ ...th, cursor: "pointer" }} onClick={() => ordenar("uc")} title="Ordenar pela última compra">Últ. compra{seta("uc")}</th>
+          <th style={th}>Responsável</th><th style={th}>Contato</th><th style={th}></th>
         </tr></thead>
         <tbody>
           {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id}>
@@ -810,6 +836,10 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
             <td style={{ ...td, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis" }} title={o.addr?.district || ""}>{o.addr?.district || "—"}</td>
             <td style={{ ...td, fontSize: 13 }}>{o.addr?.city_name || o.addr?.city || "—"}{o.addr?.state ? <span style={{ color: S.ts }}>/{o.addr.state}</span> : null}</td>
             <td style={td}>{(() => { const r = rfvDe(o); if (!r) return "—"; const rc = { "Campeão": S.gold, "Leal": S.ok, "Em Crescimento": S.pri, "Em Risco": "#E76F51", "Inativo": S.td }[r.rfv] || S.ts; return <span style={{ fontSize: 10.5, color: rc, border: `1px solid ${rc}66`, background: rc + "18", padding: "2px 7px", borderRadius: 4, fontWeight: 700 }}>{r.rfv}</span>; })()}</td>
+            <td style={td} title={(() => { const v = uvDe(o); return v ? `Última visita ${dmy(v.d)}${v.u ? " por " + v.u : ""}${v.n12 != null ? ` · ${v.n12} visita(s) em 12 meses` : ""}` : "Sem visita registrada"; })()}>{(() => { const v = uvDe(o); if (!v) return uvSrv ? <span style={{ fontSize: 12, color: S.td }}>sem visita</span> : <span style={{ color: S.td }}>…</span>; const n = diasAte(v.d); const c = n > 90 ? S.dng : n > 45 ? S.gold : S.ts;
+              return <><span className="num" style={{ display: "block", fontSize: 13 }}>{dmy(v.d)}</span><span style={{ display: "block", fontSize: 11.5, color: c }}>{haDias(n)}{v.u ? ` · ${v.u.split(" ")[0]}` : ""}</span></>; })()}</td>
+            <td style={td}>{(() => { const d = ucDe(o); if (!d) return <span style={{ fontSize: 12, color: S.td }}>{rfv ? "sem compra" : "…"}</span>; const st = rfvDe(o)?.status; const c = st === "Atrasado" ? S.dng : st === "Momento de Recompra" ? S.gold : S.ts;
+              return <span title={st ? `Recompra: ${st}` : ""}><span className="num" style={{ display: "block", fontSize: 13 }}>{dmy(d)}</span><span style={{ display: "block", fontSize: 11.5, color: c }}>{haDias(diasAte(d))}</span></span>; })()}</td>
             <td style={{ ...td, fontSize: 13 }} title={o.owner || ""}>{o.owner ? o.owner.split(" ")[0] : "—"}</td>
             <td style={{ ...td, maxWidth: 175, overflow: "hidden", textOverflow: "ellipsis" }} title={[o.phone, o.email].filter(Boolean).join(" · ")}>
               {o.phone ? <a href={`https://wa.me/55${String(o.phone).replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="num" style={{ display: "block", fontSize: 13, color: S.ok, textDecoration: "none", fontWeight: 600 }}>{o.phone}</a> : null}
@@ -900,7 +930,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   if (sel) return <ClienteCRM org={sel} allOrgs={allOrgs} prospDe={prospDe} onProspFim={onProspFim} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
 
   return (<div>
-    {secao === "empresas" && <EmpresasView token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}
+    {secao === "empresas" && <EmpresasView token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} visits={visits} prospDe={prospDe} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}
     {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} onPerson={onPerson} q0={pessoasQ} />}
     {secao === "inicio" && <div>
     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>

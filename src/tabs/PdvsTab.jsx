@@ -105,7 +105,7 @@ function PdvsTab({visible,orgs,allOrgs,setOrgs,visits,plocs,active,ldId,geoErr,u
             <MultiSelect values={canalSel} onChange={v=>{setCanalSel(v);setVc(PG);}} placeholder="Canal" allLabel="Todos" options={CANAIS}/>
             <MultiSelect values={fRfv} onChange={v=>{setFRfv(v);setVc(PG);}} placeholder="Classe RFV" allLabel="Todas" options={["Campeão","Leal","Em Crescimento","Em Risco","Inativo"]}/>
             <MultiSelect values={fSr} onChange={v=>{setFSr(v);setVc(PG);}} placeholder="Recompra" allLabel="Todos" options={["Em Dia","Momento de Recompra","Atrasado"]}/>
-            <MultiSelect values={fInd} onChange={v=>{setFInd(v);setVc(PG);}} placeholder="Indústria" allLabel="Todas" options={marcasCadastro()}/>
+            <MultiSelect values={fInd} onChange={v=>{setFInd(v);setVc(PG);}} placeholder="Marca" allLabel="Todas" options={marcasCadastro()}/>
             <MultiSelect values={fSit} onChange={v=>{setFSit(v);setVc(PG);}} placeholder="Situação na marca" allLabel="Todas" options={["Compra","Prospecção"]}/>
           </div>
           <div>
