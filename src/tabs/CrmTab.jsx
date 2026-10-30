@@ -1031,7 +1031,9 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   };
 
   if (!visible) return null;
-  if (sel) return <ClienteCRM org={sel} allOrgs={allOrgs} prospDe={prospDe} onProspFim={onProspFim} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
+  // v106: a ficha mostra sempre a versão atual do cliente (depois de editar, sem precisar sair e voltar)
+  const selAt = sel ? ([...(allOrgs || []), ...(excl || [])].find(o => o.id === sel.id) || sel) : null;
+  if (sel) return <ClienteCRM org={selAt} allOrgs={allOrgs} prospDe={prospDe} onProspFim={onProspFim} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
 
   return (<div>
     {secao === "empresas" && <EmpresasView token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} visits={visits} prospDe={prospDe} onProspSalvar={onProspSalvar} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}

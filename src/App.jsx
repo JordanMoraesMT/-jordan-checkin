@@ -523,6 +523,6 @@ export default function App(){
       onCancel={()=>setSearchAdd(false)}/>}
     {newClient&&<NewClientModal token={token} user={user} users={usersList} allOrgs={allOrgs} onSave={org=>{setOrgs(p=>[org,...p]);setAllOrgs(p=>[org,...p]);setNewClient(false);}} onCancel={()=>setNewClient(false)}/>}
     {personTarget&&<PeopleModal org={personTarget} token={token} onClose={()=>setPersonTarget(null)}/>}
-    {editTarget&&<EditModal org={editTarget} token={token} users={usersList} allOrgs={allOrgs} onSave={u=>{setOrgs(p=>p.map(o=>o.id===u.id?u:o));setAllOrgs(p=>p.map(o=>o.id===u.id?u:o));setEditTarget(null);}} onClose={()=>setEditTarget(null)}/>}
+    {editTarget&&<EditModal org={editTarget} token={token} users={usersList} allOrgs={allOrgs} onSave={u=>{/* v106: atualiza também os EXCLUÍDOS e move o cliente de lista quando a categoria muda (Excluido ↔ demais) */const ex=!!u.excluido;const poe=(p,dentro)=>{const tem=p.some(o=>o.id===u.id);if(!dentro)return tem?p.filter(o=>o.id!==u.id):p;return tem?p.map(o=>o.id===u.id?u:o):[...p,u];};setOrgs(p=>poe(p,!ex));setAllOrgs(p=>poe(p,!ex));setExclOrgs(p=>poe(p,ex));setEditTarget(null);}} onClose={()=>setEditTarget(null)}/>}
     {divTarget&&<DivergentModal org={divTarget.org} dist={divTarget.dist} onAction={handleDivAction} onCancel={()=>setDivTarget(null)}/>}
   </div>);}
