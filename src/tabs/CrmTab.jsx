@@ -648,6 +648,28 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
 const diasAte = d => { if (!d) return null; const t = Date.parse(d + "T12:00:00"); return isNaN(t) ? null : Math.max(0, Math.round((Date.parse(todayLocal() + "T12:00:00") - t) / 86400000)); };
 const dmy = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}` : "";
 const haDias = n => n == null ? "" : n === 0 ? "hoje" : n === 1 ? "ontem" : `há ${n} dias`;
+// v105: colunas da tabela de Empresas — ocultar/mostrar e largura do nome (salvo no aparelho)
+const COLS_E = [["cat", "Categoria · canal"], ["bairro", "Bairro"], ["cidade", "Cidade"], ["rfv", "RFV"], ["uv", "Últ. visita"], ["uc", "Últ. compra"], ["prosp", "Prospecção"], ["resp", "Responsável"], ["ctt", "Contato"]];
+const NOME_W = [["Compacto", 215], ["Médio", 300], ["Largo", 420]];
+function ColunasMenu({ ocultas, setOcultas, nomeW, setNomeW, quebra, setQuebra }) {
+  const [aberto, setAberto] = useState(false); const bt = useRef(null), pn = useRef(null); const [r, setR] = useState(null);
+  useEffect(() => { if (!aberto) return; const f = e => { if (pn.current?.contains(e.target) || bt.current?.contains(e.target)) return; setAberto(false); }; document.addEventListener("mousedown", f); document.addEventListener("touchstart", f); return () => { document.removeEventListener("mousedown", f); document.removeEventListener("touchstart", f); }; }, [aberto]);
+  const abrir = () => { const b = bt.current?.getBoundingClientRect(); setR(b); setAberto(v => !v); };
+  const W = 250; const chip = on => ({ flex: 1, padding: "6px 4px", fontSize: 12, borderRadius: 7, border: `1px solid ${on ? S.pri : S.inpBdr}`, background: on ? S.pri + "1c" : S.inp, color: on ? S.pl : S.ts, fontWeight: on ? 700 : 500, cursor: "pointer" });
+  return (<>
+    <button ref={bt} onClick={abrir} aria-expanded={aberto} title="Ocultar colunas e largura do nome" style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 11px", fontSize: 12, fontWeight: 600, borderRadius: 10, border: `1px solid ${ocultas.length ? S.pri : S.inpBdr}`, background: ocultas.length ? S.pri + "18" : "transparent", color: ocultas.length ? S.pl : S.t2, cursor: "pointer", whiteSpace: "nowrap" }}><SlidersHorizontal size={14} /> Colunas{ocultas.length ? ` · ${ocultas.length} oculta${ocultas.length > 1 ? "s" : ""}` : ""}</button>
+    {aberto && r && createPortal(<div ref={pn} style={{ position: "fixed", top: Math.min(r.bottom + 6, window.innerHeight - 440), left: Math.max(8, Math.min(r.right - W, window.innerWidth - W - 8)), width: W, zIndex: 9999, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: "0 16px 40px rgba(0,0,0,.4)", padding: 12, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}>
+      <p style={{ margin: "0 0 6px", fontSize: 11.5, fontWeight: 700, color: S.ts }}>Largura do nome</p>
+      <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>{NOME_W.map(([l, w]) => <button key={l} onClick={() => setNomeW(w)} style={chip(nomeW === w)}>{l}</button>)}</div>
+      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: S.t2, padding: "4px 0 10px", cursor: "pointer" }}><input type="checkbox" checked={quebra} onChange={e => setQuebra(e.target.checked)} style={{ width: 15, height: 15 }} /> Nome inteiro (quebra em linhas)</label>
+      <p style={{ margin: "0 0 4px", fontSize: 11.5, fontWeight: 700, color: S.ts, borderTop: `1px solid ${S.brd}`, paddingTop: 10 }}>Colunas visíveis</p>
+      {COLS_E.map(([k, l]) => <label key={k} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: S.txt, padding: "5px 0", cursor: "pointer" }}><input type="checkbox" checked={!ocultas.includes(k)} onChange={() => setOcultas(o => o.includes(k) ? o.filter(x => x !== k) : [...o, k])} style={{ width: 15, height: 15 }} />{l}</label>)}
+      <button onClick={() => { setOcultas([]); setNomeW(215); setQuebra(false); }} style={{ marginTop: 8, width: "100%", padding: "7px", fontSize: 12, borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.ts, cursor: "pointer" }}>Restaurar padrão</button>
+      <p style={{ margin: "8px 0 0", fontSize: 10.5, color: S.td }}>Dica: arraste a borda direita do cabeçalho "Nome" para ajustar a largura.</p>
+    </div>, document.body)}
+  </>);
+}
+
 // v104: escolher marcas em prospecção — uma empresa (marca/desmarca) ou várias (marcar / encerrar em lote)
 function ProspModal({ titulo, sub, compra = [], atuais = [], lote = false, onSalvar, onFechar }) {
   const marcas = marcasCadastro();
@@ -699,6 +721,14 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const uvLocal = useMemo(() => { const m = {}; (visits || []).forEach(v => { if (!v.checkoutTime || /JORDAN REPRESENTA/i.test(v.orgName || "")) return; const d = toLocalDate(v.checkinTime); if (!m[v.orgId] || d > m[v.orgId].d) m[v.orgId] = { d, u: v.userName || "" }; }); return m; }, [visits]);
   const uvDe = o => { const k = soDig(o.cnpj); const a = k ? uvSrv?.[k.padStart(14, "0")] : null; const b = uvLocal[o.id]; if (a && b) return b.d > a.d ? { ...a, d: b.d, u: b.u || a.u } : a; return a || b || null; };
   const ucDe = o => rfvDe(o)?.ultima || null;
+  // v105: colunas visíveis e largura do nome
+  const CPREF = "jc:empresas-cols"; const c0 = sL(CPREF, {});
+  const [ocultas, setOcultas] = useState(arr(c0.ocultas));
+  const [nomeW, setNomeW] = useState(Number(c0.nomeW) || 215);
+  const [quebra, setQuebra] = useState(!!c0.quebra);
+  useEffect(() => { sS(CPREF, { ocultas, nomeW, quebra }); }, [ocultas, nomeW, quebra]); // eslint-disable-line
+  const V = k => !ocultas.includes(k);
+  const arrastar = e => { e.preventDefault(); e.stopPropagation(); const x0 = e.clientX, w0 = nomeW; const mv = ev => setNomeW(Math.max(140, Math.min(700, Math.round(w0 + ev.clientX - x0)))); const up = () => { window.removeEventListener("pointermove", mv); window.removeEventListener("pointerup", up); }; window.addEventListener("pointermove", mv); window.addEventListener("pointerup", up); };
   // v104: prospecção manual — por empresa (🎯) e em lote (seleção)
   const compraDe = o => String(rfvDe(o)?.inds || "").split(",").map(x => x.trim()).filter(Boolean);
   const [selE, setSelE] = useState(() => new Set());
@@ -836,7 +866,10 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   return (<div>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
       <p style={{ margin: 0, fontSize: 12.5, color: S.ts }}>Exibindo <b style={{ color: S.txt }}>{Math.min(vc, lista.length)}</b> de <b style={{ color: S.txt }}>{lista.length}</b> empresas</p>
-      <button onClick={onNovaEmpresa} style={{ display: "flex", alignItems: "center", gap: 5, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}><Plus size={14}/>Adicionar empresa</button>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <ColunasMenu ocultas={ocultas} setOcultas={setOcultas} nomeW={nomeW} setNomeW={setNomeW} quebra={quebra} setQuebra={setQuebra} />
+        <button onClick={onNovaEmpresa} style={{ display: "flex", alignItems: "center", gap: 5, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}><Plus size={14}/>Adicionar empresa</button>
+      </div>
     </div>
     {/* v85: busca + "Filtros · N" + etiquetas — mesmo padrão de PDVs e Análise */}
     <div style={{ display: "flex", alignItems: "center", gap: 10, background: S.card, border: `1px solid ${S.brd}`, borderRadius: 8, padding: "0 12px", height: 46, marginBottom: 10 }}>
@@ -878,43 +911,44 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       <button onClick={() => setSelE(new Set())} style={{ padding: "8px 10px", fontSize: 12.5, borderRadius: 9, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.ts, cursor: "pointer" }}>Limpar seleção</button>
     </div>}
     <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10 }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1240 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 120 + nomeW + [["cat", 130], ["bairro", 120], ["cidade", 150], ["rfv", 110], ["uv", 120], ["uc", 105], ["prosp", 170], ["resp", 100], ["ctt", 175]].reduce((t, [k, w]) => t + (V(k) ? w : 0), 0) }}>
         <thead><tr>
           <th style={{ ...th, width: 34, padding: "10px 4px 10px 10px" }}><input type="checkbox" aria-label="Selecionar todas as empresas filtradas" checked={lista.length > 0 && lista.every(o => selE.has(o.id))} onChange={e => setSelE(e.target.checked ? new Set(lista.map(o => o.id)) : new Set())} style={{ width: 16, height: 16, cursor: "pointer" }} /></th>
-          <th style={{ ...th, cursor: "pointer" }} onClick={() => ordenar("nome")}>Nome{seta("nome")}</th>
-          <th style={th}>Categoria · canal</th><th style={th}>Bairro</th><th style={th}>Cidade</th><th style={th}>RFV</th>
-          <th style={{ ...th, cursor: "pointer" }} onClick={() => ordenar("uv")} title="Ordenar pela última visita">Últ. visita{seta("uv")}</th>
-          <th style={{ ...th, cursor: "pointer" }} onClick={() => ordenar("uc")} title="Ordenar pela última compra">Últ. compra{seta("uc")}</th>
-          <th style={th}>Prospecção</th>
-          <th style={th}>Responsável</th><th style={th}>Contato</th><th style={th}></th>
+          <th style={{ ...th, cursor: "pointer", width: nomeW, minWidth: nomeW, maxWidth: nomeW, position: "sticky", userSelect: "none" }} onClick={() => ordenar("nome")}>Nome{seta("nome")}
+            <span onPointerDown={arrastar} onClick={e => e.stopPropagation()} onDoubleClick={e => { e.stopPropagation(); setNomeW(w => w >= 420 ? 215 : 420); }} title="Arraste para ajustar a largura (duplo clique alterna)" aria-label="Ajustar largura do nome" style={{ position: "absolute", top: 6, bottom: 6, right: 0, width: 10, cursor: "col-resize", display: "flex", justifyContent: "center", touchAction: "none" }}><span style={{ width: 2, height: "100%", borderRadius: 1, background: S.inpBdr }} /></span></th>
+          {V("cat") && <th style={th}>Categoria · canal</th>}{V("bairro") && <th style={th}>Bairro</th>}{V("cidade") && <th style={th}>Cidade</th>}{V("rfv") && <th style={th}>RFV</th>}
+          {V("uv") && <th style={{ ...th, cursor: "pointer" }} onClick={() => ordenar("uv")} title="Ordenar pela última visita">Últ. visita{seta("uv")}</th>}
+          {V("uc") && <th style={{ ...th, cursor: "pointer" }} onClick={() => ordenar("uc")} title="Ordenar pela última compra">Últ. compra{seta("uc")}</th>}
+          {V("prosp") && <th style={th}>Prospecção</th>}
+          {V("resp") && <th style={th}>Responsável</th>}{V("ctt") && <th style={th}>Contato</th>}<th style={th}></th>
         </tr></thead>
         <tbody>
           {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id} style={selE.has(o.id) ? { background: S.acc + "10" } : undefined}>
             <td style={{ ...td, padding: "10px 4px 10px 10px" }}><input type="checkbox" aria-label={`Selecionar ${o.nickname || o.name}`} checked={selE.has(o.id)} onChange={() => setSelE(s => { const n = new Set(s); n.has(o.id) ? n.delete(o.id) : n.add(o.id); return n; })} style={{ width: 16, height: 16, cursor: "pointer" }} /></td>
-            <td style={{ ...td, maxWidth: 215, overflow: "hidden", textOverflow: "ellipsis" }}>
-              <button onClick={() => onOpen(o)} style={{ background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer" }}>
-                <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: S.txt }}>{o.nickname || o.name}</span>
+            <td style={{ ...td, width: nomeW, minWidth: nomeW, maxWidth: nomeW, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: quebra ? "normal" : "nowrap" }} title={quebra ? undefined : (o.nickname || o.name)}>
+              <button onClick={() => onOpen(o)} style={{ background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer", maxWidth: "100%" }}>
+                <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: S.txt, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: quebra ? "normal" : "nowrap", wordBreak: "break-word" }}>{o.nickname || o.name}</span>
                 <span className="num" style={{ display: "block", fontSize: 11.5, color: S.ts }}>{[o.addr?.city_name || o.addr?.city, o.cnpj].filter(Boolean).join(" · ")}</span>
               </button></td>
-            <td style={td}>{o.cat && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: S.txt }}><span style={{ width: 8, height: 8, borderRadius: 4, background: cor, flexShrink: 0 }} />{o.cat}</span>}
-              <span style={{ display: "block", fontSize: 11.5, color: (o.canal || "Presencial") === "Presencial" ? S.ts : S.acc, marginLeft: 14 }}>{o.canal || "Presencial"}</span></td>
-            <td style={{ ...td, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis" }} title={o.addr?.district || ""}>{o.addr?.district || "—"}</td>
-            <td style={{ ...td, fontSize: 13 }}>{o.addr?.city_name || o.addr?.city || "—"}{o.addr?.state ? <span style={{ color: S.ts }}>/{o.addr.state}</span> : null}</td>
-            <td style={td}>{(() => { const r = rfvDe(o); if (!r) return "—"; const rc = { "Campeão": S.gold, "Leal": S.ok, "Em Crescimento": S.pri, "Em Risco": "#E76F51", "Inativo": S.td }[r.rfv] || S.ts; return <span style={{ fontSize: 10.5, color: rc, border: `1px solid ${rc}66`, background: rc + "18", padding: "2px 7px", borderRadius: 4, fontWeight: 700 }}>{r.rfv}</span>; })()}</td>
-            <td style={td} title={(() => { const v = uvDe(o); return v ? `Última visita ${dmy(v.d)}${v.u ? " por " + v.u : ""}${v.n12 != null ? ` · ${v.n12} visita(s) em 12 meses` : ""}` : "Sem visita registrada"; })()}>{(() => { const v = uvDe(o); if (!v) return uvSrv ? <span style={{ fontSize: 12, color: S.td }}>sem visita</span> : <span style={{ color: S.td }}>…</span>; const n = diasAte(v.d); const c = n > 90 ? S.dng : n > 45 ? S.gold : S.ts;
-              return <><span className="num" style={{ display: "block", fontSize: 13 }}>{dmy(v.d)}</span><span style={{ display: "block", fontSize: 11.5, color: c }}>{haDias(n)}{v.u ? ` · ${v.u.split(" ")[0]}` : ""}</span></>; })()}</td>
-            <td style={td}>{(() => { const d = ucDe(o); if (!d) return <span style={{ fontSize: 12, color: S.td }}>{rfv ? "sem compra" : "…"}</span>; const st = rfvDe(o)?.status; const c = st === "Atrasado" ? S.dng : st === "Momento de Recompra" ? S.gold : S.ts;
-              return <span title={st ? `Recompra: ${st}` : ""}><span className="num" style={{ display: "block", fontSize: 13 }}>{dmy(d)}</span><span style={{ display: "block", fontSize: 11.5, color: c }}>{haDias(diasAte(d))}</span></span>; })()}</td>
-            <td style={{ ...td, whiteSpace: "normal", minWidth: 150, maxWidth: 230 }}>{(() => { const ps = prospDe ? prospDe(o) : [];
+            {V("cat") && <td style={td}>{o.cat && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: S.txt }}><span style={{ width: 8, height: 8, borderRadius: 4, background: cor, flexShrink: 0 }} />{o.cat}</span>}
+              <span style={{ display: "block", fontSize: 11.5, color: (o.canal || "Presencial") === "Presencial" ? S.ts : S.acc, marginLeft: 14 }}>{o.canal || "Presencial"}</span></td>}
+            {V("bairro") && <td style={{ ...td, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis" }} title={o.addr?.district || ""}>{o.addr?.district || "—"}</td>}
+            {V("cidade") && <td style={{ ...td, fontSize: 13 }}>{o.addr?.city_name || o.addr?.city || "—"}{o.addr?.state ? <span style={{ color: S.ts }}>/{o.addr.state}</span> : null}</td>}
+            {V("rfv") && <td style={td}>{(() => { const r = rfvDe(o); if (!r) return "—"; const rc = { "Campeão": S.gold, "Leal": S.ok, "Em Crescimento": S.pri, "Em Risco": "#E76F51", "Inativo": S.td }[r.rfv] || S.ts; return <span style={{ fontSize: 10.5, color: rc, border: `1px solid ${rc}66`, background: rc + "18", padding: "2px 7px", borderRadius: 4, fontWeight: 700 }}>{r.rfv}</span>; })()}</td>}
+            {V("uv") && <td style={td} title={(() => { const v = uvDe(o); return v ? `Última visita ${dmy(v.d)}${v.u ? " por " + v.u : ""}${v.n12 != null ? ` · ${v.n12} visita(s) em 12 meses` : ""}` : "Sem visita registrada"; })()}>{(() => { const v = uvDe(o); if (!v) return uvSrv ? <span style={{ fontSize: 12, color: S.td }}>sem visita</span> : <span style={{ color: S.td }}>…</span>; const n = diasAte(v.d); const c = n > 90 ? S.dng : n > 45 ? S.gold : S.ts;
+              return <><span className="num" style={{ display: "block", fontSize: 13 }}>{dmy(v.d)}</span><span style={{ display: "block", fontSize: 11.5, color: c }}>{haDias(n)}{v.u ? ` · ${v.u.split(" ")[0]}` : ""}</span></>; })()}</td>}
+            {V("uc") && <td style={td}>{(() => { const d = ucDe(o); if (!d) return <span style={{ fontSize: 12, color: S.td }}>{rfv ? "sem compra" : "…"}</span>; const st = rfvDe(o)?.status; const c = st === "Atrasado" ? S.dng : st === "Momento de Recompra" ? S.gold : S.ts;
+              return <span title={st ? `Recompra: ${st}` : ""}><span className="num" style={{ display: "block", fontSize: 13 }}>{dmy(d)}</span><span style={{ display: "block", fontSize: 11.5, color: c }}>{haDias(diasAte(d))}</span></span>; })()}</td>}
+            {V("prosp") && <td style={{ ...td, whiteSpace: "normal", minWidth: 150, maxWidth: 230 }}>{(() => { const ps = prospDe ? prospDe(o) : [];
               return <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
                 {ps.map(x => <span key={x.industria} title={`Em prospecção${x.user_nome ? " · " + x.user_nome : ""}${(x.atualizado_em || x.criado_em) ? " · desde " + dmy(String(x.criado_em || x.atualizado_em).slice(0, 10)) : ""}`} style={{ fontSize: 10.5, fontWeight: 700, color: S.acc, background: S.acc + "18", border: `1px solid ${S.acc}55`, borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap" }}>{x.industria}</span>)}
                 <button onClick={() => { setPMsg(""); setPModal({ lote: false, orgs: [o] }); }} title="Marcar / desmarcar marcas em prospecção" aria-label={`Prospecção de ${o.nickname || o.name}`} style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 7px", fontSize: 11, borderRadius: 6, border: `1px dashed ${S.acc}88`, background: "transparent", color: S.acc, cursor: "pointer" }}><Target size={12} />{ps.length ? "" : " Marcar"}</button>
-              </div>; })()}</td>
-            <td style={{ ...td, fontSize: 13 }} title={o.owner || ""}>{o.owner ? o.owner.split(" ")[0] : "—"}</td>
-            <td style={{ ...td, maxWidth: 175, overflow: "hidden", textOverflow: "ellipsis" }} title={[o.phone, o.email].filter(Boolean).join(" · ")}>
+              </div>; })()}</td>}
+            {V("resp") && <td style={{ ...td, fontSize: 13 }} title={o.owner || ""}>{o.owner ? o.owner.split(" ")[0] : "—"}</td>}
+            {V("ctt") && <td style={{ ...td, maxWidth: 175, overflow: "hidden", textOverflow: "ellipsis" }} title={[o.phone, o.email].filter(Boolean).join(" · ")}>
               {o.phone ? <a href={`https://wa.me/55${String(o.phone).replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="num" style={{ display: "block", fontSize: 13, color: S.ok, textDecoration: "none", fontWeight: 600 }}>{o.phone}</a> : null}
               {o.email ? <a href={`mailto:${o.email}`} style={{ display: "block", fontSize: 12, color: S.pl, textDecoration: "none", overflow: "hidden", textOverflow: "ellipsis" }}>{o.email}</a> : null}
-              {!o.phone && !o.email ? <span style={{ color: S.ts }}>—</span> : null}</td>
+              {!o.phone && !o.email ? <span style={{ color: S.ts }}>—</span> : null}</td>}
             <td style={td}><button onClick={() => onEdit(o)} title="Editar empresa" style={{ background: "transparent", border: `1px solid ${S.gold}66`, color: S.gold, borderRadius: 8, padding: "5px 8px", cursor: "pointer", display: "flex", alignItems: "center" }}><Pencil size={14}/></button></td>
           </tr>); })}
         </tbody>
