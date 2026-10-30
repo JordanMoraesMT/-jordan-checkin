@@ -2,7 +2,8 @@
 // CRM próprio: histórico de atividades, contatos, fotos/arquivos da loja e GPS.
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal, Link2 } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Target, Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal, Link2 } from "lucide-react";
 import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca, toLocalDate, marcasCadastro, chaveMarca } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
 
@@ -647,7 +648,41 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
 const diasAte = d => { if (!d) return null; const t = Date.parse(d + "T12:00:00"); return isNaN(t) ? null : Math.max(0, Math.round((Date.parse(todayLocal() + "T12:00:00") - t) / 86400000)); };
 const dmy = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}` : "";
 const haDias = n => n == null ? "" : n === 0 ? "hoje" : n === 1 ? "ontem" : `há ${n} dias`;
-function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user, onCrmChange, visits, prospDe }) {
+// v104: escolher marcas em prospecção — uma empresa (marca/desmarca) ou várias (marcar / encerrar em lote)
+function ProspModal({ titulo, sub, compra = [], atuais = [], lote = false, onSalvar, onFechar }) {
+  const marcas = marcasCadastro();
+  const kC = new Set(compra.map(chaveMarca)), kA = new Set(atuais.map(chaveMarca));
+  const [sel, setSel] = useState(() => new Set(marcas.filter(m => kA.has(chaveMarca(m)))));
+  const [lo, setLo] = useState(false);
+  const tog = m => setSel(s => { const n = new Set(s); n.has(m) ? n.delete(m) : n.add(m); return n; });
+  const ir = async modo => { setLo(true); await onSalvar([...sel], modo); setLo(false); };
+  const muda = !lote && (marcas.some(m => sel.has(m) !== kA.has(chaveMarca(m))));
+  return createPortal(<div onMouseDown={e => { if (e.target === e.currentTarget && !lo) onFechar(); }} style={{ position: "fixed", inset: 0, background: "rgba(4,10,18,.66)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+    <div role="dialog" aria-label="Marcas em prospecção" style={{ width: "100%", maxWidth: 460, maxHeight: "calc(100vh - 24px)", overflowY: "auto", background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 16, padding: 16, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }}>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 4 }}>
+        <Target size={18} color={S.acc} style={{ marginTop: 2 }} /><span style={{ flex: 1, fontSize: 15, fontWeight: 800, color: S.txt }}>{titulo}</span>
+        <button onClick={onFechar} disabled={lo} aria-label="Fechar" style={{ padding: 6, border: "none", display: "flex" }}><X size={17} color={S.ts} /></button>
+      </div>
+      {sub && <p style={{ margin: "0 0 12px 26px", fontSize: 12, color: S.ts }}>{sub}</p>}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 14 }}>
+        {marcas.map(m => { const bloq = !lote && kC.has(chaveMarca(m)); const on = sel.has(m);
+          return <button key={m} disabled={bloq || lo} onClick={() => tog(m)} aria-pressed={on} style={{ padding: "8px 12px", fontSize: 13, borderRadius: 9, fontWeight: on ? 700 : 500, border: `1px solid ${on ? S.acc : S.inpBdr}`, background: on ? S.acc + "22" : S.inp, color: bloq ? S.td : on ? S.acc : S.t2, cursor: bloq ? "default" : "pointer", opacity: bloq ? .55 : 1 }}>{on ? "✓ " : ""}{m}{bloq ? " · compra" : ""}</button>; })}
+      </div>
+      {lote ? <>
+        <p style={{ margin: "0 0 10px", fontSize: 11.5, color: S.td }}>Quem já compra a marca fica de fora automaticamente. "Encerrar" tira a prospecção dessas marcas das empresas selecionadas.</p>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
+          <button onClick={() => ir("rem")} disabled={lo || !sel.size} style={{ padding: "10px 14px", fontSize: 13, borderRadius: 10, border: `1px solid ${S.dng}66`, background: "transparent", color: S.dng, cursor: "pointer", opacity: sel.size ? 1 : .5 }}>Encerrar prospecção</button>
+          <button onClick={() => ir("add")} disabled={lo || !sel.size} style={{ padding: "10px 16px", fontSize: 13, fontWeight: 800, borderRadius: 10, border: "none", background: S.acc, color: "#fff", cursor: "pointer", opacity: sel.size ? 1 : .5 }}>{lo ? "Gravando…" : "Marcar prospecção"}</button>
+        </div>
+      </> : <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button onClick={onFechar} disabled={lo} style={{ padding: "10px 14px", fontSize: 13, borderRadius: 10, border: `1px solid ${S.inpBdr}`, background: S.inp, color: S.t2, cursor: "pointer" }}>Cancelar</button>
+        <button onClick={() => ir("set")} disabled={lo || !muda} style={{ padding: "10px 16px", fontSize: 13, fontWeight: 800, borderRadius: 10, border: "none", background: S.acc, color: "#fff", cursor: "pointer", opacity: muda ? 1 : .5 }}>{lo ? "Gravando…" : "Salvar"}</button>
+      </div>}
+    </div>
+  </div>, document.body);
+}
+
+function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user, onCrmChange, visits, prospDe, onProspSalvar }) {
   const rfvDe = (o) => { if (!rfv) return null; const k = soDig(o.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; };
   const PREF = "jc:empresas-prefs";
   const p0 = sL(PREF, {});
@@ -664,6 +699,23 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const uvLocal = useMemo(() => { const m = {}; (visits || []).forEach(v => { if (!v.checkoutTime || /JORDAN REPRESENTA/i.test(v.orgName || "")) return; const d = toLocalDate(v.checkinTime); if (!m[v.orgId] || d > m[v.orgId].d) m[v.orgId] = { d, u: v.userName || "" }; }); return m; }, [visits]);
   const uvDe = o => { const k = soDig(o.cnpj); const a = k ? uvSrv?.[k.padStart(14, "0")] : null; const b = uvLocal[o.id]; if (a && b) return b.d > a.d ? { ...a, d: b.d, u: b.u || a.u } : a; return a || b || null; };
   const ucDe = o => rfvDe(o)?.ultima || null;
+  // v104: prospecção manual — por empresa (🎯) e em lote (seleção)
+  const compraDe = o => String(rfvDe(o)?.inds || "").split(",").map(x => x.trim()).filter(Boolean);
+  const [selE, setSelE] = useState(() => new Set());
+  const [pModal, setPModal] = useState(null); // { orgs:[o], lote:bool }
+  const [pMsg, setPMsg] = useState("");
+  const salvarP = async (marcas, modo) => {
+    const os = pModal.orgs; let lista;
+    if (modo === "set") { const o = os[0]; const at = (prospDe ? prospDe(o) : []).map(x => x.industria); const kS = new Set(marcas.map(chaveMarca)), kA = new Set(at.map(chaveMarca));
+      lista = [{ o, add: marcas.filter(m => !kA.has(chaveMarca(m))), rem: at.filter(m => !kS.has(chaveMarca(m))) }]; }
+    else if (modo === "add") lista = os.map(o => { const kC = new Set(compraDe(o).map(chaveMarca)); return { o, add: marcas.filter(m => !kC.has(chaveMarca(m))), rem: [] }; }).filter(x => x.add.length);
+    else lista = os.map(o => { const kA = new Set((prospDe ? prospDe(o) : []).map(x => chaveMarca(x.industria))); return { o, add: [], rem: marcas.filter(m => kA.has(chaveMarca(m))) }; }).filter(x => x.rem.length);
+    if (!lista.length) { setPModal(null); setPMsg(modo === "rem" ? "Nenhuma das empresas selecionadas estava em prospecção dessas marcas." : "Todas as selecionadas já compram essas marcas."); return; }
+    if (!onProspSalvar) return;
+    const r = await onProspSalvar(lista);
+    setPModal(null); if (pModal.lote) setSelE(new Set());
+    setPMsg(r.falha ? `Gravei ${r.ok} de ${lista.length}. ${r.falha} falharam — tente de novo.` : `✓ Prospecção ${modo === "rem" ? "encerrada" : "gravada"} em ${r.ok} empresa(s).`);
+  };
   const [filtAberto, setFiltAberto] = useState(false);
   useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit]);
   // v85: quem tem pessoa de contato (carrega só quando o filtro de contato é usado)
@@ -815,17 +867,30 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
         </div>}
         {fCtt.length > 0 && !cttSet && <p style={{ fontSize: 12, color: S.ts, margin: "0 0 8px" }}>Carregando contatos…</p>}
       </>); })()}
+    {pModal && <ProspModal lote={pModal.lote} titulo={pModal.lote ? `Prospecção em ${pModal.orgs.length} empresa(s)` : `Marcas em prospecção · ${pModal.orgs[0].nickname || pModal.orgs[0].name}`}
+      sub={pModal.lote ? "Escolha as marcas e toque em Marcar ou Encerrar." : "Marque as marcas que estão sendo prospectadas. As que o cliente já compra ficam bloqueadas."}
+      compra={pModal.lote ? [] : compraDe(pModal.orgs[0])} atuais={pModal.lote ? [] : (prospDe ? prospDe(pModal.orgs[0]).map(x => x.industria) : [])}
+      onSalvar={salvarP} onFechar={() => setPModal(null)} />}
+    {pMsg && <p style={{ margin: "0 0 8px", fontSize: 12.5, color: pMsg.startsWith("✓") ? S.ok : S.gold }}>{pMsg}</p>}
+    {selE.size > 0 && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: S.acc + "14", border: `1px solid ${S.acc}55`, borderRadius: 10, padding: "8px 12px", marginBottom: 8 }}>
+      <span style={{ flex: 1, minWidth: 160, fontSize: 13, color: S.txt }}><b>{selE.size}</b> empresa(s) selecionada(s)</span>
+      <button onClick={() => { setPMsg(""); setPModal({ lote: true, orgs: [...(allOrgs || []), ...(excl || [])].filter(o => selE.has(o.id)) }); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, fontWeight: 700, borderRadius: 9, border: "none", background: S.acc, color: "#fff", cursor: "pointer" }}><Target size={14} /> Prospecção…</button>
+      <button onClick={() => setSelE(new Set())} style={{ padding: "8px 10px", fontSize: 12.5, borderRadius: 9, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.ts, cursor: "pointer" }}>Limpar seleção</button>
+    </div>}
     <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10 }}>
-      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1080 }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 1240 }}>
         <thead><tr>
+          <th style={{ ...th, width: 34, padding: "10px 4px 10px 10px" }}><input type="checkbox" aria-label="Selecionar todas as empresas filtradas" checked={lista.length > 0 && lista.every(o => selE.has(o.id))} onChange={e => setSelE(e.target.checked ? new Set(lista.map(o => o.id)) : new Set())} style={{ width: 16, height: 16, cursor: "pointer" }} /></th>
           <th style={{ ...th, cursor: "pointer" }} onClick={() => ordenar("nome")}>Nome{seta("nome")}</th>
           <th style={th}>Categoria · canal</th><th style={th}>Bairro</th><th style={th}>Cidade</th><th style={th}>RFV</th>
           <th style={{ ...th, cursor: "pointer" }} onClick={() => ordenar("uv")} title="Ordenar pela última visita">Últ. visita{seta("uv")}</th>
           <th style={{ ...th, cursor: "pointer" }} onClick={() => ordenar("uc")} title="Ordenar pela última compra">Últ. compra{seta("uc")}</th>
+          <th style={th}>Prospecção</th>
           <th style={th}>Responsável</th><th style={th}>Contato</th><th style={th}></th>
         </tr></thead>
         <tbody>
-          {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id}>
+          {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id} style={selE.has(o.id) ? { background: S.acc + "10" } : undefined}>
+            <td style={{ ...td, padding: "10px 4px 10px 10px" }}><input type="checkbox" aria-label={`Selecionar ${o.nickname || o.name}`} checked={selE.has(o.id)} onChange={() => setSelE(s => { const n = new Set(s); n.has(o.id) ? n.delete(o.id) : n.add(o.id); return n; })} style={{ width: 16, height: 16, cursor: "pointer" }} /></td>
             <td style={{ ...td, maxWidth: 215, overflow: "hidden", textOverflow: "ellipsis" }}>
               <button onClick={() => onOpen(o)} style={{ background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer" }}>
                 <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: S.txt }}>{o.nickname || o.name}</span>
@@ -840,6 +905,11 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
               return <><span className="num" style={{ display: "block", fontSize: 13 }}>{dmy(v.d)}</span><span style={{ display: "block", fontSize: 11.5, color: c }}>{haDias(n)}{v.u ? ` · ${v.u.split(" ")[0]}` : ""}</span></>; })()}</td>
             <td style={td}>{(() => { const d = ucDe(o); if (!d) return <span style={{ fontSize: 12, color: S.td }}>{rfv ? "sem compra" : "…"}</span>; const st = rfvDe(o)?.status; const c = st === "Atrasado" ? S.dng : st === "Momento de Recompra" ? S.gold : S.ts;
               return <span title={st ? `Recompra: ${st}` : ""}><span className="num" style={{ display: "block", fontSize: 13 }}>{dmy(d)}</span><span style={{ display: "block", fontSize: 11.5, color: c }}>{haDias(diasAte(d))}</span></span>; })()}</td>
+            <td style={{ ...td, whiteSpace: "normal", minWidth: 150, maxWidth: 230 }}>{(() => { const ps = prospDe ? prospDe(o) : [];
+              return <div style={{ display: "flex", alignItems: "center", gap: 4, flexWrap: "wrap" }}>
+                {ps.map(x => <span key={x.industria} title={`Em prospecção${x.user_nome ? " · " + x.user_nome : ""}${(x.atualizado_em || x.criado_em) ? " · desde " + dmy(String(x.criado_em || x.atualizado_em).slice(0, 10)) : ""}`} style={{ fontSize: 10.5, fontWeight: 700, color: S.acc, background: S.acc + "18", border: `1px solid ${S.acc}55`, borderRadius: 4, padding: "2px 6px", whiteSpace: "nowrap" }}>{x.industria}</span>)}
+                <button onClick={() => { setPMsg(""); setPModal({ lote: false, orgs: [o] }); }} title="Marcar / desmarcar marcas em prospecção" aria-label={`Prospecção de ${o.nickname || o.name}`} style={{ display: "flex", alignItems: "center", gap: 3, padding: "3px 7px", fontSize: 11, borderRadius: 6, border: `1px dashed ${S.acc}88`, background: "transparent", color: S.acc, cursor: "pointer" }}><Target size={12} />{ps.length ? "" : " Marcar"}</button>
+              </div>; })()}</td>
             <td style={{ ...td, fontSize: 13 }} title={o.owner || ""}>{o.owner ? o.owner.split(" ")[0] : "—"}</td>
             <td style={{ ...td, maxWidth: 175, overflow: "hidden", textOverflow: "ellipsis" }} title={[o.phone, o.email].filter(Boolean).join(" · ")}>
               {o.phone ? <a href={`https://wa.me/55${String(o.phone).replace(/\D/g, "")}`} target="_blank" rel="noreferrer" className="num" style={{ display: "block", fontSize: 13, color: S.ok, textDecoration: "none", fontWeight: 600 }}>{o.phone}</a> : null}
@@ -877,7 +947,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
 // ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl, pessoasQ, onRemoto, prospDe, onProspFim }) {
+export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl, pessoasQ, onRemoto, prospDe, onProspFim, onProspSalvar }) {
   // secao controlada pelo menu lateral do App: inicio | empresas | pessoas
   const [sel, setSel] = useState(null);
   // Abrir a ficha de um cliente vindo de outra tela (ex.: clique no card em PDVs)
@@ -930,7 +1000,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   if (sel) return <ClienteCRM org={sel} allOrgs={allOrgs} prospDe={prospDe} onProspFim={onProspFim} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
 
   return (<div>
-    {secao === "empresas" && <EmpresasView token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} visits={visits} prospDe={prospDe} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}
+    {secao === "empresas" && <EmpresasView token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} visits={visits} prospDe={prospDe} onProspSalvar={onProspSalvar} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}
     {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} onPerson={onPerson} q0={pessoasQ} />}
     {secao === "inicio" && <div>
     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
