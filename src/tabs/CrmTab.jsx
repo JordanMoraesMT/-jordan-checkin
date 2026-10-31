@@ -760,10 +760,12 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     setPMsg("Gerando planilha…");
     try {
       const { gerarPlanilhaProsp } = await import("../planilhaProsp.js");
-      const cl = lista.filter(o => soDig(o.cnpj)).map(o => ({ cnpj: soDig(o.cnpj).padStart(14, "0"), nome: o.nickname || o.name || "", razao: o.legalName || "", cidade: o.addr?.city_name || o.addr?.city || "", uf: o.addr?.state || "", resp: o.owner || "", cat: o.cat || "", compra: compraDe(o), prosp: prospDe ? prospDe(o).map(x => x.industria) : [] }));
+      // v109: SEMPRE a carteira inteira (inclusive Excluídos), sem depender dos filtros da tela
+      const vis = new Set(); const todos = [...(allOrgs || []), ...(excl || [])].filter(o => { if (vis.has(o.id)) return false; vis.add(o.id); return true; }).sort((a, b) => (a.nickname || a.name || "").localeCompare(b.nickname || b.name || ""));
+      const cl = todos.filter(o => soDig(o.cnpj)).map(o => ({ cnpj: soDig(o.cnpj).padStart(14, "0"), nome: o.nickname || o.name || "", razao: o.legalName || "", cidade: o.addr?.city_name || o.addr?.city || "", uf: o.addr?.state || "", resp: o.owner || "", cat: o.cat || "", compra: compraDe(o), prosp: prospDe ? prospDe(o).map(x => x.industria) : [] }));
       const blob = gerarPlanilhaProsp(cl, marcasCadastro(), chaveMarca);
       const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `prospeccao-${todayLocal()}.xlsx`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000);
-      setPMsg(`✓ Planilha com ${cl.length} empresa(s) baixada. Marque X nas marcas e carregue em "Carregar prospecção".`);
+      setPMsg(`✓ Planilha com ${cl.length} empresa(s) baixada (carteira inteira, inclusive excluídos). Marque X nas marcas e carregue em "Carregar prospecção".`);
     } catch (e) { setPMsg("Erro ao gerar a planilha: " + (e.message || e)); }
   };
   const lerProsp = async file => {
@@ -1035,7 +1037,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     </div>
     {/* Barra de planilhas: exportar (CNPJ na 1ª coluna, como texto) e importar/cadastrar em massa */}
     <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-      <button onClick={baixarProsp} title="Excel com uma coluna por marca: marque X nas prospectadas" style={{ flex: 1, minWidth: 200, padding: 12, fontSize: 13, background: S.gold + "1c", border: `1px solid ${S.gold}66`, color: S.gold, fontWeight: 600, borderRadius: 10, cursor: "pointer" }}>🎯 Planilha de prospecção ({lista.filter(o => soDig(o.cnpj)).length})</button>
+      <button onClick={baixarProsp} title="Excel com TODA a carteira (inclusive excluídos), uma coluna por marca: marque X nas prospectadas" style={{ flex: 1, minWidth: 200, padding: 12, fontSize: 13, background: S.gold + "1c", border: `1px solid ${S.gold}66`, color: S.gold, fontWeight: 600, borderRadius: 10, cursor: "pointer" }}>🎯 Planilha de prospecção ({new Set([...(allOrgs || []), ...(excl || [])].filter(o => soDig(o.cnpj)).map(o => o.id)).size})</button>
       <button onClick={() => upRef.current && upRef.current.click()} disabled={pUpLo} style={{ flex: 1, minWidth: 200, padding: 12, fontSize: 13, background: S.gold + "1c", border: `1px solid ${S.gold}66`, color: S.gold, fontWeight: 600, borderRadius: 10, cursor: "pointer" }}>{pUpLo ? "Lendo…" : "📤 Carregar prospecção (Excel/CSV)"}</button>
       <input ref={upRef} type="file" accept=".xlsx,.csv,.txt" style={{ display: "none" }} onChange={e => lerProsp(e.target.files?.[0])} />
       <button onClick={exportar} disabled={!!impMsg} style={{ flex: 1, minWidth: 200, padding: 12, fontSize: 13, background: S.pri + "22", border: `1px solid ${S.pri}55`, color: S.pl, fontWeight: 600, borderRadius: 10, cursor: "pointer" }}>📊 Exportar {lista.length} empresas (Excel)</button>
