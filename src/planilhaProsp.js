@@ -34,20 +34,29 @@ function zipStore(arquivos) {
 
 // ── Gerar a planilha ──────────────────────────────────────────────────
 // clientes: [{ cnpj, nome, razao, cidade, uf, resp, cat, compra:[marcas], prosp:[marcas] }]; marcas: [nomes]
-export function gerarPlanilhaProsp(clientes, marcas, chaveMarca) {
+// modo "colunas" = uma coluna por marca com "X" (qualquer programa)
+// modo "celula"  = uma célula "Marcas em prospecção" com lista das marcas — no Google Planilhas dá para ligar
+//                  "Permitir várias seleções"; no Excel escolhe uma e digita as outras separadas por vírgula.
+export function gerarPlanilhaProsp(clientes, marcas, chaveMarca, modo = "colunas") {
+  const umaCel = modo === "celula";
   const fixas = ["CNPJ", "Nome", "Razão social", "Cidade", "UF", "Responsável", "Categoria", "Já compra"];
-  const cab = [...fixas, ...marcas, "Observação"];
-  const nM0 = fixas.length, nM1 = fixas.length + marcas.length - 1, ult = cab.length - 1, nL = clientes.length + 1;
+  const cab = umaCel ? [...fixas, "Marcas em prospecção", "Observação"] : [...fixas, ...marcas, "Observação"];
+  const nM0 = fixas.length, nM1 = umaCel ? fixas.length : fixas.length + marcas.length - 1, ult = cab.length - 1, nL = clientes.length + 1;
   const cel = (r, c, v, s) => `<c r="${col(c)}${r}" t="inlineStr" s="${s}"><is><t xml:space="preserve">${esc(v)}</t></is></c>`;
   const vazio = (r, c, s) => `<c r="${col(c)}${r}" s="${s}"/>`;
   const linhas = [`<row r="1" ht="30" customHeight="1">${cab.map((h, c) => cel(1, c, h, c >= nM0 && c <= nM1 ? 2 : 1)).join("")}</row>`];
   clientes.forEach((o, i) => {
     const r = i + 2, kC = new Set((o.compra || []).map(chaveMarca)), kP = new Set((o.prosp || []).map(chaveMarca));
     const fix = [o.cnpj, o.nome, o.razao, o.cidade, o.uf, o.resp, o.cat, (o.compra || []).join(", ")].map((v, c) => v ? cel(r, c, v, 3) : vazio(r, c, 3)).join("");
-    const mc = marcas.map((m, j) => { const c = nM0 + j, k = chaveMarca(m); return kC.has(k) ? cel(r, c, "compra", 4) : kP.has(k) ? cel(r, c, "X", 5) : vazio(r, c, 5); }).join("");
+    const mc = umaCel ? (() => { const v = marcas.filter(m => kP.has(chaveMarca(m)) && !kC.has(chaveMarca(m))).join(", "); return v ? cel(r, nM0, v, 5) : vazio(r, nM0, 5); })() : marcas.map((m, j) => { const c = nM0 + j, k = chaveMarca(m); return kC.has(k) ? cel(r, c, "compra", 4) : kP.has(k) ? cel(r, c, "X", 5) : vazio(r, c, 5); }).join("");
     linhas.push(`<row r="${r}">${fix}${mc}${vazio(r, ult, 3)}</row>`);
   });
-  const larg = [16, 34, 30, 18, 5, 16, 13, 22, ...marcas.map(m => Math.max(12, Math.min(15, m.length + 3))), 30];
+  const larg = [16, 34, 30, 18, 5, 16, 13, 22, ...(umaCel ? [42] : marcas.map(m => Math.max(12, Math.min(15, m.length + 3)))), 30];
+  const listaM = esc(`"${marcas.join(",")}"`);
+  const regras = umaCel
+    ? `<conditionalFormatting sqref="${col(nM0)}2:${col(nM0)}${Math.max(2, nL)}"><cfRule type="notContainsBlanks" dxfId="0" priority="1"><formula>LEN(TRIM(${col(nM0)}2))&gt;0</formula></cfRule></conditionalFormatting>
+<dataValidations count="1"><dataValidation type="list" errorStyle="warning" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Várias marcas" error="Para mais de uma marca, separe por vírgula (ex.: Zagonel, PADO). Clique em Sim para manter." promptTitle="Marcas em prospecção" prompt="Escolha a marca. Para várias: separe por vírgula (no Google Planilhas, ative Permitir várias seleções)." sqref="${col(nM0)}2:${col(nM0)}${Math.max(2, nL)}"><formula1>${listaM}</formula1></dataValidation></dataValidations>`
+    : null;
   const faixa = `${col(nM0)}2:${col(nM1)}${Math.max(2, nL)}`;
   const sheet1 = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
@@ -58,12 +67,24 @@ export function gerarPlanilhaProsp(clientes, marcas, chaveMarca) {
 <cols>${larg.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w}" customWidth="1"/>`).join("")}</cols>
 <sheetData>${linhas.join("")}</sheetData>
 <autoFilter ref="A1:${col(ult)}${nL}"/>
-<conditionalFormatting sqref="${faixa}"><cfRule type="cellIs" dxfId="0" priority="1" operator="equal"><formula>"X"</formula></cfRule></conditionalFormatting>
-<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Valor inválido" error="Marque com X a marca em prospecção (ou deixe vazio). &quot;compra&quot; = o cliente já compra a marca." promptTitle="Prospecção" prompt="X = em prospecção · vazio = não" sqref="${faixa}"><formula1>"X"</formula1></dataValidation></dataValidations>
+${regras || `<conditionalFormatting sqref="${faixa}"><cfRule type="cellIs" dxfId="0" priority="1" operator="equal"><formula>"X"</formula></cfRule></conditionalFormatting>
+<dataValidations count="1"><dataValidation type="list" allowBlank="1" showInputMessage="1" showErrorMessage="1" errorTitle="Valor inválido" error="Marque com X a marca em prospecção (ou deixe vazio). &quot;compra&quot; = o cliente já compra a marca." promptTitle="Prospecção" prompt="X = em prospecção · vazio = não" sqref="${faixa}"><formula1>"X"</formula1></dataValidation></dataValidations>`}
 <pageMargins left="0.3" right="0.3" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>
 <pageSetup paperSize="9" orientation="landscape" fitToWidth="1" fitToHeight="0"/>
 </worksheet>`;
-  const ajuda = [
+  const ajuda = umaCel ? [
+    "Planilha de prospecção — TeamCheck (uma célula com várias marcas)",
+    "",
+    "1. Na aba Prospecção, a coluna \"Marcas em prospecção\" recebe TODAS as marcas do cliente, separadas por vírgula. Ex.: Zagonel, PADO, Tintas Dacar",
+    "2. GOOGLE PLANILHAS: Arquivo › Importar este arquivo › selecione a coluna › Dados › Validação de dados › clique na regra › Avançado › marque \"Permitir várias seleções\". Aí a lista deixa escolher várias marcas na mesma célula.",
+    "3. EXCEL: escolha uma marca na lista e digite as outras separadas por vírgula. Se aparecer o aviso, clique em Sim para manter.",
+    "4. Célula vazia = sem prospecção. Tirar uma marca da célula encerra a prospecção dela (você confirma antes de gravar).",
+    "5. \"Já compra\" mostra as marcas que o cliente já compra; se forem digitadas na prospecção, são ignoradas.",
+    "6. Não altere a coluna CNPJ: é ela que identifica o cliente. Pode filtrar, ordenar e apagar linhas à vontade.",
+    "7. Baixe como .xlsx (ou CSV) e carregue em TeamCheck › CRM › Empresas › Carregar prospecção. Antes de gravar aparece um resumo.",
+    "",
+    `Gerada em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Cuiaba" })} · ${clientes.length} clientes · marcas: ${marcas.join(", ")}`,
+  ] : [
     "Planilha de prospecção — TeamCheck",
     "",
     "1. Na aba Prospecção, cada coluna de marca tem uma lista suspensa: escolha X para marcar a marca em prospecção.",
@@ -182,5 +203,13 @@ export async function lerPlanilha(file) {
   if (nome.endsWith(".xls")) throw new Error("Formato .xls antigo não é aceito. Salve como .xlsx (Pasta de Trabalho do Excel) ou CSV.");
   return lerXlsx(await file.arrayBuffer());
 }
+// Célula "Marcas em prospecção" → marcas reconhecidas + nomes não reconhecidos (aceita , ; / | e quebra de linha)
+export const marcasDaCelula = (v, marcas, chaveMarca) => {
+  const ok = [], nao = [];
+  String(v ?? "").split(/[,;\/|\n]+/).map(t => t.trim()).filter(Boolean).forEach(t => { const k = chaveMarca(t);
+    const m = marcas.find(x => chaveMarca(x) === k) || (k.length >= 4 ? marcas.find(x => chaveMarca(x).includes(k) || k.includes(chaveMarca(x))) : null);
+    if (m) { if (!ok.includes(m)) ok.push(m); } else nao.push(t); });
+  return { ok, nao };
+};
 // Valor da célula de marca → marcado?  (X, SIM, S, 1, OK, ✓, P/PROSP…)  "compra" e vazio = não
 export const marcado = v => { const t = String(v ?? "").trim().toLowerCase(); if (!t || t.startsWith("compra")) return false; return /^(x|sim|s|1|ok|✓|✔|p|prosp)/.test(t); };

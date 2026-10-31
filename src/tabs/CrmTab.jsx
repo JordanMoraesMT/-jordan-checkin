@@ -756,41 +756,46 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   };
   // v108: planilha de prospecção — baixar (lista atual, uma coluna por marca com "X") e carregar preenchida
   const [pUp, setPUp] = useState(null); const [pUpLo, setPUpLo] = useState(false); const upRef = useRef(null);
-  const baixarProsp = async () => {
-    setPMsg("Gerando planilha…");
+  const [plEscolha, setPlEscolha] = useState(false); // v110: escolher o formato da planilha
+  const baixarProsp = async (modo = "colunas") => {
+    setPlEscolha(false); setPMsg("Gerando planilha…");
     try {
       const { gerarPlanilhaProsp } = await import("../planilhaProsp.js");
       // v109: SEMPRE a carteira inteira (inclusive Excluídos), sem depender dos filtros da tela
       const vis = new Set(); const todos = [...(allOrgs || []), ...(excl || [])].filter(o => { if (vis.has(o.id)) return false; vis.add(o.id); return true; }).sort((a, b) => (a.nickname || a.name || "").localeCompare(b.nickname || b.name || ""));
       const cl = todos.filter(o => soDig(o.cnpj)).map(o => ({ cnpj: soDig(o.cnpj).padStart(14, "0"), nome: o.nickname || o.name || "", razao: o.legalName || "", cidade: o.addr?.city_name || o.addr?.city || "", uf: o.addr?.state || "", resp: o.owner || "", cat: o.cat || "", compra: compraDe(o), prosp: prospDe ? prospDe(o).map(x => x.industria) : [] }));
-      const blob = gerarPlanilhaProsp(cl, marcasCadastro(), chaveMarca);
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `prospeccao-${todayLocal()}.xlsx`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000);
+      const blob = gerarPlanilhaProsp(cl, marcasCadastro(), chaveMarca, modo);
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `prospeccao-${modo === "celula" ? "1-celula-" : ""}${todayLocal()}.xlsx`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 8000);
       setPMsg(`✓ Planilha com ${cl.length} empresa(s) baixada (carteira inteira, inclusive excluídos). Marque X nas marcas e carregue em "Carregar prospecção".`);
     } catch (e) { setPMsg("Erro ao gerar a planilha: " + (e.message || e)); }
   };
   const lerProsp = async file => {
     if (!file) return; setPMsg(""); setPUpLo(true);
     try {
-      const { lerPlanilha, marcado } = await import("../planilhaProsp.js");
+      const { lerPlanilha, marcado, marcasDaCelula } = await import("../planilhaProsp.js");
       const d = await lerPlanilha(file);
       const cab = d.cab.map(h => String(h || "").trim());
       const iC = cab.findIndex(h => /cnpj/i.test(h));
       if (iC < 0) throw new Error("a planilha precisa da coluna CNPJ (use a planilha baixada aqui).");
-      const colM = marcasCadastro().map(m => [m, cab.findIndex(h => chaveMarca(h) === chaveMarca(m))]).filter(([, i]) => i >= 0);
-      if (!colM.length) throw new Error("nenhuma coluna de marca reconhecida (ex.: TRAMONTINA, PADO, Zagonel…).");
-      const kCols = new Set(colM.map(([m]) => chaveMarca(m)));
+      const MARCAS = marcasCadastro();
+      const colM = MARCAS.map(m => [m, cab.findIndex(h => chaveMarca(h) === chaveMarca(m))]).filter(([, i]) => i >= 0);
+      // v110: formato "uma célula" — coluna "Marcas em prospecção" (ou "Prospecção") com várias marcas separadas por vírgula
+      const iCel = colM.length ? -1 : cab.findIndex(h => /PROSPEC/.test(chaveMarca(h)));
+      if (!colM.length && iCel < 0) throw new Error("nenhuma coluna de marca reconhecida (ex.: TRAMONTINA, PADO… ou \"Marcas em prospecção\").");
+      const kCols = new Set((iCel >= 0 ? MARCAS : colM.map(([m]) => m)).map(chaveMarca)); const naoRec = new Set();
       const porCnpj = new Map([...(allOrgs || []), ...(excl || [])].filter(o => soDig(o.cnpj)).map(o => [soDig(o.cnpj).padStart(14, "0"), o]));
       const itens = [], nao = [], vistos = new Set(); let ignor = 0, marc = 0;
       for (const l of d.linhas) {
         const cn = soDig(l[iC]); if (!cn) continue; const o = porCnpj.get(cn.padStart(14, "0"));
         if (!o) { nao.push(cn); continue; } if (vistos.has(o.id)) continue; vistos.add(o.id);
         const kC = new Set(compraDe(o).map(chaveMarca)); const at = (prospDe ? prospDe(o) : []).map(x => x.industria); const kA = new Set(at.map(chaveMarca));
-        const quer = colM.filter(([, i]) => marcado(l[i])).map(([m]) => m); marc += quer.length;
+        let quer; if (iCel >= 0) { const r = marcasDaCelula(l[iCel], MARCAS, chaveMarca); quer = r.ok; r.nao.forEach(t => naoRec.add(t)); } else quer = colM.filter(([, i]) => marcado(l[i])).map(([m]) => m);
+        marc += quer.length;
         const ok = quer.filter(m => !kC.has(chaveMarca(m))); ignor += quer.length - ok.length; const kQ = new Set(ok.map(chaveMarca));
         const add = ok.filter(m => !kA.has(chaveMarca(m))), rem = at.filter(m => kCols.has(chaveMarca(m)) && !kQ.has(chaveMarca(m)));
         if (add.length || rem.length) itens.push({ o, add, rem });
       }
-      setPUp({ arq: file.name, itens, nao, ignor, marc, lidas: vistos.size, encerrar: true });
+      setPUp({ arq: file.name, itens, nao, ignor, marc, lidas: vistos.size, encerrar: true, formato: iCel >= 0 ? "uma célula" : "colunas", naoRec: [...naoRec] });
     } catch (e) { setPMsg("Não consegui ler a planilha: " + (e.message || e)); }
     setPUpLo(false); if (upRef.current) upRef.current.value = "";
   };
@@ -966,11 +971,12 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
           return <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}><Target size={18} color={S.acc} /><span style={{ flex: 1, fontSize: 15, fontWeight: 800, color: S.txt }}>Carregar prospecção</span>
               <button onClick={() => setPUp(null)} disabled={pUpLo} aria-label="Fechar" style={{ padding: 6, border: "none", display: "flex" }}><X size={17} color={S.ts} /></button></div>
-            <p style={{ margin: "0 0 10px 26px", fontSize: 12, color: S.ts }}>{pUp.arq} · {pUp.lidas} empresa(s) reconhecida(s) · {pUp.marc} marca(s) marcada(s)</p>
+            <p style={{ margin: "0 0 10px 26px", fontSize: 12, color: S.ts }}>{pUp.arq} · formato {pUp.formato} · {pUp.lidas} empresa(s) reconhecida(s) · {pUp.marc} marca(s) marcada(s)</p>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 8, marginBottom: 10 }}>
               {[["Novas", nAdd, S.ok], ["Encerrar", pUp.encerrar ? nRem : 0, S.dng], ["Empresas", nEmp, S.pl]].map(([l, v, c]) => <div key={l} style={{ border: `1px solid ${S.brd}`, borderRadius: 10, padding: "8px 10px" }}><div style={{ fontSize: 11, color: S.ts }}>{l}</div><div className="num" style={{ fontSize: 20, fontWeight: 800, color: c }}>{v}</div></div>)}
             </div>
-            {nRem > 0 && <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: S.t2, marginBottom: 8, cursor: "pointer" }}><input type="checkbox" checked={pUp.encerrar} onChange={e => setPUp(p => ({ ...p, encerrar: e.target.checked }))} style={{ width: 16, height: 16 }} /> Encerrar as {nRem} prospecção(ões) que estão sem X na planilha</label>}
+            {nRem > 0 && <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: S.t2, marginBottom: 8, cursor: "pointer" }}><input type="checkbox" checked={pUp.encerrar} onChange={e => setPUp(p => ({ ...p, encerrar: e.target.checked }))} style={{ width: 16, height: 16 }} /> Encerrar as {nRem} prospecção(ões) que não estão marcadas na planilha</label>}
+            {pUp.naoRec?.length > 0 && <p style={{ margin: "0 0 6px", fontSize: 12, color: S.gold }}>Marca(s) não reconhecida(s), ignorada(s): {pUp.naoRec.slice(0, 8).join(", ")}{pUp.naoRec.length > 8 ? "…" : ""}</p>}
             {pUp.ignor > 0 && <p style={{ margin: "0 0 6px", fontSize: 12, color: S.ts }}>{pUp.ignor} marcação(ões) ignorada(s): o cliente já compra a marca.</p>}
             {pUp.nao.length > 0 && <p style={{ margin: "0 0 6px", fontSize: 12, color: S.gold }}>{pUp.nao.length} CNPJ não encontrado(s) no cadastro: {pUp.nao.slice(0, 6).join(", ")}{pUp.nao.length > 6 ? "…" : ""}</p>}
             <div style={{ maxHeight: 260, overflowY: "auto", margin: "6px 0 12px", border: `1px solid ${S.brd}`, borderRadius: 10, padding: "4px 10px" }}>
@@ -1036,8 +1042,15 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       </table>
     </div>
     {/* Barra de planilhas: exportar (CNPJ na 1ª coluna, como texto) e importar/cadastrar em massa */}
+    {plEscolha && <div style={{ marginTop: 10, background: S.card, border: `1px solid ${S.gold}66`, borderRadius: 12, padding: 12 }}>
+      <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 700, color: S.txt }}>Formato da planilha de prospecção (carteira inteira, inclusive excluídos)</p>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))", gap: 8 }}>
+        <button onClick={() => baixarProsp("colunas")} style={{ textAlign: "left", padding: "10px 12px", borderRadius: 10, border: `1px solid ${S.inpBdr}`, background: S.inp, cursor: "pointer" }}><b style={{ display: "block", fontSize: 13, color: S.txt }}>Uma coluna por marca</b><span style={{ fontSize: 11.5, color: S.ts }}>Marque X em cada marca. Funciona em qualquer programa (Excel, Google, LibreOffice).</span></button>
+        <button onClick={() => baixarProsp("celula")} style={{ textAlign: "left", padding: "10px 12px", borderRadius: 10, border: `1px solid ${S.inpBdr}`, background: S.inp, cursor: "pointer" }}><b style={{ display: "block", fontSize: 13, color: S.txt }}>Várias marcas na mesma célula</b><span style={{ fontSize: 11.5, color: S.ts }}>Google Planilhas: seleção múltipla na lista. Excel: escolha uma e digite as outras separadas por vírgula.</span></button>
+      </div>
+    </div>}
     <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
-      <button onClick={baixarProsp} title="Excel com TODA a carteira (inclusive excluídos), uma coluna por marca: marque X nas prospectadas" style={{ flex: 1, minWidth: 200, padding: 12, fontSize: 13, background: S.gold + "1c", border: `1px solid ${S.gold}66`, color: S.gold, fontWeight: 600, borderRadius: 10, cursor: "pointer" }}>🎯 Planilha de prospecção ({new Set([...(allOrgs || []), ...(excl || [])].filter(o => soDig(o.cnpj)).map(o => o.id)).size})</button>
+      <button onClick={() => setPlEscolha(v => !v)} aria-expanded={plEscolha} title="Excel com TODA a carteira (inclusive excluídos), uma coluna por marca: marque X nas prospectadas" style={{ flex: 1, minWidth: 200, padding: 12, fontSize: 13, background: S.gold + "1c", border: `1px solid ${S.gold}66`, color: S.gold, fontWeight: 600, borderRadius: 10, cursor: "pointer" }}>🎯 Planilha de prospecção ({new Set([...(allOrgs || []), ...(excl || [])].filter(o => soDig(o.cnpj)).map(o => o.id)).size})</button>
       <button onClick={() => upRef.current && upRef.current.click()} disabled={pUpLo} style={{ flex: 1, minWidth: 200, padding: 12, fontSize: 13, background: S.gold + "1c", border: `1px solid ${S.gold}66`, color: S.gold, fontWeight: 600, borderRadius: 10, cursor: "pointer" }}>{pUpLo ? "Lendo…" : "📤 Carregar prospecção (Excel/CSV)"}</button>
       <input ref={upRef} type="file" accept=".xlsx,.csv,.txt" style={{ display: "none" }} onChange={e => lerProsp(e.target.files?.[0])} />
       <button onClick={exportar} disabled={!!impMsg} style={{ flex: 1, minWidth: 200, padding: 12, fontSize: 13, background: S.pri + "22", border: `1px solid ${S.pri}55`, color: S.pl, fontWeight: 600, borderRadius: 10, cursor: "pointer" }}>📊 Exportar {lista.length} empresas (Excel)</button>
