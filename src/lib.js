@@ -219,6 +219,27 @@ function isRealVisit(v){if(!v.checkoutTime)return false;if(v.taskType&&v.taskTyp
 // O horário e o GPS do check-out não dizem nada da visita: vale o ponto e a hora do check-in.
 const checkoutEsquecido=v=>!!(v&&v.checkinTime&&v.checkoutTime&&toLocalDate(v.checkoutTime)!==toLocalDate(v.checkinTime));
 const saidaEfetiva=v=>checkoutEsquecido(v)?v.checkinTime:v.checkoutTime;
+// v112: JORNADA LÍQUIDA (regra "b" do Jordan, 03/11/2026) = 1º check-in → último check-out − INTERVALO REAL.
+// Intervalo = do último check-out da manhã (maior saída até 13:00 entre as visitas que começaram antes das 12:00)
+// ao 1º check-in da tarde (primeira entrada a partir das 12:00) — mesma definição do PDF de comissão do Dashboard.
+// Sem intervalo medido: se o dia atravessa o almoço (começa antes das 12:00 e termina depois das 13:00) desconta 1h;
+// se não atravessa (ex.: sábado só de manhã), não desconta nada.  Retorna minutos: { bruto, intervalo, liquida, medido }.
+const minDiaCba=iso=>{const d=new Date(iso);if(isNaN(d))return null;const p=new Intl.DateTimeFormat("en-GB",{timeZone:TZ,hour:"2-digit",minute:"2-digit",hour12:false}).formatToParts(d);const h=+p.find(x=>x.type==="hour").value%24,m=+p.find(x=>x.type==="minute").value;return h*60+m;};
+const jornadaDia=vs=>{
+  const l=(vs||[]).filter(v=>v&&v.checkinTime).slice().sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));
+  if(!l.length)return{bruto:0,intervalo:0,liquida:0,medido:false};
+  const ini=l[0].checkinTime;let fim=null;l.forEach(v=>{const s=saidaEfetiva(v)||v.checkinTime;if(!fim||new Date(s)>new Date(fim))fim=s;});
+  const fm=iso=>Math.floor(new Date(iso).getTime()/60000);const bruto=Math.max(0,fm(fim)-fm(ini));/* em minutos inteiros, como os horários mostrados */
+  let saiManha=null,entTarde=null;
+  l.forEach(v=>{const e=minDiaCba(v.checkinTime),s=minDiaCba(saidaEfetiva(v)||v.checkinTime);if(e==null)return;
+    if(e<720&&s!=null&&s<=780&&(saiManha==null||s>saiManha))saiManha=s;
+    if(e>=720&&(entTarde==null||e<entTarde))entTarde=e;});
+  let intervalo=0,medido=false;
+  if(saiManha!=null&&entTarde!=null&&entTarde>saiManha){intervalo=entTarde-saiManha;medido=true;}
+  else{const e0=minDiaCba(ini),f0=minDiaCba(fim);if(e0!=null&&f0!=null&&e0<720&&f0>780)intervalo=60;}
+  intervalo=Math.min(intervalo,bruto);
+  return{bruto,intervalo,liquida:Math.max(0,bruto-intervalo),medido};
+};
 // v90: dedup de visitas. A MESMA visita gravada duas vezes (KV + cópia reconstruída do D1, check-in repetido) tem horários
 // sobrepostos → fica a mais longa. Duas visitas reais ao mesmo cliente no dia (saiu e voltou) não se sobrepõem e contam as duas.
 // A cópia reconstruída do D1 (d1:true, sem horários reais) sai quando há visita real do cliente no dia do check-in OU do check-out.
@@ -250,4 +271,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(!checkoutEsquecido(v)&&v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export {chaveMarca, marcasCadastro, _bk as chaveTexto, normBusca, contemBusca, cidadeCanon, unificarCidades, PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl, temCoord, checkoutEsquecido, saidaEfetiva, dedupVisitas };
+export {jornadaDia, minDiaCba, chaveMarca, marcasCadastro, _bk as chaveTexto, normBusca, contemBusca, cidadeCanon, unificarCidades, PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl, temCoord, checkoutEsquecido, saidaEfetiva, dedupVisitas };

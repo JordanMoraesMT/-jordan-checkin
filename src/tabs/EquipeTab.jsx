@@ -1,6 +1,6 @@
 // TeamCheck — aba EquipeTab (unificada com o Relatório: mesma base de visitas check-in/out)
 import { useState, useMemo, useEffect } from "react";
-import { toLocalDate, todayLocal, USERS, S, fT, fD, fD1, mins, hrsMin, hav, csv, getBase, getEnd, getVCoord, getVEndCoord, DASH, temCoord, saidaEfetiva, dedupVisitas } from "../lib";
+import { toLocalDate, todayLocal, USERS, S, fT, fD, fD1, mins, hrsMin, hav, csv, getBase, getEnd, getVCoord, getVEndCoord, DASH, temCoord, saidaEfetiva, dedupVisitas, jornadaDia } from "../lib";
 import { Kpi, DateField, SearchSelect } from "../components";
 
 function EquipeTab({sel,setSel,plocs,dayBases,user,visits,token,bump}){
@@ -35,7 +35,7 @@ function EquipeTab({sel,setSel,plocs,dayBases,user,visits,token,bump}){
     return k;},[dayVisits,dayBases,plocs,uid,sel]);
 
   // Jornada: 1º check-in → último check-out − 60 (almoço) — idêntico ao Relatório
-  const workH=useMemo(()=>{if(!dayVisits.length)return 0;const a=dayVisits[0].checkinTime,b=saidaEfetiva(dayVisits[dayVisits.length-1]);if(!a||!b)return 0;return Math.max(0,mins(a,b)-60);},[dayVisits]);
+  const workH=useMemo(()=>dayVisits.length?jornadaDia(dayVisits).liquida:0,[dayVisits]);// v112: − intervalo real
   const firstCheckin=dayVisits.length?fT(dayVisits[0].checkinTime):"-";
   const withGps=dayVisits.filter(v=>getVCoord(v,plocs)).length;
 

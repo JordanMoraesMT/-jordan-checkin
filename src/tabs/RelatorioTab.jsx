@@ -1,7 +1,7 @@
 // TeamCheck — aba RelatorioTab
 import { useState, useMemo } from "react";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { toLocalDate, todayLocal, USERS, S, PC, fT, fD, fDS, mins, hrsMin, hav, csv, getBase, getEnd, getVCoord, getVEndCoord, temCoord, checkoutEsquecido, saidaEfetiva, dedupVisitas } from "../lib";
+import { toLocalDate, todayLocal, USERS, S, PC, fT, fD, fDS, mins, hrsMin, hav, csv, getBase, getEnd, getVCoord, getVEndCoord, temCoord, checkoutEsquecido, saidaEfetiva, dedupVisitas, jornadaDia } from "../lib";
 import { BaseEditInline, Kpi, SegTabs, DateField } from "../components";
 import { EscritorioResumo } from "./EscritorioResumo";
 
@@ -56,7 +56,7 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
       segs.push(ca&&cb?hav(ca.lat,ca.lng,cb.lat,cb.lng)*1.3:0);}
     return segs;};
   const totKm=useMemo(()=>bd.reduce((acc,[dt,dvs])=>acc+calcDayKm(dvs,dt),0),[bd,dayBases,plocs,repUserId]);
-  const workH=bd.reduce((s,[,d])=>{if(!d||!d.length)return s;const sr=[...d].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));if(!sr[0]?.checkinTime||!sr[sr.length-1]?.checkoutTime)return s;const raw=mins(sr[0].checkinTime,saidaEfetiva(sr[sr.length-1]));return s+Math.max(0,raw-60);},0);
+  const workH=bd.reduce((s,[,d])=>{if(!d||!d.length)return s;const sr=[...d].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));if(!sr[0]?.checkinTime||!sr[sr.length-1]?.checkoutTime)return s;return s+jornadaDia(sr).liquida;/* v112: − intervalo real (antes −1h fixa) */},0);
   const mx=Math.max(1,...bd.map(([,v])=>v.length));
     const firstCheckin=pv.length&&pv[0]?.checkinTime?fT(pv[0].checkinTime):"-";
     const lastCheckout=pv.length&&pv[pv.length-1]?.checkoutTime?fT(saidaEfetiva(pv[pv.length-1])):"-";
@@ -108,7 +108,7 @@ function RelatorioTab({visits,dayBases,user,token,plocs,onEditBase}){
     {editDay&&<BaseEditInline day={editDay} dayBases={dayBases} userId={repUserId} dayKey={!isMe?repUserId+"_"+editDay:editDay} plocs={plocs} lastVisitCoord={bd.find(([d])=>d===editDay)?getVEndCoord([...bd.find(([d])=>d===editDay)[1]].sort((a,b)=>new Date(b.checkinTime)-new Date(a.checkinTime))[0],plocs):null} onSave={(d,start,end)=>{onEditBase(d,start,end,!isMe?repUserId:null);setEditDay(null);}} onCancel={()=>setEditDay(null)}/>}
     <div style={{display:"flex",gap:6,marginBottom:12}}>
       {/* FIX: Export with correct user name and bases */}
-      <button onClick={()=>{const rows=[["Data","Vendedor","Origem","Destino","Visitas","Km","Jornada","Clientes"]];bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));if(!sr.length)return;const b2=getRepBase(dt);const eb=getRepEnd(dt);const dk=calcDayKm(dvs,dt);rows.push([fD(dt+"T12:00"),repUserName,b2?.label||"Casa",eb?.label||"Casa",dvs.length,dk.toFixed(1),hrsMin(mins(sr[0].checkinTime,saidaEfetiva(sr[sr.length-1]))),dvs.map(v=>v.orgName).join(", ")]);});rows.push([],["TOTAL","","","",pv.length,totKm.toFixed(1),hrsMin(workH),""]);csv(rows,`km-${repUserName}-${sd}-${ed}.csv`);}} style={{flex:1,textAlign:"center",padding:9,borderRadius:8,fontSize:12.5,fontWeight:500,border:`1px solid ${S.inpBdr}`,color:S.t2,background:"transparent"}}>Exportar resumo</button>
+      <button onClick={()=>{const rows=[["Data","Vendedor","Origem","Destino","Visitas","Km","Jornada líquida","Jornada bruta","Intervalo","Clientes"]];bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));if(!sr.length)return;const b2=getRepBase(dt);const eb=getRepEnd(dt);const dk=calcDayKm(dvs,dt);rows.push([fD(dt+"T12:00"),repUserName,b2?.label||"Casa",eb?.label||"Casa",dvs.length,dk.toFixed(1),(()=>{const j=jornadaDia(sr);return hrsMin(j.liquida);})(),(()=>{const j=jornadaDia(sr);return hrsMin(j.bruto);})(),(()=>{const j=jornadaDia(sr);return j.intervalo?hrsMin(j.intervalo)+(j.medido?"":" (padrão)"):"—";})(),dvs.map(v=>v.orgName).join(", ")]);});rows.push([],["TOTAL","","","",pv.length,totKm.toFixed(1),hrsMin(workH),"","",""]);csv(rows,`km-${repUserName}-${sd}-${ed}.csv`);}} style={{flex:1,textAlign:"center",padding:9,borderRadius:8,fontSize:12.5,fontWeight:500,border:`1px solid ${S.inpBdr}`,color:S.t2,background:"transparent"}}>Exportar resumo</button>
       {/* FIX: Detailed export with Km column */}
       <button onClick={()=>{const rows=[["Data","In","Out","Min","Cliente","Cidade","Km Trecho","Tipo","Obs","Venda","Conferir"]];
         bd.forEach(([dt,dvs])=>{const sr=[...dvs].sort((a,b)=>new Date(a.checkinTime)-new Date(b.checkinTime));const segs=calcSegKm(sr,dt);const b2=getRepBase(dt);const eb=getRepEnd(dt);
