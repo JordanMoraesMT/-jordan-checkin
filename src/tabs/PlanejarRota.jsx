@@ -233,7 +233,9 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   const [fSit, setFSit] = useState(p0.fSit || []);
   const [busca, setBusca] = useState("");
   const [editar, setEditar] = useState(false); // v99: voltou à seleção com um roteiro aberto
-  const [diaAg, setDiaAg] = useState(amanha());
+  // v111: vindo de Empresas › "Colocar em rota" — abre sozinho o roteiro daquele dia para ajustar
+  const [autoAbrir, setAutoAbrir] = useState(() => { try { const v = JSON.parse(localStorage.getItem("jc:abrirRoteiroDia") || "null"); localStorage.removeItem("jc:abrirRoteiroDia"); return v && v.dia ? v : null; } catch { return null; } });
+  const [diaAg, setDiaAg] = useState(autoAbrir?.dia || amanha());
   const [dias, setDias] = useState(p0.dias || "todos");
   const [ordem, setOrdem] = useState(p0.ordem || "prio");
   const [sel, setSel] = useState(() => new Set(p0.sel || []));
@@ -316,7 +318,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
     const vend = owner.length === 1 ? owner[0] : user?.name; const U = USERS.find(u => u.n === vend);
     const nrm = s => String(s || "").toLowerCase().trim();
     const vis = base.visitas.filter(v => (U && String(v.user_id || "") === String(U.id)) || nrm(v.user_nome) === nrm(vend));
-    const ue = {}; base.visitas.forEach(v => { const d = new Date(Date.parse(String(v.criado_em).replace(" ", "T") + "Z") - 4 * 3600000).toISOString().slice(0, 10); if (v.org_id && (!ue[v.org_id] || d > ue[v.org_id])) ue[v.org_id] = d; });
+    const ue = {}; base.visitas.forEach(v => { const ms = Date.parse(String(v.criado_em).replace(" ", "T") + "Z"); if (isNaN(ms)) return; /* v111: data inválida não derruba a tela */ const d = new Date(ms - 4 * 3600000).toISOString().slice(0, 10); if (v.org_id && (!ue[v.org_id] || d > ue[v.org_id])) ue[v.org_id] = d; });
     let dv = ""; Object.values(rfv?.byCnpj || {}).forEach(r => { if (r.ultima && r.ultima > dv) dv = r.ultima; });
     const A = analisar({ visitas: vis, carteira: orgs, carteiraValor: orgs.filter(o => nrm(o.owner) === nrm(vend)), ultimaEquipe: ue, rfv, vendInd: base.vendInd, fat12Ind: base.fat12Ind, prem, hoje: todayLocal(), dataVendas: dv || null });
     const m = {}; A.linhas.forEach(l => { m[l.id] = { v: l.veredito, aPartir: l.aPartir }; }); return m;
@@ -497,6 +499,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
     } catch { setMsg("Não consegui ler a Agenda agora. Tente de novo."); }
     setLo(false);
   };
+  useEffect(() => { if (!autoAbrir || !token || !partida || !plocs || !Object.keys(plocs).length) return; setAutoAbrir(null); setEditar(false); abrirAgenda(); }, [autoAbrir, token, partida?.lat, plocs]); // eslint-disable-line
 
   // Google Maps aceita ~10 pontos por link (origem + 9). Trechos encadeados: cada um começa onde o anterior
   // terminou; o último leva a volta para casa — sem nunca gerar um trecho só de volta.
@@ -811,4 +814,4 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   </div>);
 }
 
-export { PlanejarRota };
+export { PlanejarRota, otimizar };

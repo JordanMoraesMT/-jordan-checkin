@@ -3,9 +3,10 @@
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { Target, Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal, Link2 } from "lucide-react";
-import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca, toLocalDate, marcasCadastro, chaveMarca } from "../lib";
+import { ListFilter, CalendarPlus, Target, Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal, Link2 } from "lucide-react";
+import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca, toLocalDate, marcasCadastro, chaveMarca, HOMES, fixMojibake } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
+import { otimizar } from "./PlanejarRota";
 
 const DASH = "https://dashboard.jordanmt.com";
 const TIPOS = [
@@ -670,6 +671,38 @@ function ColunasMenu({ ocultas, setOcultas, nomeW, setNomeW, quebra, setQuebra, 
   </>);
 }
 
+// v111: filtro no cabeçalho da coluna (estilo Excel) — marca valores; usa os mesmos filtros da tela (etiquetas/Limpar)
+function ColFiltro({ rot, opcoes, vals, set }) {
+  const [ab, setAb] = useState(false); const bt = useRef(null), pn = useRef(null); const [r, setR] = useState(null); const [q, setQ] = useState("");
+  useEffect(() => { if (!ab) return; const f = e => { if (pn.current?.contains(e.target) || bt.current?.contains(e.target)) return; setAb(false); }; document.addEventListener("mousedown", f); document.addEventListener("touchstart", f); return () => { document.removeEventListener("mousedown", f); document.removeEventListener("touchstart", f); }; }, [ab]);
+  const on = vals.length > 0; const W = 264;
+  const vis = q.trim() ? opcoes.filter(o => normBusca(o.l).includes(normBusca(q).trim())) : opcoes;
+  const tog = v => set(vals.includes(v) ? vals.filter(x => x !== v) : [...vals, v]);
+  const lk = { background: "transparent", border: "none", padding: 0, fontSize: 12, fontWeight: 600, cursor: "pointer" };
+  return (<>
+    <button ref={bt} onClick={e => { e.stopPropagation(); setR(bt.current.getBoundingClientRect()); setAb(a => !a); setQ(""); }} title={on ? `Filtro: ${vals.join(", ")}` : `Filtrar ${rot}`} aria-label={`Filtrar ${rot}`} aria-expanded={ab}
+      style={{ marginLeft: 5, padding: "2px 3px", border: "none", background: on ? S.pri : "transparent", borderRadius: 5, cursor: "pointer", verticalAlign: "middle", display: "inline-flex", position: "relative", zIndex: 3 }}><ListFilter size={13} color={on ? "#fff" : S.td} /></button>
+    {ab && r && createPortal(<div ref={pn} onClick={e => e.stopPropagation()} role="dialog" aria-label={`Filtro ${rot}`} style={{ position: "fixed", top: Math.min(r.bottom + 6, window.innerHeight - 400), left: Math.max(8, Math.min(r.left - 12, window.innerWidth - W - 8)), width: W, zIndex: 9999, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: "0 16px 40px rgba(0,0,0,.4)", padding: 10, fontWeight: 400, textAlign: "left", whiteSpace: "normal" }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}><b style={{ flex: 1, fontSize: 12.5, color: S.txt }}>{rot}</b>{on && <span style={{ fontSize: 11, color: S.pl }}>{vals.length} marcado(s)</span>}</div>
+      {opcoes.length > 8 && <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar…" style={{ width: "100%", boxSizing: "border-box", height: 32, fontSize: 12.5, marginBottom: 6 }} />}
+      <div style={{ display: "flex", gap: 12, marginBottom: 6 }}>
+        <button onClick={() => set([...new Set([...vals, ...vis.map(o => o.v)])])} style={{ ...lk, color: S.pl }}>Marcar {q ? "visíveis" : "todos"}</button>
+        <button onClick={() => set([])} style={{ ...lk, color: S.dng }}>Limpar</button>
+      </div>
+      <div style={{ maxHeight: 270, overflowY: "auto" }}>
+        {vis.length ? vis.map(o => <label key={o.v} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 2px", fontSize: 12.5, color: S.txt, cursor: "pointer" }}>
+          <input type="checkbox" checked={vals.includes(o.v)} onChange={() => tog(o.v)} style={{ width: 15, height: 15, flexShrink: 0 }} />
+          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.l}</span>{o.n != null && <span className="num" style={{ fontSize: 11, color: S.td }}>{o.n}</span>}</label>) : <p style={{ fontSize: 12, color: S.ts, margin: "6px 0" }}>Nada encontrado.</p>}
+      </div>
+    </div>, document.body)}
+  </>);
+}
+const FAIXAS_D = ["Até 30 dias", "31 a 60 dias", "61 a 90 dias", "91 a 180 dias", "Mais de 180 dias", "Sem registro"];
+const faixaD = n => n == null ? "Sem registro" : n <= 30 ? "Até 30 dias" : n <= 60 ? "31 a 60 dias" : n <= 90 ? "61 a 90 dias" : n <= 180 ? "91 a 180 dias" : "Mais de 180 dias";
+const hhmmR = m => { m = Math.round(m); return `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+const paraMinR = t => { const [h, m] = String(t || "08:00").split(":").map(Number); return (h || 0) * 60 + (m || 0); };
+const amanhaR = () => { const d = new Date(todayLocal() + "T12:00:00"); d.setDate(d.getDate() + 1); return d.toISOString().slice(0, 10); };
+
 // v104: escolher marcas em prospecção — uma empresa (marca/desmarca) ou várias (marcar / encerrar em lote)
 function ProspModal({ titulo, sub, compra = [], atuais = [], lote = false, onSalvar, onFechar }) {
   const marcas = marcasCadastro();
@@ -704,7 +737,7 @@ function ProspModal({ titulo, sub, compra = [], atuais = [], lote = false, onSal
   </div>, document.body);
 }
 
-function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user, onCrmChange, visits, prospDe, onProspSalvar }) {
+function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user, onCrmChange, visits, prospDe, onProspSalvar, plocs, onIrRotas }) {
   const rfvDe = (o) => { if (!rfv) return null; const k = soDig(o.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; };
   const PREF = "jc:empresas-prefs";
   const p0 = sL(PREF, {});
@@ -715,6 +748,8 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const [fCanal, setFCanal] = useState(arr(p0.fCanal)); // v64: canal de venda
   const [fCtt, setFCtt] = useState(arr(p0.fCtt)); // v85: com/sem pessoa de contato
   const [fInd, setFInd] = useState(arr(p0.fInd)); const [fSit, setFSit] = useState(arr(p0.fSit)); // v103: marca × situação (Compra / Prospecção)
+  // v111: filtros das colunas — bairro, faixas de última visita/compra, prospecção e contato (telefone/e-mail)
+  const [fBai, setFBai] = useState(arr(p0.fBai)); const [fUv, setFUv] = useState(arr(p0.fUv)); const [fUc, setFUc] = useState(arr(p0.fUc)); const [fPr, setFPr] = useState(arr(p0.fPr)); const [fTel, setFTel] = useState(arr(p0.fTel));
   // v103: última visita de cada cliente — histórico completo do servidor (por CNPJ) + visitas do app (cobre quem não tem CNPJ e o dia de hoje)
   const [uvSrv, setUvSrv] = useState(null);
   useEffect(() => { if (!token) return; let vivo = true; crm(token, "/api/crm/ultimas-visitas").then(d => { if (vivo) setUvSrv(d.visitas || {}); }).catch(() => { if (vivo) setUvSrv({}); }); return () => { vivo = false; }; }, [token]);
@@ -805,8 +840,48 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     setPUpLo(true); const r = await onProspSalvar(lista2); setPUpLo(false); setPUp(null);
     setPMsg(r.falha ? `Gravei ${r.ok} de ${lista2.length} empresa(s). ${r.falha} falharam — carregue a planilha de novo para tentar o restante.` : `✓ Prospecção atualizada em ${r.ok} empresa(s) pela planilha.`);
   };
+  // v111: "Colocar em rota" — empresas selecionadas → roteiro de um dia (junta com o que já houver), ordem pela localização
+  const [rd, setRd] = useState(null); // { orgs, dia, uid, lo, msg, feito, avisos }
+  const orgPorId = useMemo(() => { const m = new Map(); [...(allOrgs || []), ...(excl || [])].forEach(o => m.set(o.id, o)); return m; }, [allOrgs, excl]);
+  const abrirRd = () => {
+    const orgs = [...selE].map(id => orgPorId.get(id)).filter(Boolean);
+    setRd({ orgs, dia: amanhaR(), uid: String(user?.id || ""), lo: false, msg: "", feito: null, avisos: null });
+    crm(token, `/api/crm/tarefas?desde=${todayLocal()}&limit=3000`).then(d => {
+      const ag = {}; (d.tarefas || []).forEach(t => { if (t.done || String(t.type || "").toUpperCase() !== "VISITA" || !t.orgId) return; const dd = String(t.due || "").slice(0, 10); if (dd >= todayLocal()) (ag[t.orgId] = ag[t.orgId] || []).push(`${dd.slice(8, 10)}/${dd.slice(5, 7)} · ${String(t.userName || "").split(" ")[0]}`); });
+      setRd(r => r ? { ...r, avisos: ag } : r);
+    }).catch(() => setRd(r => r ? { ...r, avisos: {} } : r));
+  };
+  const colocarRota = async () => {
+    const { dia, uid } = rd; const U = USERS.find(u => String(u.id) === String(uid)) || { id: user?.id, n: user?.name };
+    const pref = String(uid) === String(user?.id) ? sL(`jc:rotaPlan:${uid}`, {}) : {};
+    const casa = HOMES[uid] || null; const partida = pref.partidaTipo === "outro" && pref.outro ? pref.outro : casa;
+    if (!partida) { setRd(r => ({ ...r, msg: `Sem endereço de partida cadastrado para ${U.n}.` })); return; }
+    const voltar = pref.voltar !== false, saida = pref.saida || "08:00", mv = Number(pref.minVisita) || 30;
+    setRd(r => ({ ...r, lo: true, msg: "" }));
+    try {
+      const d = await crm(token, `/api/crm/tarefas?desde=${dia}&ate=${encodeURIComponent(dia + "T23:59:59-04:00")}&limit=500`);
+      const nrm = x => String(x || "").toLowerCase().trim(); const meu = t => String(t.userId || "") === String(U.id) || nrm(t.userName) === nrm(U.n);
+      const rot = (d.tarefas || []).filter(t => /^Roteiro planejado/.test(String(t.text || "")) && String(t.type || "").toUpperCase() === "VISITA" && meu(t) && String(t.due || "").slice(0, 10) === dia).sort((a, b) => String(a.due).localeCompare(String(b.due)));
+      const abertas = rot.filter(t => !t.done), feitas = new Set(rot.filter(t => t.done).map(t => Number(t.orgId)));
+      const ids = []; const semGps = [];
+      [...abertas.map(t => Number(t.orgId)), ...rd.orgs.map(o => o.id)].forEach(id => { if (!id || ids.includes(id) || feitas.has(id)) return; if (plocs?.[id]?.lat != null) ids.push(id); else { const o = orgPorId.get(id); if (o && !semGps.includes(o.nickname || o.name)) semGps.push(o.nickname || o.name); } });
+      if (!ids.length) throw new Error("nenhuma empresa com GPS para colocar na rota.");
+      if (ids.length > 30) throw new Error(`o dia ficaria com ${ids.length} paradas — o máximo é 30.`);
+      const r = await otimizar(partida, ids.map(id => ({ id, lat: plocs[id].lat, lng: plocs[id].lng })), voltar);
+      for (const a of abertas) await crm(token, `/api/crm/atividades?id=${a.d1_id}`, { method: "DELETE" });
+      let t = paraMinR(saida), ok = 0; const N = r.ordem.length;
+      for (const [i, pt] of r.ordem.entries()) {
+        t += r.legs[i]?.min || 0; const hh = hhmmR(t); t += mv; const o = orgPorId.get(pt.id);
+        await crm(token, "/api/crm/atividades", { method: "POST", body: JSON.stringify({ org_id: pt.id, cnpj: soDig(o?.cnpj) || null, org_nome: o ? (o.nickname || o.name) : "", tipo: "VISITA", texto: `Roteiro planejado — parada ${i + 1} de ${N}`, origem: "tarefa", due_em: `${dia}T${hh}:00-04:00`, agendor_id: null, user_id: Number(U.id) || null, user_nome: U.n }) });
+        ok++;
+      }
+      const km = r.legs.reduce((a, l) => a + l.km, 0);
+      setRd(x => ({ ...x, lo: false, feito: { n: ok, km, antes: abertas.length, semGps, estimado: r.estimado, ordem: r.ordem.map(z => { const o = orgPorId.get(z.id); return o ? (o.nickname || o.name) : z.id; }), resp: U.n, meu: String(U.id) === String(user?.id) } }));
+      setSelE(new Set()); onCrmChange && onCrmChange();
+    } catch (e) { setRd(x => ({ ...x, lo: false, msg: "Não foi possível: " + (e.message || e) })); }
+  };
   const [filtAberto, setFiltAberto] = useState(false);
-  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit]);
+  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel]);
   // v85: quem tem pessoa de contato (carrega só quando o filtro de contato é usado)
   const [cttSet, setCttSet] = useState(null);
   useEffect(() => { if (!fCtt.length || cttSet || !token) return; let vivo = true;
@@ -837,11 +912,34 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     // v103: Marca × Situação na marca — mesma regra de PDVs (sem situação = compra OU prospecção)
     if (fInd.length || fSit.length) { const mk = new Set((fInd.length ? fInd : marcasCadastro()).map(chaveMarca)); const qC = !fSit.length || fSit.includes("Compra"), qP = !fSit.length || fSit.includes("Prospecção");
       l = l.filter(o => { const compra = String(rfvDe(o)?.inds || "").split(",").some(i => mk.has(chaveMarca(i))); const pr = prospDe ? prospDe(o).some(x => mk.has(chaveMarca(x.industria))) : false; return (qC && compra) || (qP && pr); }); }
+    if (fBai.length) { const kb = new Set(fBai.map(b => normBusca(b).trim())); l = l.filter(o => kb.has(normBusca(fixMojibake(o.addr?.district || "")).trim() || "(sem bairro)")); }
+    if (fUv.length) l = l.filter(o => { const v = uvDe(o); return fUv.includes(faixaD(v ? diasAte(v.d) : null)); });
+    if (fUc.length) l = l.filter(o => { const d = ucDe(o); return fUc.includes(faixaD(d ? diasAte(d) : null)); });
+    if (fPr.length) l = l.filter(o => { const ps = (prospDe ? prospDe(o) : []).map(x => chaveMarca(x.industria)); return fPr.some(v => v === "Com prospecção" ? ps.length > 0 : v === "Sem prospecção" ? !ps.length : ps.includes(chaveMarca(v))); });
+    if (fTel.length) l = l.filter(o => fTel.some(v => v === "Com telefone" ? !!o.phone : v === "Sem telefone" ? !o.phone : v === "Com e-mail" ? !!o.email : !o.email));
     const nome = o => o.nickname || o.name || "";
     if (ordKey === "nome") return [...l].sort((a, b) => ordem * nome(a).localeCompare(nome(b)));
     const val = o => ordKey === "uv" ? (uvDe(o)?.d || "") : (ucDe(o) || "");
     return [...l].sort((a, b) => { const va = val(a), vb = val(b); if (!va && !vb) return nome(a).localeCompare(nome(b)); if (!va) return 1; if (!vb) return -1; return ordem * va.localeCompare(vb) || nome(a).localeCompare(nome(b)); });
-  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, fCtt, fInd, fSit, prospDe, cttSet, ordem, ordKey, uvSrv, uvLocal, rfv]); // eslint-disable-line
+  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel, prospDe, cttSet, ordem, ordKey, uvSrv, uvLocal, rfv]); // eslint-disable-line
+  // v111: opções (com contagem) dos filtros de coluna — sobre a base inteira
+  const opcCol = useMemo(() => {
+    const base = [...(allOrgs || []), ...(excl || [])]; const cont = (fn) => { const m = new Map(); base.forEach(o => { const v = fn(o); (Array.isArray(v) ? v : [v]).forEach(x => { if (x != null && x !== "") m.set(x, (m.get(x) || 0) + 1); }); }); return m; };
+    const lista_ = (ordemV, m, sortAlpha) => { const ks = ordemV || [...m.keys()]; const out = ks.map(v => ({ v, l: v, n: m.get(v) || 0 })); return sortAlpha ? out.sort((a, b) => a.l.localeCompare(b.l)) : out; };
+    const bai = new Map(), baiL = {}; base.forEach(o => { const b = fixMojibake(o.addr?.district || "").trim() || "(sem bairro)"; const k = normBusca(b).trim(); bai.set(k, (bai.get(k) || 0) + 1); if (!baiL[k]) baiL[k] = b; });
+    const marcas = marcasCadastro();
+    return {
+      cat: lista_([...CATS, "Excluido"], cont(o => o.cat)),
+      bairro: [...bai.entries()].map(([k, n]) => ({ v: baiL[k], l: baiL[k], n })).sort((a, b) => a.l.localeCompare(b.l)),
+      cidade: lista_(null, cont(o => o.addr?.city_name || o.addr?.city), true),
+      rfv: lista_(["Campeão", "Leal", "Em Crescimento", "Em Risco", "Inativo"], cont(o => rfvDe(o)?.rfv)),
+      uv: lista_(FAIXAS_D, cont(o => { const v = uvDe(o); return faixaD(v ? diasAte(v.d) : null); })),
+      uc: lista_(FAIXAS_D, cont(o => { const d = ucDe(o); return faixaD(d ? diasAte(d) : null); })),
+      prosp: lista_(["Com prospecção", "Sem prospecção", ...marcas], cont(o => { const ps = (prospDe ? prospDe(o) : []).map(x => x.industria); const ks = new Set(ps.map(chaveMarca)); return [ps.length ? "Com prospecção" : "Sem prospecção", ...marcas.filter(m => ks.has(chaveMarca(m)))]; })),
+      resp: lista_(resps, cont(o => o.owner)),
+      ctt: lista_(["Com telefone", "Sem telefone", "Com e-mail", "Sem e-mail"], cont(o => [o.phone ? "Com telefone" : "Sem telefone", o.email ? "Com e-mail" : "Sem e-mail"])),
+    };
+  }, [allOrgs, excl, rfv, uvSrv, uvLocal, prospDe, resps]); // eslint-disable-line
   const th = { textAlign: "left", padding: "10px 10px", fontSize: 12.5, fontWeight: 600, color: S.t2, whiteSpace: "nowrap", borderBottom: `1px solid ${S.brd}`, position: "sticky", top: 0, background: S.cardSolid, zIndex: 1 };
   const td = { padding: "10px 10px", fontSize: 13, color: S.txt, borderBottom: `1px solid ${S.brd}`, whiteSpace: "nowrap", verticalAlign: "middle" };
 
@@ -936,8 +1034,8 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Nome, CNPJ, bairro, cidade, e-mail ou telefone" aria-label="Buscar empresa" style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", padding: 0, fontSize: 15 }} />
       {q && <button onClick={() => { setQ(""); setVc(60); }} aria-label="Limpar busca" style={{ border: "none", padding: 4, color: S.ts, display: "flex", background: "transparent" }}><X size={16} /></button>}
     </div>
-    {(() => { const grupos = [[fCat, setFCat], [fResp, setFResp], [fCid, setFCid], [fCanal, setFCanal], [fGrp, setFGrp], [fRfv, setFRfv], [fSr, setFSr], [fCtt, setFCtt], [fInd, setFInd], [fSit, setFSit]];
-      const chips = grupos.flatMap(([vals, set]) => vals.map(v => ({ k: v, l: v, tira: () => { set(vals.filter(x => x !== v)); setVc(60); } })));
+    {(() => { const grupos = [[fCat, setFCat], [fResp, setFResp], [fCid, setFCid], [fCanal, setFCanal], [fGrp, setFGrp], [fRfv, setFRfv], [fSr, setFSr], [fCtt, setFCtt], [fInd, setFInd], [fSit, setFSit], [fBai, setFBai, "Bairro: "], [fUv, setFUv, "Visita: "], [fUc, setFUc, "Compra: "], [fPr, setFPr, "Prosp.: "], [fTel, setFTel]];
+      const chips = grupos.flatMap(([vals, set, pre = ""]) => vals.map(v => ({ k: pre + v, l: pre + v, tira: () => { set(vals.filter(x => x !== v)); setVc(60); } })));
       const limpar = () => { grupos.forEach(([, set]) => set([])); setVc(60); };
       return (<>
         <div style={{ display: "flex", gap: 6, alignItems: "center", overflowX: "auto", paddingBottom: 2, marginBottom: filtAberto ? 10 : 8 }}>
@@ -964,6 +1062,42 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       compra={pModal.lote ? [] : compraDe(pModal.orgs[0])} atuais={pModal.lote ? [] : (prospDe ? prospDe(pModal.orgs[0]).map(x => x.industria) : [])}
       onSalvar={salvarP} onFechar={() => setPModal(null)} />}
     {pMsg && <p style={{ margin: "0 0 8px", fontSize: 12.5, color: pMsg.startsWith("✓") ? S.ok : S.gold }}>{pMsg}</p>}
+    {rd && createPortal(<div onMouseDown={e => { if (e.target === e.currentTarget && !rd.lo) setRd(null); }} style={{ position: "fixed", inset: 0, background: "rgba(4,10,18,.66)", zIndex: 9990, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
+      <div role="dialog" aria-label="Colocar em rota" style={{ width: "100%", maxWidth: 520, maxHeight: "calc(100vh - 24px)", overflowY: "auto", background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 16, padding: 16, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}><CalendarPlus size={18} color={S.pl} /><span style={{ flex: 1, fontSize: 15, fontWeight: 800, color: S.txt }}>Colocar em rota</span>
+          <button onClick={() => setRd(null)} disabled={rd.lo} aria-label="Fechar" style={{ padding: 6, border: "none", display: "flex" }}><X size={17} color={S.ts} /></button></div>
+        {!rd.feito ? <>
+          <p style={{ margin: "0 0 10px", fontSize: 12.5, color: S.ts }}>{rd.orgs.length} empresa(s) selecionada(s). Se o dia já tiver roteiro, elas entram nele e a <b>ordem é recalculada pela localização</b> (partida e volta: casa do responsável). Depois dá para ajustar em Rotas.</p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            <DateField value={rd.dia} onChange={d => d && setRd(r => ({ ...r, dia: d }))} today={todayLocal()} placeholder="Dia da rota" style={{ minWidth: 200, flex: 1 }} />
+            <select value={rd.uid} onChange={e => setRd(r => ({ ...r, uid: e.target.value }))} aria-label="Responsável" style={{ flex: 1, minWidth: 160, fontSize: 13 }}>{USERS.map(u => <option key={u.id} value={String(u.id)}>{u.n}</option>)}</select>
+          </div>
+          <div style={{ maxHeight: 230, overflowY: "auto", border: `1px solid ${S.brd}`, borderRadius: 10, padding: "4px 10px", marginBottom: 10 }}>
+            {rd.orgs.map(o => { const gps = plocs?.[o.id]?.lat != null; const ag = rd.avisos?.[o.id] || []; const v = uvDe(o); const dv = v ? diasAte(v.d) : null;
+              return <div key={o.id} style={{ padding: "6px 0", borderBottom: `1px solid ${S.cl}`, fontSize: 12.5 }}>
+                <b style={{ color: gps ? S.txt : S.td }}>{o.nickname || o.name}</b> <span style={{ color: S.ts }}>· {o.addr?.city_name || o.addr?.city || ""}</span>
+                {!gps && <span style={{ display: "block", color: S.dng, fontSize: 11.5 }}>sem GPS — fica fora (faça um check-in para capturar)</span>}
+                {dv != null && dv <= 30 && <span style={{ display: "block", color: S.gold, fontSize: 11.5 }}>⚠ visitado {haDias(dv)}{v.u ? ` por ${v.u.split(" ")[0]}` : ""}</span>}
+                {ag.length > 0 && <span style={{ display: "block", color: S.purple || S.gold, fontSize: 11.5 }}>⚠ já agendado: {ag.slice(0, 3).join("; ")}</span>}
+              </div>; })}
+          </div>
+          {rd.msg && <p style={{ margin: "0 0 8px", fontSize: 12.5, color: S.gold }}>{rd.msg}</p>}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button onClick={() => setRd(null)} disabled={rd.lo} style={{ padding: "10px 14px", fontSize: 13, borderRadius: 10, border: `1px solid ${S.inpBdr}`, background: S.inp, color: S.t2, cursor: "pointer" }}>Cancelar</button>
+            <button onClick={colocarRota} disabled={rd.lo || !rd.orgs.some(o => plocs?.[o.id]?.lat != null)} style={{ padding: "10px 16px", fontSize: 13, fontWeight: 800, borderRadius: 10, border: "none", background: "#0578A6", color: "#fff", cursor: "pointer" }}>{rd.lo ? "Calculando a rota…" : `Colocar na rota de ${rd.dia.slice(8, 10)}/${rd.dia.slice(5, 7)}`}</button>
+          </div>
+        </> : <>
+          <p style={{ margin: "0 0 6px", fontSize: 13.5, color: S.ok, fontWeight: 700 }}>✓ Roteiro de {rd.dia.slice(8, 10)}/{rd.dia.slice(5, 7)} ({rd.feito.resp}): {rd.feito.n} visita(s) na Agenda{rd.feito.antes ? `, junto com as ${rd.feito.antes} que já estavam` : ""}.</p>
+          <p style={{ margin: "0 0 8px", fontSize: 12, color: S.ts }}>Ordem calculada pela localização · cerca de {Math.round(rd.feito.km)} km{rd.feito.estimado ? " (estimativa em linha reta — o roteador não respondeu)" : ""}.</p>
+          <ol style={{ margin: "0 0 10px", paddingLeft: 22, fontSize: 12.5, color: S.t2, maxHeight: 200, overflowY: "auto" }}>{rd.feito.ordem.map((n, i) => <li key={i}>{n}</li>)}</ol>
+          {rd.feito.semGps.length > 0 && <p style={{ margin: "0 0 8px", fontSize: 12, color: S.gold }}>Ficaram fora (sem GPS): {rd.feito.semGps.join(", ")}.</p>}
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
+            <button onClick={() => setRd(null)} style={{ padding: "10px 14px", fontSize: 13, borderRadius: 10, border: `1px solid ${S.inpBdr}`, background: S.inp, color: S.t2, cursor: "pointer" }}>Fechar</button>
+            {rd.feito.meu && onIrRotas && <button onClick={() => { try { localStorage.setItem("jc:abrirRoteiroDia", JSON.stringify({ dia: rd.dia })); } catch {} setRd(null); onIrRotas(); }} style={{ padding: "10px 16px", fontSize: 13, fontWeight: 800, borderRadius: 10, border: "none", background: "#0578A6", color: "#fff", cursor: "pointer" }}>Abrir em Rotas para ajustar a ordem</button>}
+          </div>
+        </>}
+      </div>
+    </div>, document.body)}
     {pUp && createPortal(<div onMouseDown={e => { if (e.target === e.currentTarget && !pUpLo) setPUp(null); }} style={{ position: "fixed", inset: 0, background: "rgba(4,10,18,.66)", zIndex: 9998, display: "flex", alignItems: "center", justifyContent: "center", padding: 12 }}>
       <div role="dialog" aria-label="Carregar prospecção" style={{ width: "100%", maxWidth: 560, maxHeight: "calc(100vh - 24px)", overflowY: "auto", background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 16, padding: 16, boxShadow: "0 18px 50px rgba(0,0,0,.45)" }}>
         {(() => { const nAdd = pUp.itens.reduce((t, x) => t + x.add.length, 0), nRem = pUp.itens.reduce((t, x) => t + x.rem.length, 0); const nEmp = pUp.itens.filter(x => x.add.length || (pUp.encerrar && x.rem.length)).length;
@@ -992,6 +1126,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     {selE.size > 0 && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: S.acc + "14", border: `1px solid ${S.acc}55`, borderRadius: 10, padding: "8px 12px", marginBottom: 8 }}>
       <span style={{ flex: 1, minWidth: 160, fontSize: 13, color: S.txt }}><b>{selE.size}</b> empresa(s) selecionada(s)</span>
       <button onClick={() => { setPMsg(""); setPModal({ lote: true, orgs: [...(allOrgs || []), ...(excl || [])].filter(o => selE.has(o.id)) }); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, fontWeight: 700, borderRadius: 9, border: "none", background: S.acc, color: "#fff", cursor: "pointer" }}><Target size={14} /> Prospecção…</button>
+      <button onClick={abrirRd} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, fontWeight: 700, borderRadius: 9, border: "none", background: "#0578A6", color: "#fff", cursor: "pointer" }}><CalendarPlus size={14} /> Colocar em rota…</button>
       <button onClick={() => setSelE(new Set())} style={{ padding: "8px 10px", fontSize: 12.5, borderRadius: 9, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.ts, cursor: "pointer" }}>Limpar seleção</button>
     </div>}
     <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10 }}>
@@ -999,15 +1134,15 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
         <thead><tr>
           <th style={{ ...th, width: 34, padding: "10px 4px 10px 10px" }}><input type="checkbox" aria-label="Selecionar todas as empresas filtradas" checked={lista.length > 0 && lista.every(o => selE.has(o.id))} onChange={e => setSelE(e.target.checked ? new Set(lista.map(o => o.id)) : new Set())} style={{ width: 16, height: 16, cursor: "pointer" }} /></th>
           <th style={{ ...th, cursor: "pointer", width: nomeW, minWidth: nomeW, maxWidth: nomeW, userSelect: "none" }} onClick={() => ordenar("nome")}>Nome{seta("nome")}{alca("nome", "Nome")}</th>
-          {V("cat") && <th style={{ ...th, ...wSt("cat") }}>Categoria · canal{alca("cat", "Categoria")}</th>}
-          {V("bairro") && <th style={{ ...th, ...wSt("bairro") }}>Bairro{alca("bairro", "Bairro")}</th>}
-          {V("cidade") && <th style={{ ...th, ...wSt("cidade") }}>Cidade{alca("cidade", "Cidade")}</th>}
-          {V("rfv") && <th style={{ ...th, ...wSt("rfv") }}>RFV{alca("rfv", "RFV")}</th>}
-          {V("uv") && <th style={{ ...th, cursor: "pointer", ...wSt("uv") }} onClick={() => ordenar("uv")} title="Ordenar pela última visita">Últ. visita{seta("uv")}{alca("uv", "Últ. visita")}</th>}
-          {V("uc") && <th style={{ ...th, cursor: "pointer", ...wSt("uc") }} onClick={() => ordenar("uc")} title="Ordenar pela última compra">Últ. compra{seta("uc")}{alca("uc", "Últ. compra")}</th>}
-          {V("prosp") && <th style={{ ...th, ...wSt("prosp") }}>Prospecção{alca("prosp", "Prospecção")}</th>}
-          {V("resp") && <th style={{ ...th, ...wSt("resp") }}>Responsável{alca("resp", "Responsável")}</th>}
-          {V("ctt") && <th style={{ ...th, ...wSt("ctt") }}>Contato{alca("ctt", "Contato")}</th>}<th style={th}></th>
+          {V("cat") && <th style={{ ...th, ...wSt("cat") }}>Categoria · canal<ColFiltro rot="Categoria" opcoes={opcCol.cat} vals={fCat} set={v => { setFCat(v); setVc(60); }} />{alca("cat", "Categoria")}</th>}
+          {V("bairro") && <th style={{ ...th, ...wSt("bairro") }}>Bairro<ColFiltro rot="Bairro" opcoes={opcCol.bairro} vals={fBai} set={v => { setFBai(v); setVc(60); }} />{alca("bairro", "Bairro")}</th>}
+          {V("cidade") && <th style={{ ...th, ...wSt("cidade") }}>Cidade<ColFiltro rot="Cidade" opcoes={opcCol.cidade} vals={fCid} set={v => { setFCid(v); setVc(60); }} />{alca("cidade", "Cidade")}</th>}
+          {V("rfv") && <th style={{ ...th, ...wSt("rfv") }}>RFV<ColFiltro rot="Classe RFV" opcoes={opcCol.rfv} vals={fRfv} set={v => { setFRfv(v); setVc(60); }} />{alca("rfv", "RFV")}</th>}
+          {V("uv") && <th style={{ ...th, cursor: "pointer", ...wSt("uv") }} onClick={() => ordenar("uv")} title="Ordenar pela última visita">Últ. visita{seta("uv")}<ColFiltro rot="Última visita" opcoes={opcCol.uv} vals={fUv} set={v => { setFUv(v); setVc(60); }} />{alca("uv", "Últ. visita")}</th>}
+          {V("uc") && <th style={{ ...th, cursor: "pointer", ...wSt("uc") }} onClick={() => ordenar("uc")} title="Ordenar pela última compra">Últ. compra{seta("uc")}<ColFiltro rot="Última compra" opcoes={opcCol.uc} vals={fUc} set={v => { setFUc(v); setVc(60); }} />{alca("uc", "Últ. compra")}</th>}
+          {V("prosp") && <th style={{ ...th, ...wSt("prosp") }}>Prospecção<ColFiltro rot="Prospecção" opcoes={opcCol.prosp} vals={fPr} set={v => { setFPr(v); setVc(60); }} />{alca("prosp", "Prospecção")}</th>}
+          {V("resp") && <th style={{ ...th, ...wSt("resp") }}>Responsável<ColFiltro rot="Responsável" opcoes={opcCol.resp} vals={fResp} set={v => { setFResp(v); setVc(60); }} />{alca("resp", "Responsável")}</th>}
+          {V("ctt") && <th style={{ ...th, ...wSt("ctt") }}>Contato<ColFiltro rot="Contato" opcoes={opcCol.ctt} vals={fTel} set={v => { setFTel(v); setVc(60); }} />{alca("ctt", "Contato")}</th>}<th style={th}></th>
         </tr></thead>
         <tbody>
           {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id} style={selE.has(o.id) ? { background: S.acc + "10" } : undefined}>
@@ -1078,7 +1213,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
 // ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl, pessoasQ, onRemoto, prospDe, onProspFim, onProspSalvar }) {
+export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl, pessoasQ, onRemoto, prospDe, onProspFim, onProspSalvar, onIrRotas }) {
   // secao controlada pelo menu lateral do App: inicio | empresas | pessoas
   const [sel, setSel] = useState(null);
   // Abrir a ficha de um cliente vindo de outra tela (ex.: clique no card em PDVs)
@@ -1133,7 +1268,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   if (sel) return <ClienteCRM org={selAt} allOrgs={allOrgs} prospDe={prospDe} onProspFim={onProspFim} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
 
   return (<div>
-    {secao === "empresas" && <EmpresasView token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} visits={visits} prospDe={prospDe} onProspSalvar={onProspSalvar} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}
+    {secao === "empresas" && <EmpresasView plocs={plocs} onIrRotas={onIrRotas} token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} visits={visits} prospDe={prospDe} onProspSalvar={onProspSalvar} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}
     {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} onPerson={onPerson} q0={pessoasQ} />}
     {secao === "inicio" && <div>
     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
