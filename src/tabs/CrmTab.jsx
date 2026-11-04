@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ListFilter, CalendarPlus, Target, Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal, Link2 } from "lucide-react";
 import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca, toLocalDate, marcasCadastro, chaveMarca, HOMES, fixMojibake } from "../lib";
-import { SearchSelect, MultiSelect, DateField, TarefaModal } from "../components";
+import { SearchSelect, MultiSelect, DateField, TarefaModal, ColunasMenu, ColFiltro } from "../components";
 import { otimizar } from "./PlanejarRota";
 
 const DASH = "https://dashboard.jordanmt.com";
@@ -651,52 +651,6 @@ const dmy = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}` : "";
 const haDias = n => n == null ? "" : n === 0 ? "hoje" : n === 1 ? "ontem" : `há ${n} dias`;
 // v105: colunas da tabela de Empresas — ocultar/mostrar e largura do nome (salvo no aparelho)
 const COLS_E = [["cat", "Categoria · canal"], ["bairro", "Bairro"], ["cidade", "Cidade"], ["rfv", "RFV"], ["uv", "Últ. visita"], ["uc", "Últ. compra"], ["prosp", "Prospecção"], ["resp", "Responsável"], ["ctt", "Contato"]];
-const NOME_W = [["Compacto", 215], ["Médio", 300], ["Largo", 420]];
-function ColunasMenu({ ocultas, setOcultas, nomeW, setNomeW, quebra, setQuebra, onRestaurar, nLarg }) {
-  const [aberto, setAberto] = useState(false); const bt = useRef(null), pn = useRef(null); const [r, setR] = useState(null);
-  useEffect(() => { if (!aberto) return; const f = e => { if (pn.current?.contains(e.target) || bt.current?.contains(e.target)) return; setAberto(false); }; document.addEventListener("mousedown", f); document.addEventListener("touchstart", f); return () => { document.removeEventListener("mousedown", f); document.removeEventListener("touchstart", f); }; }, [aberto]);
-  const abrir = () => { const b = bt.current?.getBoundingClientRect(); setR(b); setAberto(v => !v); };
-  const W = 250; const chip = on => ({ flex: 1, padding: "6px 4px", fontSize: 12, borderRadius: 7, border: `1px solid ${on ? S.pri : S.inpBdr}`, background: on ? S.pri + "1c" : S.inp, color: on ? S.pl : S.ts, fontWeight: on ? 700 : 500, cursor: "pointer" });
-  return (<>
-    <button ref={bt} onClick={abrir} aria-expanded={aberto} title="Ocultar colunas e largura do nome" style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 11px", fontSize: 12, fontWeight: 600, borderRadius: 10, border: `1px solid ${ocultas.length ? S.pri : S.inpBdr}`, background: ocultas.length ? S.pri + "18" : "transparent", color: ocultas.length ? S.pl : S.t2, cursor: "pointer", whiteSpace: "nowrap" }}><SlidersHorizontal size={14} /> Colunas{ocultas.length ? ` · ${ocultas.length} oculta${ocultas.length > 1 ? "s" : ""}` : ""}</button>
-    {aberto && r && createPortal(<div ref={pn} style={{ position: "fixed", top: Math.min(r.bottom + 6, window.innerHeight - 440), left: Math.max(8, Math.min(r.right - W, window.innerWidth - W - 8)), width: W, zIndex: 9999, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: "0 16px 40px rgba(0,0,0,.4)", padding: 12, maxHeight: "calc(100vh - 16px)", overflowY: "auto" }}>
-      <p style={{ margin: "0 0 6px", fontSize: 11.5, fontWeight: 700, color: S.ts }}>Largura do nome</p>
-      <div style={{ display: "flex", gap: 5, marginBottom: 6 }}>{NOME_W.map(([l, w]) => <button key={l} onClick={() => setNomeW(w)} style={chip(nomeW === w)}>{l}</button>)}</div>
-      <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: S.t2, padding: "4px 0 10px", cursor: "pointer" }}><input type="checkbox" checked={quebra} onChange={e => setQuebra(e.target.checked)} style={{ width: 15, height: 15 }} /> Nome inteiro (quebra em linhas)</label>
-      <p style={{ margin: "0 0 4px", fontSize: 11.5, fontWeight: 700, color: S.ts, borderTop: `1px solid ${S.brd}`, paddingTop: 10 }}>Colunas visíveis</p>
-      {COLS_E.map(([k, l]) => <label key={k} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: S.txt, padding: "5px 0", cursor: "pointer" }}><input type="checkbox" checked={!ocultas.includes(k)} onChange={() => setOcultas(o => o.includes(k) ? o.filter(x => x !== k) : [...o, k])} style={{ width: 15, height: 15 }} />{l}</label>)}
-      <button onClick={onRestaurar} style={{ marginTop: 8, width: "100%", padding: "7px", fontSize: 12, borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.ts, cursor: "pointer" }}>Restaurar padrão</button>
-      <p style={{ margin: "8px 0 0", fontSize: 10.5, color: S.td }}>Dica: arraste a borda direita de qualquer cabeçalho para ajustar a largura daquela coluna; duplo clique na borda volta ao automático.{nLarg ? ` (${nLarg} coluna(s) com largura ajustada)` : ""}</p>
-    </div>, document.body)}
-  </>);
-}
-
-// v111: filtro no cabeçalho da coluna (estilo Excel) — marca valores; usa os mesmos filtros da tela (etiquetas/Limpar)
-function ColFiltro({ rot, opcoes, vals, set }) {
-  const [ab, setAb] = useState(false); const bt = useRef(null), pn = useRef(null); const [r, setR] = useState(null); const [q, setQ] = useState("");
-  useEffect(() => { if (!ab) return; const f = e => { if (pn.current?.contains(e.target) || bt.current?.contains(e.target)) return; setAb(false); }; document.addEventListener("mousedown", f); document.addEventListener("touchstart", f); return () => { document.removeEventListener("mousedown", f); document.removeEventListener("touchstart", f); }; }, [ab]);
-  const on = vals.length > 0; const W = 264;
-  const vis = q.trim() ? opcoes.filter(o => normBusca(o.l).includes(normBusca(q).trim())) : opcoes;
-  const tog = v => set(vals.includes(v) ? vals.filter(x => x !== v) : [...vals, v]);
-  const lk = { background: "transparent", border: "none", padding: 0, fontSize: 12, fontWeight: 600, cursor: "pointer" };
-  return (<>
-    <button ref={bt} onClick={e => { e.stopPropagation(); setR(bt.current.getBoundingClientRect()); setAb(a => !a); setQ(""); }} title={on ? `Filtro: ${vals.join(", ")}` : `Filtrar ${rot}`} aria-label={`Filtrar ${rot}`} aria-expanded={ab}
-      style={{ marginLeft: 5, padding: "2px 3px", border: "none", background: on ? S.pri : "transparent", borderRadius: 5, cursor: "pointer", verticalAlign: "middle", display: "inline-flex", position: "relative", zIndex: 3 }}><ListFilter size={13} color={on ? "#fff" : S.td} /></button>
-    {ab && r && createPortal(<div ref={pn} onClick={e => e.stopPropagation()} role="dialog" aria-label={`Filtro ${rot}`} style={{ position: "fixed", top: Math.min(r.bottom + 6, window.innerHeight - 400), left: Math.max(8, Math.min(r.left - 12, window.innerWidth - W - 8)), width: W, zIndex: 9999, background: "var(--card-solid)", border: `1px solid ${S.brd}`, borderRadius: 12, boxShadow: "0 16px 40px rgba(0,0,0,.4)", padding: 10, fontWeight: 400, textAlign: "left", whiteSpace: "normal" }}>
-      <div style={{ display: "flex", alignItems: "center", marginBottom: 6 }}><b style={{ flex: 1, fontSize: 12.5, color: S.txt }}>{rot}</b>{on && <span style={{ fontSize: 11, color: S.pl }}>{vals.length} marcado(s)</span>}</div>
-      {opcoes.length > 8 && <input autoFocus value={q} onChange={e => setQ(e.target.value)} placeholder="Buscar…" style={{ width: "100%", boxSizing: "border-box", height: 32, fontSize: 12.5, marginBottom: 6 }} />}
-      <div style={{ display: "flex", gap: 12, marginBottom: 6 }}>
-        <button onClick={() => set([...new Set([...vals, ...vis.map(o => o.v)])])} style={{ ...lk, color: S.pl }}>Marcar {q ? "visíveis" : "todos"}</button>
-        <button onClick={() => set([])} style={{ ...lk, color: S.dng }}>Limpar</button>
-      </div>
-      <div style={{ maxHeight: 270, overflowY: "auto" }}>
-        {vis.length ? vis.map(o => <label key={o.v} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 2px", fontSize: 12.5, color: S.txt, cursor: "pointer" }}>
-          <input type="checkbox" checked={vals.includes(o.v)} onChange={() => tog(o.v)} style={{ width: 15, height: 15, flexShrink: 0 }} />
-          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.l}</span>{o.n != null && <span className="num" style={{ fontSize: 11, color: S.td }}>{o.n}</span>}</label>) : <p style={{ fontSize: 12, color: S.ts, margin: "6px 0" }}>Nada encontrado.</p>}
-      </div>
-    </div>, document.body)}
-  </>);
-}
 const FAIXAS_D = ["Até 30 dias", "31 a 60 dias", "61 a 90 dias", "91 a 180 dias", "Mais de 180 dias", "Sem registro"];
 const faixaD = n => n == null ? "Sem registro" : n <= 30 ? "Até 30 dias" : n <= 60 ? "31 a 60 dias" : n <= 90 ? "61 a 90 dias" : n <= 180 ? "91 a 180 dias" : "Mais de 180 dias";
 const hhmmR = m => { m = Math.round(m); return `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
@@ -1024,7 +978,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8, gap: 8 }}>
       <p style={{ margin: 0, fontSize: 12.5, color: S.ts }}>Exibindo <b style={{ color: S.txt }}>{Math.min(vc, lista.length)}</b> de <b style={{ color: S.txt }}>{lista.length}</b> empresas</p>
       <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-        <ColunasMenu ocultas={ocultas} setOcultas={setOcultas} nomeW={nomeW} setNomeW={setNomeW} quebra={quebra} setQuebra={setQuebra} nLarg={Object.keys(larg).filter(k => k !== "nome").length} onRestaurar={() => { setOcultas([]); setLarg({}); setQuebra(false); }} />
+        <ColunasMenu cols={COLS_E} ocultas={ocultas} setOcultas={setOcultas} nomeW={nomeW} setNomeW={setNomeW} quebra={quebra} setQuebra={setQuebra} nLarg={Object.keys(larg).filter(k => k !== "nome").length} onRestaurar={() => { setOcultas([]); setLarg({}); setQuebra(false); }} />
         <button onClick={onNovaEmpresa} style={{ display: "flex", alignItems: "center", gap: 5, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}><Plus size={14}/>Adicionar empresa</button>
       </div>
     </div>
