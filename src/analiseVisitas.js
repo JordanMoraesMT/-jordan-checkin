@@ -79,9 +79,9 @@ export function analisar({ visitas, carteira, carteiraValor, ultimaEquipe, vendI
   // ultimaEquipe: {orgId: "AAAA-MM-DD"} última visita de QUALQUER usuário — conta para "aguardar" (cliente já atendido).
   const P = { ...PREMISSAS_PADRAO, ...prem, taxas: { ...PREMISSAS_PADRAO.taxas, ...(prem?.taxas || {}) } };
   const esc = soDig(P.cnpjEscritorio), ini = P.inicio, ateV = dataVendas && dataVendas < hoje ? dataVendas : hoje;
-  const vs = (visitas || []).map(v => { const ms = msD1(v.criado_em); return { ...v, ms, dia: diaCba(ms), cn: k14(v.cnpj),
+  const vs = (visitas || []).map(v => { const ms = msD1(v.criado_em); if (isNaN(ms)) return null; /* v113: data inválida não derruba a análise */ return { ...v, ms, dia: diaCba(ms), cn: k14(v.cnpj),
       escritorio: soDig(v.cnpj) === esc || /JORDAN REPRESENTA/i.test(v.org_nome || "") }; })
-    .filter(v => !isNaN(v.ms) && v.dia >= ini && v.dia <= hoje).sort((a, b) => a.ms - b.ms);
+    .filter(v => v && !isNaN(v.ms) && v.dia >= ini && v.dia <= hoje).sort((a, b) => a.ms - b.ms);
 
   // ── jornada por dia (1º → último check-out; o do escritório fecha a jornada, mas não é visita) ──
   const porDia = new Map();
@@ -132,7 +132,11 @@ export function analisar({ visitas, carteira, carteiraValor, ultimaEquipe, vendI
     const ultVis = nVis ? mv[mv.length - 1].dia : null; const diasSem = ultVis ? diffDias(hoje, ultVis) : null;
     const horas = mv.reduce((s, v) => s + hDe(v), 0);
     const horasJanela = mv.filter(v => v.dia <= ateV).reduce((s, v) => s + hDe(v), 0);
-    const reais = mv.filter(v => v.durMin > 0); const emLoja = reais.reduce((s, v) => s + v.durMin / 60, 0); const nReal = reais.length;
+    // v113: tempo EXATO no PDV — soma de check-in → check-out de cada visita (durReal); última visita com horário
+    const reais = mv.filter(v => v.durReal != null); const emLoja = reais.reduce((s, v) => s + v.durReal / 60, 0); const nReal = reais.length;
+    const longas = reais.filter(v => v.durReal > 240).length;
+    const uv = nVis ? mv[mv.length - 1] : null;
+    const ultAtend = uv ? { dia: uv.dia, ci: uv.durReal != null ? horaCba(uv.ciMs) : null, co: horaCba(uv.durReal != null ? uv.coMs : uv.ms), min: uv.durReal != null ? uv.durReal : null, esquecido: uv.durReal == null && uv.ciMs != null } : null;
     const vendido = Object.values(vendInd?.[cn] || {}).reduce((s, v) => s + (+v || 0), 0);
     const comGerada = comissaoDe(vendInd?.[cn], o, P);
     const comMes = Object.keys(f12).length ? comissaoDe(f12, o, P) / 12 : fatMes * taxaMedia;
@@ -153,7 +157,7 @@ export function analisar({ visitas, carteira, carteiraValor, ultimaEquipe, vendI
       const prox = Math.max(intervaloPago, 0); if (!uRef || dRef >= prox) veredito = "Rentável visitar"; else { veredito = "Aguardar"; aPartir = somaDias(uRef, prox); } }
     return { id: o.id, org: o, nome: o.nickname || o.name, cnpj: cn, cidade: o.addr?.city_name || o.addr?.city || "", bairro: o.addr?.district || "", status: o.cat || "",
       segmento: o.sector || "", fat12m, fatMes, classe: k.c, ideal: k.ideal, max: k.max, visitas: nVis, porMes, ultVis, diasSem, horas, emLoja, nReal, vendido,
-      ultCompra: rfvDe(o)?.ultima || null, quePagam, intervaloPago, situacao, diagnostico, indice, saude, veredito, aPartir };
+      ultCompra: rfvDe(o)?.ultima || null, longas, ultAtend, quePagam, intervaloPago, situacao, diagnostico, indice, saude, veredito, aPartir };
   });
 
   const soma = (l, f) => l.reduce((s, x) => s + (f(x) || 0), 0);

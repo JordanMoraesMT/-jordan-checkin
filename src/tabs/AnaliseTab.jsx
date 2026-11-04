@@ -12,6 +12,8 @@ import { TRAM_GERADO } from "../tramTaxas.js";
 const brl = v => (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const n1 = v => (v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
 const hm = h => { const m = Math.round((h || 0) * 60); return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`; };
+// v113: tempo no PDV — abaixo de 1h em minutos (ex.: "16 min", "1 min"), acima em "1h05"
+const tLoja = min => { const m = Math.round(min || 0); return m < 60 ? `${m} min` : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}`; };
 const dBR = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}` : "—";
 const dCurta = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}` : "";
 const k14 = x => String(x || "").replace(/\D/g, "").padStart(14, "0");
@@ -118,9 +120,9 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   const verTxt = x => x.veredito === "Aguardar" && x.aPartir ? `Aguardar · a partir de ${dCurta(x.aPartir)}` : x.veredito;
 
   const exportar = () => {
-    const cab = ["CNPJ", "Cliente", "Responsável", "Cidade", "Bairro", "Status", "Segmento", "Classe", "Visitas", "Visitas/mês", "Visitas/mês ideal", "Última visita", "Dias sem visita", "Horas investidas", "Horas na loja", "Situação", "Vale nova visita?"];
+    const cab = ["CNPJ", "Cliente", "Responsável", "Cidade", "Bairro", "Status", "Segmento", "Classe", "Visitas", "Visitas/mês", "Visitas/mês ideal", "Última visita", "Dias sem visita", "Horas na loja (check-in → check-out)", "Visitas com check-in", "Últ. visita: check-in", "Últ. visita: check-out", "Últ. visita: minutos no PDV", "Horas c/ deslocamento (jornada)", "Situação", "Vale nova visita?"];
     const rows = [isAdmin ? [...cab, "Diagnóstico", "Saúde", "Índice", "Faturamento 12m", "Vendido no período", "Última compra"] : cab];
-    linhasF.forEach(x => { const b = [x.cnpj, x.nome, x.vendedor || "", x.cidade, x.bairro, x.status, x.segmento, x.classe, x.visitas, n1(x.porMes), x.ideal, x.ultVis ? dBR(x.ultVis) : "", x.diasSem ?? "", n1(x.horas), x.nReal ? n1(x.emLoja) : "", x.situacao, verTxt(x)];
+    linhasF.forEach(x => { const b = [x.cnpj, x.nome, x.vendedor || "", x.cidade, x.bairro, x.status, x.segmento, x.classe, x.visitas, n1(x.porMes), x.ideal, x.ultVis ? dBR(x.ultVis) : "", x.diasSem ?? "", x.nReal ? tLoja(x.emLoja * 60) : "", `${x.nReal}/${x.visitas}`, x.ultAtend?.ci || "", x.ultAtend?.co || "", x.ultAtend?.min != null ? Math.round(x.ultAtend.min) : "", n1(x.horas), x.situacao, verTxt(x)];
       rows.push(isAdmin ? [...b, x.diagnostico, x.saude, x.indice == null ? "" : n1(x.indice), Math.round(x.fat12m), Math.round(x.vendido), x.ultCompra ? dBR(x.ultCompra) : ""] : b); });
     csv(rows, `analise-visitas-${(selUser.n || "").split(" ")[0].toLowerCase()}-${hoje}.csv`); };
 
@@ -210,7 +212,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
     <div style={{ overflow: "auto", maxHeight: "70vh", border: `1px solid ${S.brd}`, borderRadius: 10, background: S.card, marginBottom: 16 }}>
       <table style={{ width: "100%", minWidth: isAdmin ? 1240 : 780, borderCollapse: "collapse" }}>
         <thead><tr>
-          {th("nome", "Cliente")}{sels.length > 1 && th("vendedor", "Responsável")}{th("veredito", "Vale nova visita?")}{th("classe", "Classe")}{th("visitas", "Visitas", 1)}{th("porMes", "Por mês · ideal", 1)}{th("diasSem", "Última visita", 1)}{th("horas", "Horas", 1)}{th("situacao", "Situação")}
+          {th("nome", "Cliente")}{sels.length > 1 && th("vendedor", "Responsável")}{th("veredito", "Vale nova visita?")}{th("classe", "Classe")}{th("visitas", "Visitas", 1)}{th("porMes", "Por mês · ideal", 1)}{th("diasSem", "Última visita", 1)}{th("emLoja", "Horas no PDV", 1)}{th("situacao", "Situação")}
           {isAdmin && <>{th("diagnostico", "Diagnóstico")}{th("indice", "Saúde", 1)}{th("vendido", "Vendido período", 1)}{th("fat12m", "Fat. 12m", 1)}</>}
         </tr></thead>
         <tbody>{linhasF.map(x => <tr key={x.id}>
@@ -222,7 +224,11 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
           <td style={tdn}>{x.visitas}</td>
           <td style={{ ...tdn, color: x.porMes > x.ideal * prem.tolerancia ? S.gold : S.txt }}>{n1(x.porMes)} · {x.ideal}</td>
           <td style={{ ...tdn, color: x.situacao === "Visita atrasada" ? S.gold : x.situacao === "Sem visita" ? S.dng : S.txt }}>{x.ultVis ? `${x.diasSem}d` : "nunca"}<div style={{ fontSize: 11, color: S.ts }}>{x.ultVis ? dBR(x.ultVis) : ""}</div></td>
-          <td style={tdn} title={x.nReal ? `Tempo dentro da loja (check-in → check-out) em ${x.nReal} de ${x.visitas} visita(s)` : "Sem check-in casado: jornada dividida igualmente"}>{x.horas ? hm(x.horas) : "—"}{x.nReal > 0 && <span style={{ display: "block", fontSize: 10.5, color: S.ts }}>na loja {hm(x.emLoja)}{x.nReal < x.visitas ? ` · ${x.nReal}/${x.visitas}` : ""}</span>}</td>
+          <td style={tdn} title={`Tempo exato no PDV: soma de check-in → check-out de cada visita (${x.nReal} de ${x.visitas} com check-in).${x.longas ? ` ${x.longas} visita(s) com mais de 4h — conferir se o check-out não foi esquecido.` : ""} Com deslocamento (jornada repartida, base do valor da hora): ${hm(x.horas)}.`}>
+            {x.nReal ? tLoja(x.emLoja * 60) : "—"}{x.longas > 0 && <span style={{ color: S.gold }}> ⚠</span>}
+            {x.ultAtend && <span style={{ display: "block", fontSize: 10.5, color: S.ts, whiteSpace: "nowrap" }}>{x.ultAtend.min != null ? `últ. ${x.ultAtend.ci}→${x.ultAtend.co} · ${tLoja(x.ultAtend.min)}` : x.ultAtend.esquecido ? "últ. check-out esquecido (outro dia)" : "últ. sem check-in"}</span>}
+            {x.nReal > 0 && x.nReal < x.visitas && <span style={{ display: "block", fontSize: 10.5, color: S.td }}>{x.nReal}/{x.visitas} com check-in</span>}
+            {x.horas > 0 && <span style={{ display: "block", fontSize: 10.5, color: S.td }}>c/ desloc. {hm(x.horas)}</span>}</td>
           <td style={{ ...td, color: corDe(SIT, x.situacao), whiteSpace: "nowrap" }}>{x.situacao}</td>
           {isAdmin && <>
             <td style={{ ...td, color: corDe(DIAG, x.diagnostico) }}>{x.diagnostico}</td>
@@ -270,7 +276,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
           <tbody>{pe.classes.map((c, i) => <tr key={c.c}><td style={{ padding: "4px 8px", fontSize: 13.5, color: S.txt }}>{c.c}</td>
             {["min", "ideal", "max"].map(f => <td key={f} style={{ padding: "4px 8px" }}><input type="number" value={c[f]} disabled={c.c === "Sem compra" && f === "min"} onChange={e => setPe(p => ({ ...p, classes: p.classes.map((x, j) => j === i ? { ...x, [f]: +e.target.value } : x) }))} className="num" style={{ width: 110, height: 38, boxSizing: "border-box" }} /></td>)}</tr>)}</tbody>
         </table></div>
-        <p style={{ margin: 0, fontSize: 12, color: S.ts, lineHeight: 1.5 }}>Valor da hora = comissão estimada da carteira (vendas de cada representada × taxa) ÷ horas de campo, até a última venda carregada. Horas = jornada do dia (1º → último check-out) repartida entre as visitas do dia na proporção da duração real de cada uma (check-in → check-out); sem check-in casado, em partes iguais. "Na loja" = tempo real dentro do cliente (as últimas 200 visitas de cada vendedor têm o check-in guardado). Saúde = comissão gerada pelo cliente ÷ (horas investidas × limite). Vale nova visita = a comissão mensal esperada do cliente já cobre mais uma visita desde a última?</p>
+        <p style={{ margin: 0, fontSize: 12, color: S.ts, lineHeight: 1.5 }}>Valor da hora = comissão estimada da carteira (vendas de cada representada × taxa) ÷ horas de campo, até a última venda carregada. Horas no PDV = tempo exato dentro do cliente: soma de check-in → check-out de cada visita (com segundos; check-out esquecido em outro dia fica de fora; ⚠ = visita com mais de 4h para conferir); embaixo, a última visita. "C/ desloc." = jornada do dia (1º → último check-out) repartida entre as visitas na proporção da duração real — é essa a base do valor da hora e da saúde. Saúde = comissão gerada pelo cliente ÷ (horas investidas × limite). Vale nova visita = a comissão mensal esperada do cliente já cobre mais uma visita desde a última?</p>
         <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", flexWrap: "wrap" }}>
           <button onClick={() => setPremEd({ ...PREMISSAS_PADRAO })} style={{ height: 40, padding: "0 12px", fontSize: 13.5 }}>Voltar ao padrão</button>
           <button onClick={() => salvaPrem(pe)} style={{ height: 40, padding: "0 16px", fontSize: 13.5, fontWeight: 600, background: S.pri, border: "none", color: "#fff" }}>Salvar e recalcular</button>

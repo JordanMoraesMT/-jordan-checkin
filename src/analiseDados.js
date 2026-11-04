@@ -45,12 +45,18 @@ export function carregarBase(token, inicio, hoje) {
       const ci = Date.parse(x.checkinTime), co = Date.parse(x.checkoutTime); if (isNaN(ci) || isNaN(co)) return;
       const k = String(x.orgId); if (!porOrg.has(k)) porOrg.set(k, []); porOrg.get(k).push({ ci, co }); });
     // v89: o check-in vem gravado no próprio check-out do D1 (checkin_em, Dashboard v334); o registro do app é reserva
+    // v113: durReal = tempo EXATO no PDV (check-in → check-out da MESMA visita, com segundos), sem filtro de faixa;
+    //       só fica de fora o check-out esquecido (fechado em outro dia, em hora de Cuiabá).
+    //       durMin (2 min–4 h) continua só para repartir a jornada (valor da hora), como antes.
+    const diaC = t => new Date(t - 4 * 3600000).toISOString().slice(0, 10);
+    const comTempo = (x, ci, co) => { const dd = (co - ci) / 60000; if (isNaN(dd)) return x;
+      const real = dd >= 0 && diaC(ci) === diaC(co) ? dd : null;
+      return { ...x, ...(dd >= 2 && dd <= 240 ? { durMin: dd } : {}), durReal: real, ciMs: ci, coMs: co }; };
     const comDur = l => l.map(x => { const ms = Date.parse(String(x.criado_em || "").replace(" ", "T") + "Z");
-      if (x.checkin_em) { const ci = Date.parse(x.checkin_em); const dd = (ms - ci) / 60000; if (!isNaN(dd)) return dd >= 2 && dd <= 240 ? { ...x, durMin: dd } : x; }
+      if (x.checkin_em) { const ci = Date.parse(x.checkin_em); if (!isNaN(ci) && !isNaN(ms)) return comTempo(x, ci, ms); }
       const c = porOrg.get(String(x.org_id)) || [];
       let best = null; for (const k of c) { const d = Math.abs(k.co - ms); if (d <= 600000 && (!best || d < best.d)) best = { d, k }; }
-      const dur = best ? (best.k.co - best.k.ci) / 60000 : null;
-      return dur != null && dur >= 2 && dur <= 240 ? { ...x, durMin: dur } : x; });
+      return best ? comTempo(x, best.k.ci, best.k.co) : x; });
     const r = { visitas: ok ? comDur(a.atividades.filter(x => x.origem === "checkout")) : [], vendInd: v.m, fat12Ind: f.m, falhouVisitas: !ok, falhouVendas: v.falhou + f.falhou };
     if (!ok || r.falhouVendas) cacheBase = null; // não guarda leitura incompleta
     return r;
