@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { ListFilter, CalendarPlus, Target, Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal, Link2 } from "lucide-react";
-import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca, toLocalDate, marcasCadastro, chaveMarca, HOMES, fixMojibake } from "../lib";
+import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca, toLocalDate, marcasCadastro, chaveMarca, HOMES, fixMojibake, SECTORS } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal, ColunasMenu, ColFiltro } from "../components";
 import { otimizar } from "./PlanejarRota";
 
@@ -650,7 +650,7 @@ const diasAte = d => { if (!d) return null; const t = Date.parse(d + "T12:00:00"
 const dmy = d => d ? `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(2, 4)}` : "";
 const haDias = n => n == null ? "" : n === 0 ? "hoje" : n === 1 ? "ontem" : `há ${n} dias`;
 // v105: colunas da tabela de Empresas — ocultar/mostrar e largura do nome (salvo no aparelho)
-const COLS_E = [["cat", "Categoria · canal"], ["bairro", "Bairro"], ["cidade", "Cidade"], ["rfv", "RFV"], ["uv", "Últ. visita"], ["uc", "Últ. compra"], ["prosp", "Prospecção"], ["resp", "Responsável"], ["ctt", "Contato"]];
+const COLS_E = [["cat", "Categoria · canal"], ["seg", "Segmento"], ["bairro", "Bairro"], ["cidade", "Cidade"], ["rfv", "RFV"], ["uv", "Últ. visita"], ["uc", "Últ. compra"], ["prosp", "Prospecção"], ["resp", "Responsável"], ["ctt", "Contato"]];
 const FAIXAS_D = ["Até 30 dias", "31 a 60 dias", "61 a 90 dias", "91 a 180 dias", "Mais de 180 dias", "Sem registro"];
 const faixaD = n => n == null ? "Sem registro" : n <= 30 ? "Até 30 dias" : n <= 60 ? "31 a 60 dias" : n <= 90 ? "61 a 90 dias" : n <= 180 ? "91 a 180 dias" : "Mais de 180 dias";
 const hhmmR = m => { m = Math.round(m); return `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
@@ -703,7 +703,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const [fCtt, setFCtt] = useState(arr(p0.fCtt)); // v85: com/sem pessoa de contato
   const [fInd, setFInd] = useState(arr(p0.fInd)); const [fSit, setFSit] = useState(arr(p0.fSit)); // v103: marca × situação (Compra / Prospecção)
   // v111: filtros das colunas — bairro, faixas de última visita/compra, prospecção e contato (telefone/e-mail)
-  const [fBai, setFBai] = useState(arr(p0.fBai)); const [fUv, setFUv] = useState(arr(p0.fUv)); const [fUc, setFUc] = useState(arr(p0.fUc)); const [fPr, setFPr] = useState(arr(p0.fPr)); const [fTel, setFTel] = useState(arr(p0.fTel));
+  const [fSeg, setFSeg] = useState(arr(p0.fSeg)); /* v115: segmento */ const [fBai, setFBai] = useState(arr(p0.fBai)); const [fUv, setFUv] = useState(arr(p0.fUv)); const [fUc, setFUc] = useState(arr(p0.fUc)); const [fPr, setFPr] = useState(arr(p0.fPr)); const [fTel, setFTel] = useState(arr(p0.fTel));
   // v103: última visita de cada cliente — histórico completo do servidor (por CNPJ) + visitas do app (cobre quem não tem CNPJ e o dia de hoje)
   const [uvSrv, setUvSrv] = useState(null);
   useEffect(() => { if (!token) return; let vivo = true; crm(token, "/api/crm/ultimas-visitas").then(d => { if (vivo) setUvSrv(d.visitas || {}); }).catch(() => { if (vivo) setUvSrv({}); }); return () => { vivo = false; }; }, [token]);
@@ -725,7 +725,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const autoLarg = k => setLarg(l => { const n = { ...l }; delete n[k]; return n; });
   const wSt = k => larg[k] ? { width: larg[k], minWidth: larg[k], maxWidth: larg[k], overflow: "hidden", textOverflow: "ellipsis" } : {};
   const alca = (k, rot) => <span onPointerDown={arrastar(k)} onClick={e => e.stopPropagation()} onDoubleClick={e => { e.stopPropagation(); autoLarg(k); }} title="Arraste para ajustar a largura · duplo clique: automática" aria-label={`Ajustar largura de ${rot}`} style={{ position: "absolute", top: 6, bottom: 6, right: 0, width: 10, cursor: "col-resize", display: "flex", justifyContent: "center", touchAction: "none", zIndex: 2 }}><span style={{ width: 2, height: "100%", borderRadius: 1, background: S.inpBdr }} /></span>;
-  const LARG_PAD = { cat: 130, bairro: 120, cidade: 150, rfv: 110, uv: 120, uc: 105, prosp: 170, resp: 100, ctt: 175 };
+  const LARG_PAD = { cat: 130, seg: 140, bairro: 120, cidade: 150, rfv: 110, uv: 120, uc: 105, prosp: 170, resp: 100, ctt: 175 };
   // v104: prospecção manual — por empresa (🎯) e em lote (seleção)
   const compraDe = o => { const a = [...String(rfvDe(o)?.inds || "").split(","), ...String(o.products || "").split(",")].map(x => x.trim()).filter(Boolean); const vis = new Set(); return a.filter(x => { const k = chaveMarca(x); if (vis.has(k)) return false; vis.add(k); return true; }); };
   const [selE, setSelE] = useState(() => new Set());
@@ -835,7 +835,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     } catch (e) { setRd(x => ({ ...x, lo: false, msg: "Não foi possível: " + (e.message || e) })); }
   };
   const [filtAberto, setFiltAberto] = useState(false);
-  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel]);
+  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel, fSeg }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel, fSeg]);
   // v85: quem tem pessoa de contato (carrega só quando o filtro de contato é usado)
   const [cttSet, setCttSet] = useState(null);
   useEffect(() => { if (!fCtt.length || cttSet || !token) return; let vivo = true;
@@ -848,6 +848,11 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const [vc, setVc] = useState(60);
   const resps = useMemo(() => { const s = new Set(USERS.map(u => u.n)); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
   const cidades = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const c = o.addr?.city_name || o.addr?.city; if (c) s.add(c); }); return [...s].sort(); }, [allOrgs]);
+  const SEM_SEG = "(sem segmento)";
+  // v115: "Mat. Construção" (cadastro antigo) conta como "Materiais de Construção"
+  const segCanon = v => { const t = String(v || "").trim(); return /^mat\.?\s*constru/i.test(normBusca(t)) ? "Materiais de Construção" : t; };
+  const segDe = o => segCanon(o.sector) || SEM_SEG;
+  const segsE = useMemo(() => { const s = new Set(SECTORS.map(x => segCanon(x.n))); [...(allOrgs || []), ...(excl || [])].forEach(o => { const v = segCanon(o.sector); if (v) s.add(v); }); return [...[...s].sort((a, b) => a.localeCompare(b)), SEM_SEG]; }, [allOrgs, excl]);
   const gruposE = useMemo(() => { const s = new Set(); (allOrgs||[]).forEach(o => { const g = ((o.grupo || "").replace("Grupo: ", "")).trim(); if (g) s.add(g); }); return [...s].sort(); }, [allOrgs]);
   const lista = useMemo(() => {
     let l = (q.trim() || fCat.includes("Excluido")) ? [ ...(allOrgs || []), ...(excl || []) ] : (allOrgs || []);
@@ -857,6 +862,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     if (fCat.length) l = l.filter(o => fCat.includes(o.cat));
     if (fResp.length) l = l.filter(o => fResp.includes(o.owner));
     if (fCanal.length) l = l.filter(o => fCanal.includes(o.canal || "Presencial"));
+    if (fSeg.length) l = l.filter(o => fSeg.includes(segDe(o)));
     if (fCid.length) l = l.filter(o => fCid.includes(o.addr?.city_name || o.addr?.city));
     if (fGrp.length) l = l.filter(o => fGrp.includes(((o.grupo || "").replace("Grupo: ", "")).trim()));
     if (fCtt.length && cttSet) { const tem = o => cttSet.ids.has(Number(o.id)) || (soDig(o.cnpj) && cttSet.cn.has(soDig(o.cnpj)));
@@ -875,7 +881,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     if (ordKey === "nome") return [...l].sort((a, b) => ordem * nome(a).localeCompare(nome(b)));
     const val = o => ordKey === "uv" ? (uvDe(o)?.d || "") : (ucDe(o) || "");
     return [...l].sort((a, b) => { const va = val(a), vb = val(b); if (!va && !vb) return nome(a).localeCompare(nome(b)); if (!va) return 1; if (!vb) return -1; return ordem * va.localeCompare(vb) || nome(a).localeCompare(nome(b)); });
-  }, [allOrgs, excl, q, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel, prospDe, cttSet, ordem, ordKey, uvSrv, uvLocal, rfv]); // eslint-disable-line
+  }, [allOrgs, excl, q, fSeg, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel, prospDe, cttSet, ordem, ordKey, uvSrv, uvLocal, rfv]); // eslint-disable-line
   // v111: opções (com contagem) dos filtros de coluna — sobre a base inteira
   const opcCol = useMemo(() => {
     const base = [...(allOrgs || []), ...(excl || [])]; const cont = (fn) => { const m = new Map(); base.forEach(o => { const v = fn(o); (Array.isArray(v) ? v : [v]).forEach(x => { if (x != null && x !== "") m.set(x, (m.get(x) || 0) + 1); }); }); return m; };
@@ -886,6 +892,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       cat: lista_([...CATS, "Excluido"], cont(o => o.cat)),
       bairro: [...bai.entries()].map(([k, n]) => ({ v: baiL[k], l: baiL[k], n })).sort((a, b) => a.l.localeCompare(b.l)),
       cidade: lista_(null, cont(o => o.addr?.city_name || o.addr?.city), true),
+      seg: lista_(segsE, cont(segDe)).filter(x => x.n > 0),
       rfv: lista_(["Campeão", "Leal", "Em Crescimento", "Em Risco", "Inativo"], cont(o => rfvDe(o)?.rfv)),
       uv: lista_(FAIXAS_D, cont(o => { const v = uvDe(o); return faixaD(v ? diasAte(v.d) : null); })),
       uc: lista_(FAIXAS_D, cont(o => { const d = ucDe(o); return faixaD(d ? diasAte(d) : null); })),
@@ -893,7 +900,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       resp: lista_(resps, cont(o => o.owner)),
       ctt: lista_(["Com telefone", "Sem telefone", "Com e-mail", "Sem e-mail"], cont(o => [o.phone ? "Com telefone" : "Sem telefone", o.email ? "Com e-mail" : "Sem e-mail"])),
     };
-  }, [allOrgs, excl, rfv, uvSrv, uvLocal, prospDe, resps]); // eslint-disable-line
+  }, [allOrgs, excl, rfv, uvSrv, uvLocal, prospDe, resps, segsE]); // eslint-disable-line
   const th = { textAlign: "left", padding: "10px 10px", fontSize: 12.5, fontWeight: 600, color: S.t2, whiteSpace: "nowrap", borderBottom: `1px solid ${S.brd}`, position: "sticky", top: 0, background: S.cardSolid, zIndex: 1 };
   const td = { padding: "10px 10px", fontSize: 13, color: S.txt, borderBottom: `1px solid ${S.brd}`, whiteSpace: "nowrap", verticalAlign: "middle" };
 
@@ -988,7 +995,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Nome, CNPJ, bairro, cidade, e-mail ou telefone" aria-label="Buscar empresa" style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", padding: 0, fontSize: 15 }} />
       {q && <button onClick={() => { setQ(""); setVc(60); }} aria-label="Limpar busca" style={{ border: "none", padding: 4, color: S.ts, display: "flex", background: "transparent" }}><X size={16} /></button>}
     </div>
-    {(() => { const grupos = [[fCat, setFCat], [fResp, setFResp], [fCid, setFCid], [fCanal, setFCanal], [fGrp, setFGrp], [fRfv, setFRfv], [fSr, setFSr], [fCtt, setFCtt], [fInd, setFInd], [fSit, setFSit], [fBai, setFBai, "Bairro: "], [fUv, setFUv, "Visita: "], [fUc, setFUc, "Compra: "], [fPr, setFPr, "Prosp.: "], [fTel, setFTel]];
+    {(() => { const grupos = [[fCat, setFCat], [fSeg, setFSeg], [fResp, setFResp], [fCid, setFCid], [fCanal, setFCanal], [fGrp, setFGrp], [fRfv, setFRfv], [fSr, setFSr], [fCtt, setFCtt], [fInd, setFInd], [fSit, setFSit], [fBai, setFBai, "Bairro: "], [fUv, setFUv, "Visita: "], [fUc, setFUc, "Compra: "], [fPr, setFPr, "Prosp.: "], [fTel, setFTel]];
       const chips = grupos.flatMap(([vals, set, pre = ""]) => vals.map(v => ({ k: pre + v, l: pre + v, tira: () => { set(vals.filter(x => x !== v)); setVc(60); } })));
       const limpar = () => { grupos.forEach(([, set]) => set([])); setVc(60); };
       return (<>
@@ -999,6 +1006,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
         </div>
         {filtAberto && <div style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10, padding: 12, marginBottom: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 8 }}>
           <MultiSelect values={fCat} onChange={v => { setFCat(v); setVc(60); }} placeholder="Categoria" allLabel="Todas" colorFor={c => CC[c] || S.pri} options={[...CATS, "Excluido"]} />
+          <MultiSelect values={fSeg} onChange={v => { setFSeg(v); setVc(60); }} placeholder="Segmento" allLabel="Todos" options={segsE} />
           <MultiSelect values={fResp} onChange={v => { setFResp(v); setVc(60); }} placeholder="Responsável" allLabel="Todos" options={resps} />
           <MultiSelect values={fCid} onChange={v => { setFCid(v); setVc(60); }} placeholder="Cidade" allLabel="Todas" options={cidades} />
           <MultiSelect values={fCanal} onChange={v => { setFCanal(v); setVc(60); }} placeholder="Canal" allLabel="Todos" options={CANAIS} />
@@ -1089,6 +1097,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
           <th style={{ ...th, width: 34, padding: "10px 4px 10px 10px" }}><input type="checkbox" aria-label="Selecionar todas as empresas filtradas" checked={lista.length > 0 && lista.every(o => selE.has(o.id))} onChange={e => setSelE(e.target.checked ? new Set(lista.map(o => o.id)) : new Set())} style={{ width: 16, height: 16, cursor: "pointer" }} /></th>
           <th style={{ ...th, cursor: "pointer", width: nomeW, minWidth: nomeW, maxWidth: nomeW, userSelect: "none" }} onClick={() => ordenar("nome")}>Nome{seta("nome")}{alca("nome", "Nome")}</th>
           {V("cat") && <th style={{ ...th, ...wSt("cat") }}>Categoria · canal<ColFiltro rot="Categoria" opcoes={opcCol.cat} vals={fCat} set={v => { setFCat(v); setVc(60); }} />{alca("cat", "Categoria")}</th>}
+          {V("seg") && <th style={{ ...th, ...wSt("seg") }}>Segmento<ColFiltro rot="Segmento" opcoes={opcCol.seg} vals={fSeg} set={v => { setFSeg(v); setVc(60); }} />{alca("seg", "Segmento")}</th>}
           {V("bairro") && <th style={{ ...th, ...wSt("bairro") }}>Bairro<ColFiltro rot="Bairro" opcoes={opcCol.bairro} vals={fBai} set={v => { setFBai(v); setVc(60); }} />{alca("bairro", "Bairro")}</th>}
           {V("cidade") && <th style={{ ...th, ...wSt("cidade") }}>Cidade<ColFiltro rot="Cidade" opcoes={opcCol.cidade} vals={fCid} set={v => { setFCid(v); setVc(60); }} />{alca("cidade", "Cidade")}</th>}
           {V("rfv") && <th style={{ ...th, ...wSt("rfv") }}>RFV<ColFiltro rot="Classe RFV" opcoes={opcCol.rfv} vals={fRfv} set={v => { setFRfv(v); setVc(60); }} />{alca("rfv", "RFV")}</th>}
@@ -1108,6 +1117,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
               </button></td>
             {V("cat") && <td style={{ ...td, ...wSt("cat") }}>{o.cat && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: S.txt }}><span style={{ width: 8, height: 8, borderRadius: 4, background: cor, flexShrink: 0 }} />{o.cat}</span>}
               <span style={{ display: "block", fontSize: 11.5, color: (o.canal || "Presencial") === "Presencial" ? S.ts : S.acc, marginLeft: 14 }}>{o.canal || "Presencial"}</span></td>}
+            {V("seg") && <td style={{ ...td, fontSize: 13, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", ...wSt("seg") }} title={o.sector || ""}>{segCanon(o.sector) || <span style={{ color: S.td }}>—</span>}</td>}
             {V("bairro") && <td style={{ ...td, maxWidth: 120, overflow: "hidden", textOverflow: "ellipsis", ...wSt("bairro") }} title={o.addr?.district || ""}>{o.addr?.district || "—"}</td>}
             {V("cidade") && <td style={{ ...td, fontSize: 13, ...wSt("cidade") }}>{o.addr?.city_name || o.addr?.city || "—"}{o.addr?.state ? <span style={{ color: S.ts }}>/{o.addr.state}</span> : null}</td>}
             {V("rfv") && <td style={{ ...td, ...wSt("rfv") }}>{(() => { const r = rfvDe(o); if (!r) return "—"; const rc = { "Campeão": S.gold, "Leal": S.ok, "Em Crescimento": S.pri, "Em Risco": "#E76F51", "Inativo": S.td }[r.rfv] || S.ts; return <span style={{ fontSize: 10.5, color: rc, border: `1px solid ${rc}66`, background: rc + "18", padding: "2px 7px", borderRadius: 4, fontWeight: 700 }}>{r.rfv}</span>; })()}</td>}
