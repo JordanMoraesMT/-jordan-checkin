@@ -361,6 +361,15 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
       {fato("Classe RFV", rfvInfo ? rfvInfo.rfv : "—", null, rfvInfo ? RFVC[rfvInfo.rfv] : null)}
       {fato("Recompra", rfvInfo && rfvInfo.status ? rfvInfo.status : "—", null, rfvInfo ? SRC_[rfvInfo.status] : null)}
     </dl>
+    {/* v116: pedido faturado em outro CNPJ (ex.: G6 Atacado) e entregue nesta loja — ou central de compras */}
+    {(() => { const via = [...new Set([...(rfvInfo?.via || []), ...((info?.entregas?.via) || []).map(x => x.nome || x.cnpj)])];
+      const cen = (rfv?.centrais || {})[cnpjN ? String(cnpjN).padStart(14, "0") : ""];
+      const para = cen ? cen.para.map(x => x.nome) : ((info?.entregas?.para) || []).map(x => x.nome || x.cnpj);
+      if (!via.length && !para.length) return null;
+      return <div style={{ margin: "10px 0 0", display: "grid", gap: 6 }}>
+        {via.length > 0 && <div style={{ fontSize: 12.5, color: S.txt, background: S.acc + "18", border: `1px solid ${S.acc}55`, borderRadius: 8, padding: "8px 10px" }}>📦 <b>Recebe pedidos faturados via {via.join(", ")}</b> — as compras contam para esta loja.</div>}
+        {para.length > 0 && <div style={{ fontSize: 12.5, color: S.txt, background: S.gold + "1f", border: `1px solid ${S.gold}66`, borderRadius: 8, padding: "8px 10px" }}>🏬 <b>Central de compras</b> — fatura pedidos entregues a {para.join(", ")}. As compras aparecem nessas lojas.</div>}
+      </div>; })()}
 
     {pendAbertas.length > 0 && <section aria-label="Pendências" style={{ marginTop: 14, border: `1px solid ${S.gold}55`, background: S.gold + "12", borderRadius: 10, padding: "10px 12px" }}>
       <p style={{ margin: "0 0 4px", fontSize: 12.5, fontWeight: 600, color: S.gold }}>{pendAbertas.length === 1 ? "1 pendência aberta" : `${pendAbertas.length} pendências abertas`}</p>
@@ -555,6 +564,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
           {[["Última compra", info.compras.ultima_compra ? fD(info.compras.ultima_compra + "T12:00:00") : "—"],
             ["Faturamento 12m", info.compras.fat_12m != null ? "R$ " + Number(info.compras.fat_12m).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "—"],
             ["Pedidos (total)", info.compras.pedidos ?? "—"], ["Indústrias", info.compras.industrias || "—"],
+            ...(info.entregas?.via?.length ? [["Faturado via", info.entregas.via.map(x => `${x.nome || x.cnpj} (${x.pedidos} ped.)`).join(", ")]] : []),
+            ...(info.entregas?.para?.length ? [["Entregue a (central)", info.entregas.para.map(x => `${x.nome || x.cnpj} (${x.pedidos} ped.)`).join(", ")]] : []),
             ["Última visita", ultimaVisita ? fD(ultimaVisita.checkinTime) + " (" + (ultimaVisita.userName || "—") + ")" : "—"]]
             .map(([k, v]) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: `1px solid ${S.cl}` }}>
               <span style={{ fontSize: 12, color: S.ts }}>{k}</span><span style={{ fontSize: 12.5, color: S.txt, textAlign: "right" }}>{v}</span></div>)}

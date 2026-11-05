@@ -87,7 +87,7 @@ export default function App(){
   const atualizarApp=async()=>{try{if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();await Promise.all(regs.map(r=>r.update().catch(()=>{})));}if("caches" in window){const ks=await caches.keys();await Promise.all(ks.map(k=>caches.delete(k)));}}catch(e){}location.reload();};
   // ─── Matriz RFV (D1, consolidada por CNPJ) — badges e ordenação da lista de visitas ───
   const[rfvMap,setRfvMap]=useState(null);
-  const loadRfv=async()=>{try{const r=await fetch(`${DASH_CRM}/api/crm/rfv`,{headers:{"X-Session":token}});const d=await r.json();if(d&&d.ok&&d.clientes){const byOrg={};for(const k in d.clientes){const x=d.clientes[k];if(x.org_id)byOrg[x.org_id]=x;}setRfvMap({byCnpj:d.clientes,byOrg,ref:d.ref});}}catch(e){console.warn("rfv:",e);}};
+  const loadRfv=async()=>{try{const r=await fetch(`${DASH_CRM}/api/crm/rfv`,{headers:{"X-Session":token}});const d=await r.json();if(d&&d.ok&&d.clientes){const byOrg={};for(const k in d.clientes){const x=d.clientes[k];if(x.org_id)byOrg[x.org_id]=x;}setRfvMap({byCnpj:d.clientes,byOrg,ref:d.ref,centrais:d.centrais||{}});}}catch(e){console.warn("rfv:",e);}};
   useEffect(()=>{if(token&&user)loadRfv();},[token,user]);
   // ─── v93: PROSPECÇÃO por marca (D1 crm_prospeccao, Dashboard v337). Fila local se a gravação falhar. ───
   const[prospMap,setProspMap]=useState({});
