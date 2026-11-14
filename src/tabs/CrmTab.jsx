@@ -702,9 +702,11 @@ function ProspModal({ titulo, sub, compra = [], atuais = [], lote = false, onSal
   </div>, document.body);
 }
 
-function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user, onCrmChange, visits, prospDe, onProspSalvar, plocs, onIrRotas }) {
+// v117: a mesma tabela serve Rotas › Planejar (prop `rota`): a seleção vira a seleção do roteiro e entram
+//  ordenação por prioridade/distância, "ocultar atender a distância", Cuiabá + VG e os selos do roteiro.
+export function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user, onCrmChange, visits, prospDe, onProspSalvar, plocs, onIrRotas, rota }) {
   const rfvDe = (o) => { if (!rfv) return null; const k = soDig(o.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; };
-  const PREF = "jc:empresas-prefs";
+  const PREF = rota ? "jc:rotas-lista-prefs" : "jc:empresas-prefs";
   const p0 = sL(PREF, {});
   const arr = v => Array.isArray(v) ? v : [];
   const [q, setQ] = useState("");
@@ -722,12 +724,13 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const uvDe = o => { const k = soDig(o.cnpj); const a = k ? uvSrv?.[k.padStart(14, "0")] : null; const b = uvLocal[o.id]; if (a && b) return b.d > a.d ? { ...a, d: b.d, u: b.u || a.u } : a; return a || b || null; };
   const ucDe = o => rfvDe(o)?.ultima || null;
   // v105: colunas visíveis e largura do nome
-  const CPREF = "jc:empresas-cols"; const c0 = sL(CPREF, {});
+  const CPREF = rota ? "jc:rotas-lista-cols" : "jc:empresas-cols"; const c0 = sL(CPREF, {});
   const [ocultas, setOcultas] = useState(arr(c0.ocultas));
   // v107: largura de TODAS as colunas (px); sem valor = automática. Nome padrão 215.
   const [larg, setLarg] = useState(() => (c0.larg && typeof c0.larg === "object") ? c0.larg : (c0.nomeW ? { nome: Number(c0.nomeW) } : {}));
-  const nomeW = Number(larg.nome) || 215;
-  const setNomeW = w => setLarg(l => ({ ...l, nome: typeof w === "function" ? w(Number(l.nome) || 215) : w }));
+  const NOME_PAD = rota ? 270 : 215; // v117: em Rotas o nome leva os selos do roteiro
+  const nomeW = Number(larg.nome) || NOME_PAD;
+  const setNomeW = w => setLarg(l => ({ ...l, nome: typeof w === "function" ? w(Number(l.nome) || NOME_PAD) : w }));
   const [quebra, setQuebra] = useState(!!c0.quebra);
   useEffect(() => { sS(CPREF, { ocultas, larg, quebra }); }, [ocultas, larg, quebra]); // eslint-disable-line
   const V = k => !ocultas.includes(k);
@@ -739,7 +742,10 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
   const LARG_PAD = { cat: 130, seg: 140, bairro: 120, cidade: 150, rfv: 110, uv: 120, uc: 105, prosp: 170, resp: 100, ctt: 175 };
   // v104: prospecção manual — por empresa (🎯) e em lote (seleção)
   const compraDe = o => { const a = [...String(rfvDe(o)?.inds || "").split(","), ...String(o.products || "").split(",")].map(x => x.trim()).filter(Boolean); const vis = new Set(); return a.filter(x => { const k = chaveMarca(x); if (vis.has(k)) return false; vis.add(k); return true; }); };
-  const [selE, setSelE] = useState(() => new Set());
+  const [selE0, setSelE] = useState(() => new Set());
+  const selE = rota ? rota.sel : selE0; // v117: em Rotas, a seleção é a do roteiro
+  const togSel = o => { if (rota) { rota.onToggle(o); return; } setSelE(s => { const n = new Set(s); n.has(o.id) ? n.delete(o.id) : n.add(o.id); return n; }); };
+  const limparSel = () => { if (rota) rota.onClear(); else setSelE(new Set()); };
   const [pModal, setPModal] = useState(null); // { orgs:[o], lote:bool }
   const [pMsg, setPMsg] = useState("");
   const salvarP = async (marcas, modo) => {
@@ -751,7 +757,7 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     if (!lista.length) { setPModal(null); setPMsg(modo === "rem" ? "Nenhuma das empresas selecionadas estava em prospecção dessas marcas." : "Todas as selecionadas já compram essas marcas."); return; }
     if (!onProspSalvar) return;
     const r = await onProspSalvar(lista);
-    setPModal(null); if (pModal.lote) setSelE(new Set());
+    setPModal(null); if (pModal.lote && !rota) setSelE(new Set());
     setPMsg(r.falha ? `Gravei ${r.ok} de ${lista.length}. ${r.falha} falharam — tente de novo.` : `✓ Prospecção ${modo === "rem" ? "encerrada" : "gravada"} em ${r.ok} empresa(s).`);
   };
   // v108: planilha de prospecção — baixar (lista atual, uma coluna por marca com "X") e carregar preenchida
@@ -842,19 +848,19 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       }
       const km = r.legs.reduce((a, l) => a + l.km, 0);
       setRd(x => ({ ...x, lo: false, feito: { n: ok, km, antes: abertas.length, semGps, estimado: r.estimado, ordem: r.ordem.map(z => { const o = orgPorId.get(z.id); return o ? (o.nickname || o.name) : z.id; }), resp: U.n, meu: String(U.id) === String(user?.id) } }));
-      setSelE(new Set()); onCrmChange && onCrmChange();
+      if (!rota) setSelE(new Set()); onCrmChange && onCrmChange();
     } catch (e) { setRd(x => ({ ...x, lo: false, msg: "Não foi possível: " + (e.message || e) })); }
   };
   const [filtAberto, setFiltAberto] = useState(false);
-  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel, fSeg }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel, fSeg]);
   // v85: quem tem pessoa de contato (carrega só quando o filtro de contato é usado)
   const [cttSet, setCttSet] = useState(null);
   useEffect(() => { if (!fCtt.length || cttSet || !token) return; let vivo = true;
     crm(token, "/api/crm/contatos-todos?limit=5000").then(d => { if (!vivo) return; const ids = new Set(), cn = new Set(); (d.contatos || []).forEach(c => { if (c.org_id) ids.add(Number(c.org_id)); const k = soDig(c.cnpj); if (k) cn.add(k); }); setCttSet({ ids, cn }); }).catch(() => setCttSet({ ids: new Set(), cn: new Set() }));
     return () => { vivo = false; }; }, [fCtt, cttSet, token]);
   const [ordem, setOrdem] = useState(1); // 1 = A→Z, -1 = Z→A
-  const [ordKey, setOrdKey] = useState("nome"); // v103: nome | uv (última visita) | uc (última compra)
+  const [ordKey, setOrdKey] = useState(() => rota ? (p0.ordKey || "prio") : "nome"); // v103: nome | uv | uc · v117 (Rotas): prio | perto
   const ordenar = k => { if (ordKey === k) setOrdem(o => -o); else { setOrdKey(k); setOrdem(k === "nome" ? 1 : -1); } };
+  useEffect(() => { sS(PREF, { fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel, fSeg, ...(rota ? { ordKey } : {}) }); }, [fCat, fResp, fRfv, fGrp, fSr, fCid, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel, fSeg, ordKey]); // eslint-disable-line
   const seta = k => ordKey === k ? (ordem === 1 ? " ▲" : " ▼") : "";
   const [vc, setVc] = useState(60);
   const resps = useMemo(() => { const s = new Set(USERS.map(u => u.n)); (allOrgs||[]).forEach(o => { if (o.owner) s.add(o.owner); }); return [...s].sort(); }, [allOrgs]);
@@ -888,11 +894,15 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
     if (fUc.length) l = l.filter(o => { const d = ucDe(o); return fUc.includes(faixaD(d ? diasAte(d) : null)); });
     if (fPr.length) l = l.filter(o => { const ps = (prospDe ? prospDe(o) : []).map(x => chaveMarca(x.industria)); return fPr.some(v => v === "Com prospecção" ? ps.length > 0 : v === "Sem prospecção" ? !ps.length : ps.includes(chaveMarca(v))); });
     if (fTel.length) l = l.filter(o => fTel.some(v => v === "Com telefone" ? !!o.phone : v === "Sem telefone" ? !o.phone : v === "Com e-mail" ? !!o.email : !o.email));
+    if (rota?.ocultaDist && rota.verDe) l = l.filter(o => rota.verDe(o) !== "Atender a distância");
     const nome = o => o.nickname || o.name || "";
     if (ordKey === "nome") return [...l].sort((a, b) => ordem * nome(a).localeCompare(nome(b)));
+    if (rota && (ordKey === "prio" || ordKey === "perto")) { // v117: decora → ordena (prioridade do roteiro ou distância da partida)
+      const fn = ordKey === "prio" ? (o => -rota.prioDe(o)) : (o => rota.distDe(o));
+      return l.map(o => [fn(o), nome(o), o]).sort((a, b) => (a[0] - b[0]) || a[1].localeCompare(b[1])).map(x => x[2]); }
     const val = o => ordKey === "uv" ? (uvDe(o)?.d || "") : (ucDe(o) || "");
     return [...l].sort((a, b) => { const va = val(a), vb = val(b); if (!va && !vb) return nome(a).localeCompare(nome(b)); if (!va) return 1; if (!vb) return -1; return ordem * va.localeCompare(vb) || nome(a).localeCompare(nome(b)); });
-  }, [allOrgs, excl, q, fSeg, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel, prospDe, cttSet, ordem, ordKey, uvSrv, uvLocal, rfv]); // eslint-disable-line
+  }, [allOrgs, excl, q, fSeg, fCat, fResp, fCid, fRfv, fGrp, fSr, fCanal, fCtt, fInd, fSit, fBai, fUv, fUc, fPr, fTel, prospDe, cttSet, ordem, ordKey, uvSrv, uvLocal, rfv, rota]); // eslint-disable-line
   // v111: opções (com contagem) dos filtros de coluna — sobre a base inteira
   const opcCol = useMemo(() => {
     const base = [...(allOrgs || []), ...(excl || [])]; const cont = (fn) => { const m = new Map(); base.forEach(o => { const v = fn(o); (Array.isArray(v) ? v : [v]).forEach(x => { if (x != null && x !== "") m.set(x, (m.get(x) || 0) + 1); }); }); return m; };
@@ -1000,6 +1010,14 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
         <button onClick={onNovaEmpresa} style={{ display: "flex", alignItems: "center", gap: 5, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "8px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}><Plus size={14}/>Adicionar empresa</button>
       </div>
     </div>
+    {rota && <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+      <select value={ordKey} onChange={e => { setOrdKey(e.target.value); setOrdem(e.target.value === "nome" ? 1 : -1); }} aria-label="Ordenar" style={{ fontSize: 12.5, padding: "6px 8px", height: 34 }}>
+        <option value="prio">Ordenar: prioridade</option><option value="perto">Ordenar: mais perto da partida</option><option value="nome">Ordenar: A → Z</option><option value="uv">Ordenar: última visita</option><option value="uc">Ordenar: última compra</option>
+      </select>
+      {(() => { const CV = ["Cuiabá", "Várzea Grande"]; const on = fCid.length === 2 && CV.every(c => fCid.includes(c)); return <button onClick={() => { setFCid(on ? [] : CV); setVc(60); }} aria-pressed={on} style={{ height: 34, padding: "0 12px", borderRadius: 17, fontSize: 12.5, fontWeight: 600, border: `1px solid ${on ? S.txt : S.inpBdr}`, background: on ? S.txt : "transparent", color: on ? S.bg : S.txt, cursor: "pointer" }}>Cuiabá + VG</button>; })()}
+      <button onClick={() => rota.setOcultaDist(v => !v)} aria-pressed={!!rota.ocultaDist} title="Clientes cujo retorno não cobre visita presencial" style={{ height: 34, padding: "0 12px", borderRadius: 17, fontSize: 12.5, fontWeight: 600, border: `1px solid ${rota.ocultaDist ? S.txt : S.inpBdr}`, background: rota.ocultaDist ? S.txt : "transparent", color: rota.ocultaDist ? S.bg : S.txt, cursor: "pointer" }}>{rota.ocultaDist ? "Ocultando \"atender a distância\"" : "Mostrando \"atender a distância\""}</button>
+      {rota.aviso && <span style={{ fontSize: 12, color: S.ts }}>{rota.aviso}</span>}
+    </div>}
     {/* v85: busca + "Filtros · N" + etiquetas — mesmo padrão de PDVs e Análise */}
     <div style={{ display: "flex", alignItems: "center", gap: 10, background: S.card, border: `1px solid ${S.brd}`, borderRadius: 8, padding: "0 12px", height: 46, marginBottom: 10 }}>
       <Search size={17} strokeWidth={1.8} color="var(--t3)" style={{ flexShrink: 0 }} />
@@ -1097,15 +1115,15 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
       </div>
     </div>, document.body)}
     {selE.size > 0 && <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", background: S.acc + "14", border: `1px solid ${S.acc}55`, borderRadius: 10, padding: "8px 12px", marginBottom: 8 }}>
-      <span style={{ flex: 1, minWidth: 160, fontSize: 13, color: S.txt }}><b>{selE.size}</b> empresa(s) selecionada(s)</span>
+      <span style={{ flex: 1, minWidth: 160, fontSize: 13, color: S.txt }}><b>{selE.size}</b> empresa(s) selecionada(s){rota ? " para o roteiro" : ""}</span>
       <button onClick={() => { setPMsg(""); setPModal({ lote: true, orgs: [...(allOrgs || []), ...(excl || [])].filter(o => selE.has(o.id)) }); }} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, fontWeight: 700, borderRadius: 9, border: "none", background: S.acc, color: "#fff", cursor: "pointer" }}><Target size={14} /> Prospecção…</button>
       <button onClick={abrirRd} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", fontSize: 12.5, fontWeight: 700, borderRadius: 9, border: "none", background: "#0578A6", color: "#fff", cursor: "pointer" }}><CalendarPlus size={14} /> Colocar em rota…</button>
-      <button onClick={() => setSelE(new Set())} style={{ padding: "8px 10px", fontSize: 12.5, borderRadius: 9, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.ts, cursor: "pointer" }}>Limpar seleção</button>
+      <button onClick={limparSel} style={{ padding: "8px 10px", fontSize: 12.5, borderRadius: 9, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.ts, cursor: "pointer" }}>Limpar seleção</button>
     </div>}
     <div style={{ overflow: "auto", maxHeight: "calc(100vh - 260px)", background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10 }}>
       <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 120 + nomeW + Object.entries(LARG_PAD).reduce((t, [k, w]) => t + (V(k) ? (Number(larg[k]) || w) : 0), 0) }}>
         <thead><tr>
-          <th style={{ ...th, width: 34, padding: "10px 4px 10px 10px" }}><input type="checkbox" aria-label="Selecionar todas as empresas filtradas" checked={lista.length > 0 && lista.every(o => selE.has(o.id))} onChange={e => setSelE(e.target.checked ? new Set(lista.map(o => o.id)) : new Set())} style={{ width: 16, height: 16, cursor: "pointer" }} /></th>
+          <th style={{ ...th, width: 34, padding: "10px 4px 10px 10px" }}><input type="checkbox" aria-label="Selecionar todas as empresas filtradas" title={rota ? "Selecionar os filtrados com GPS (até o máximo de paradas)" : undefined} checked={lista.length > 0 && lista.every(o => selE.has(o.id))} onChange={e => { if (rota) { e.target.checked ? rota.onAddMany(lista) : rota.onRemoveMany(lista); return; } setSelE(e.target.checked ? new Set(lista.map(o => o.id)) : new Set()); }} style={{ width: 16, height: 16, cursor: "pointer" }} /></th>
           <th style={{ ...th, cursor: "pointer", width: nomeW, minWidth: nomeW, maxWidth: nomeW, userSelect: "none" }} onClick={() => ordenar("nome")}>Nome{seta("nome")}{alca("nome", "Nome")}</th>
           {V("cat") && <th style={{ ...th, ...wSt("cat") }}>Categoria · canal<ColFiltro rot="Categoria" opcoes={opcCol.cat} vals={fCat} set={v => { setFCat(v); setVc(60); }} />{alca("cat", "Categoria")}</th>}
           {V("seg") && <th style={{ ...th, ...wSt("seg") }}>Segmento<ColFiltro rot="Segmento" opcoes={opcCol.seg} vals={fSeg} set={v => { setFSeg(v); setVc(60); }} />{alca("seg", "Segmento")}</th>}
@@ -1120,12 +1138,12 @@ function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa
         </tr></thead>
         <tbody>
           {lista.slice(0, vc).map(o => { const cor = CC[o.cat] || S.ts; return (<tr key={o.id} style={selE.has(o.id) ? { background: S.acc + "10" } : undefined}>
-            <td style={{ ...td, padding: "10px 4px 10px 10px" }}><input type="checkbox" aria-label={`Selecionar ${o.nickname || o.name}`} checked={selE.has(o.id)} onChange={() => setSelE(s => { const n = new Set(s); n.has(o.id) ? n.delete(o.id) : n.add(o.id); return n; })} style={{ width: 16, height: 16, cursor: "pointer" }} /></td>
+            <td style={{ ...td, padding: "10px 4px 10px 10px" }}><input type="checkbox" aria-label={`Selecionar ${o.nickname || o.name}`} checked={selE.has(o.id)} onChange={() => togSel(o)} style={{ width: 16, height: 16, cursor: "pointer" }} /></td>
             <td style={{ ...td, width: nomeW, minWidth: nomeW, maxWidth: nomeW, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: quebra ? "normal" : "nowrap" }} title={quebra ? undefined : (o.nickname || o.name)}>
               <button onClick={() => onOpen(o)} style={{ background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer", maxWidth: "100%" }}>
                 <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, color: S.txt, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: quebra ? "normal" : "nowrap", wordBreak: "break-word" }}>{o.nickname || o.name}</span>
                 <span className="num" style={{ display: "block", fontSize: 11.5, color: S.ts }}>{[o.addr?.city_name || o.addr?.city, o.cnpj].filter(Boolean).join(" · ")}</span>
-              </button></td>
+              </button>{rota?.extraNome && rota.extraNome(o, selE.has(o.id))}</td>
             {V("cat") && <td style={{ ...td, ...wSt("cat") }}>{o.cat && <span style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 13, color: S.txt }}><span style={{ width: 8, height: 8, borderRadius: 4, background: cor, flexShrink: 0 }} />{o.cat}</span>}
               <span style={{ display: "block", fontSize: 11.5, color: (o.canal || "Presencial") === "Presencial" ? S.ts : S.acc, marginLeft: 14 }}>{o.canal || "Presencial"}</span></td>}
             {V("seg") && <td style={{ ...td, fontSize: 13, maxWidth: 160, overflow: "hidden", textOverflow: "ellipsis", ...wSt("seg") }} title={o.sector || ""}>{segCanon(o.sector) || <span style={{ color: S.td }}>—</span>}</td>}

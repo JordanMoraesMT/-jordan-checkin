@@ -12,6 +12,7 @@ import { S, CC, CATS, CANAIS, USERS, HOMES, OSRM, DASH, SECTORS, hav, gps, sL, s
 import { MultiSelect, Kpi, DateField } from "../components";
 import { analisar, chaveArea, rotuloArea } from "../analiseVisitas.js";
 import { carregarBase, carregarPremissas } from "../analiseDados.js";
+import { EmpresasView } from "./CrmTab";
 const VER_COR = { "Rentável visitar": "#2A9D8F", "Aguardar": "#C8964E", "Atender a distância": "#E28A5B", "Prospecção": "#8C9CAE" };
 
 const TRIP = OSRM.replace("/route/", "/trip/");
@@ -213,7 +214,7 @@ function ConfirmaModal({ itens, onIncluir, onDeixar }) {
 
 const grupoDe = o => fixMojibake(String(o.grupo || "").replace("Grupo: ", "").trim());
 
-function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pendMapa, prospDe }) {
+function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pendMapa, prospDe, excl, onEdit, onNovaEmpresa, onProspSalvar, onCrmChange }) {
   const PREF = `jc:rotaPlan:${user?.id || "x"}`;
   const p0 = useMemo(() => sL(PREF, {}), []); // eslint-disable-line
   const mob = typeof window !== "undefined" && window.innerWidth <= 768;
@@ -391,6 +392,41 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
   const tog = x => { if (sel.has(x.id)) { setSel(s => { const n = new Set(s); n.delete(x.id); return n; }); return; } comConfirmacao([x], addSel); };
   const selTodos = () => { const novos = comGps.slice(0, MAX_PARADAS).filter(x => !sel.has(x.id)); if (novos.length) comConfirmacao(novos, addSel); };
   const limparFiltros = () => { setCid([]); setBai([]); setCat([]); setFRfv([]); setFSr([]); setCanal([]); setUf([]); setSeg([]); setGrp([]); setFInd([]); setFSit([]); setBusca(""); setDias("todos"); };
+
+  // v117: a lista de clientes é a tabela de Empresas (mesmas colunas, filtros, Colunas, prospecção, editar…);
+  //  a seleção dela é a seleção do roteiro.
+  const itemCache = useMemo(() => new Map(), [itemDe]);
+  const itemDeO = useCallback(o => { let x = itemCache.get(o.id); if (!x) { x = itemDe(o); itemCache.set(o.id, x); } return x; }, [itemCache, itemDe]);
+  const nSelGps = useMemo(() => [...sel].filter(id => plocs?.[id]?.lat != null).length, [sel, plocs]);
+  const [avisoSel, setAvisoSel] = useState("");
+  const rotaCfg = useMemo(() => ({
+    sel,
+    onToggle: o => { setAvisoSel(""); tog(itemDeO(o)); },
+    onAddMany: os => {
+      const livres = Math.max(0, MAX_PARADAS - nSelGps);
+      const cand = os.map(itemDeO).filter(x => x.temGps && !sel.has(x.id));
+      const novos = cand.slice(0, livres);
+      setAvisoSel(cand.length > novos.length ? `Entraram ${novos.length} de ${cand.length} (máximo de ${MAX_PARADAS} paradas).` : os.length > cand.length + os.filter(o => sel.has(o.id)).length ? "Clientes sem GPS ficaram fora." : "");
+      if (novos.length) comConfirmacao(novos, addSel);
+    },
+    onRemoveMany: os => { setAvisoSel(""); setSel(s => { const n = new Set(s); os.forEach(o => n.delete(o.id)); return n; }); },
+    onClear: () => { setAvisoSel(""); setSel(new Set()); },
+    prioDe: o => itemDeO(o).prio,
+    distDe: o => { const g = plocs?.[o.id]; return partida && g?.lat != null ? hav(partida.lat, partida.lng, g.lat, g.lng) : Infinity; },
+    verDe: o => vereditos?.[o.id]?.v || null,
+    ocultaDist, setOcultaDist,
+    aviso: [!rfv ? "Carregando RFV… a prioridade fica mais precisa quando terminar." : "", avisoSel].filter(Boolean).join(" "),
+    extraNome: (o, on) => { const x = itemDeO(o); const d = partida && x.temGps ? hav(partida.lat, partida.lng, x.lat, x.lng) : null; const al = on ? [] : alertasDe(x.id);
+      const pills = [
+        x.ver && <Pill key="v" t={x.ver.v === "Aguardar" && x.ver.aPartir ? `Aguardar · ${x.ver.aPartir.slice(8, 10)}/${x.ver.aPartir.slice(5, 7)}` : x.ver.v} cor={VER_COR[x.ver.v] || S.ts} />,
+        x.pend && <Pill key="p" t={x.pend.length === 1 ? `Pendência: ${x.pend[0]}` : `${x.pend.length} pendências`} cor="#C8964E" />,
+        ...al.map(a => <Pill key={a.tipo} t={`⚠ ${a.curto}`} cor={a.cor} />),
+        ...x.mot.map(([t, c]) => <Pill key={t} t={t} cor={c} />),
+        !x.temGps && <Pill key="g" t="sem GPS" cor={S.dng} />,
+        d != null && <span key="d" className="num" style={{ fontSize: 11, color: S.ts }}>{fmtKm(d)} km</span>,
+      ].filter(Boolean);
+      return pills.length ? <div style={{ display: "flex", gap: 4, flexWrap: "wrap", whiteSpace: "normal", marginTop: 4 }}>{pills}</div> : null; },
+  }), [sel, nSelGps, itemDeO, plocs, partida?.lat, partida?.lng, vereditos, ocultaDist, rfv, avisoSel, alertasDe]); // eslint-disable-line
 
   const usarLocal = (l, salvar) => {
     setOutro(l); setPartidaTipo("outro"); setLocalAberto(false); setMsg("");
@@ -722,74 +758,9 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
       <button onClick={abrirAgenda} disabled={lo || !token} style={{ display: "flex", alignItems: "center", gap: 6, padding: "8px 13px", fontSize: 12.5, fontWeight: 700, borderRadius: 9, border: "none", background: "#0578A6", color: "#fff", cursor: "pointer" }}>{lo ? "Abrindo…" : "Abrir da Agenda para editar"}</button>
       {msg && !sel.size && <span style={{ fontSize: 12, color: tom(S.gold), flex: "1 1 100%" }}>{msg}</span>}
     </div>}
-    <div style={card}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 14, fontWeight: 700, color: S.txt, flex: 1 }}>Quem visitar</span>
-        <button onClick={() => { setCid(GRANDE_CUIABA); setBai([]); }} style={chip(cid.length === 2 && GRANDE_CUIABA.every(c => cid.includes(c)))}>Cuiabá + VG</button>
-        <button onClick={limparFiltros} style={{ ...chip(false), color: S.dng, borderColor: S.dng + "55" }}>✕ Limpar</button>
-      </div>
-      <div style={{ position: "relative", marginBottom: 8 }}>
-        <Search size={15} color={S.ts} style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} />
-        <input value={busca} onChange={e => { setBusca(e.target.value); setVc(60); }} placeholder="Buscar cliente, CNPJ, cidade ou bairro…" style={{ width: "100%", boxSizing: "border-box", paddingLeft: 34, paddingRight: busca ? 34 : 12, height: 38, fontSize: 13 }} />
-        {busca && <button onClick={() => setBusca("")} aria-label="Limpar busca" style={{ position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)", border: "none", background: "transparent", cursor: "pointer", display: "flex", padding: 4 }}><X size={15} color={S.ts} /></button>}
-      </div>
-      <div style={grid}>
-        <MultiSelect values={owner} onChange={setOwner} placeholder="Responsável" allLabel="Todos" options={owners} />
-        <MultiSelect values={uf} onChange={v => { setUf(v); setCid([]); setBai([]); setVc(60); }} placeholder="UF" allLabel="Todas" options={ufs} />
-        <MultiSelect values={cid} onChange={v => { setCid(v); setVc(60); }} placeholder="Cidade" allLabel="Todas" options={cidades} />
-        {cid.length > 0 && <MultiSelect values={bai} onChange={v => { setBai(v); setVc(60); }} placeholder="Bairro" allLabel="Todos" options={bairros} />}
-        <MultiSelect values={cat} onChange={setCat} placeholder="Status" allLabel="Todos" colorFor={c => CC[c] || S.pri} options={CATS.filter(c => c !== "Excluido")} />
-        <MultiSelect values={fRfv} onChange={setFRfv} placeholder="Classe RFV" allLabel="Todas" colorFor={c => RFV_COR[c]} options={RFV_ORD} />
-        <MultiSelect values={fSr} onChange={setFSr} placeholder="Recompra" allLabel="Todas" colorFor={c => SR_COR[c]} options={["Atrasado", "Momento de Recompra", "Em Dia"]} />
-        <MultiSelect values={canal} onChange={setCanal} placeholder="Canal" allLabel="Todos" options={CANAIS} />
-        <MultiSelect values={seg} onChange={v => { setSeg(v); setVc(60); }} placeholder="Segmento" allLabel="Todos" options={segmentos} />
-        <MultiSelect values={grp} onChange={v => { setGrp(v); setVc(60); }} placeholder="Grupo" allLabel="Todos" options={grupos} />
-        <MultiSelect values={fInd} onChange={v => { setFInd(v); setVc(60); }} placeholder="Marca" allLabel="Todas" options={marcas} />
-        <MultiSelect values={fSit} onChange={v => { setFSit(v); setVc(60); }} placeholder="Situação na marca" allLabel="Todas" options={["Compra", "Prospecção"]} />
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 11.5, color: S.ts, marginRight: 2 }}>Sem visita:</span>
-        {DIAS_OPC.map(([v, l]) => <button key={v} onClick={() => setDias(v)} style={chip(dias === v)}>{l}</button>)}
-        <button onClick={() => setOcultaDist(v => !v)} aria-pressed={ocultaDist} title="Clientes cujo retorno não cobre visita presencial" style={chip(ocultaDist)}>{ocultaDist ? "Ocultando \"atender a distância\"" : "Mostrar todos"}</button>
-      </div>
-    </div>
-
-    <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 2px 10px", flexWrap: "wrap" }}>
-      <span style={{ fontSize: 12.5, color: S.ts, flex: 1, minWidth: 180 }}><b style={{ color: S.t2 }}>{lista.length}</b> clientes · {comGps.length} com GPS{lista.length - comGps.length > 0 && <span style={{ color: tom(S.gold) }}> · {lista.length - comGps.length} sem GPS</span>}</span>
-      <select value={ordem} onChange={e => setOrdem(e.target.value)} style={{ fontSize: 12, padding: "6px 8px" }}>
-        <option value="prio">Ordenar: prioridade</option>
-        <option value="perto">Ordenar: mais perto da partida</option>
-        <option value="az">Ordenar: A → Z</option>
-      </select>
-      <button onClick={selTodos} disabled={!comGps.length} style={chip(false)}>Selecionar todos{comGps.length > MAX_PARADAS ? ` (${MAX_PARADAS} primeiros)` : ` (${comGps.length})`}</button>
-      {sel.size > 0 && <button onClick={() => setSel(new Set())} style={{ ...chip(false), color: S.dng }}>Limpar seleção</button>}
-    </div>
-
-    {!rfv && <p style={{ fontSize: 12, color: S.ts, margin: "0 2px 10px" }}>Carregando RFV… a prioridade fica mais precisa quando terminar.</p>}
-    {lista.length === 0 && <p style={{ color: S.ts, textAlign: "center", padding: "2rem 0" }}>Nenhum cliente com esses filtros.</p>}
-
-    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-      {lista.slice(0, vc).map(x => {
-        const on = sel.has(x.id); const r = x.rfv;
-        return (<div key={x.id} onClick={() => x.temGps && tog(x)} style={{ display: "flex", alignItems: "center", gap: 11, background: on ? S.pri + "12" : S.card, border: `1px solid ${on ? S.pri + "88" : S.brd}`, borderRadius: 12, padding: "10px 12px", cursor: x.temGps ? "pointer" : "default", opacity: x.temGps ? 1 : .62 }}>
-          <span style={{ width: 20, height: 20, borderRadius: 6, flexShrink: 0, border: `1.5px solid ${on ? S.pri : S.inpBdr}`, background: on ? S.pri : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>{on && <Check size={13} color="#fff" strokeWidth={3} />}</span>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: S.txt }}>{x.nome}</span>
-              {x.o.cat && <Pill t={x.o.cat} cor={CC[x.o.cat] || S.ts} />}
-              {r?.rfv && <Pill t={r.rfv} cor={RFV_COR[r.rfv] || S.ts} />}
-              {x.ver && <Pill t={x.ver.v === "Aguardar" && x.ver.aPartir ? `Aguardar · ${x.ver.aPartir.slice(8, 10)}/${x.ver.aPartir.slice(5, 7)}` : x.ver.v} cor={VER_COR[x.ver.v] || S.ts} />}
-              {x.pend && <Pill t={x.pend.length === 1 ? `Pendência: ${x.pend[0]}` : `${x.pend.length} pendências`} cor="#C8964E" />}
-              {!on && alertasDe(x.id).map(a => <Pill key={a.tipo} t={`⚠ ${a.curto}`} cor={a.cor} />)}
-              {x.mot.map(([t, c]) => <Pill key={t} t={t} cor={c} />)}
-            </div>
-            <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.ts }}>{[x.bairro, x.cidade].filter(Boolean).join(" · ")}{x.dist != null && isFinite(x.dist) ? ` · ${fmtKm(x.dist)} km` : ""}</p>
-            <p style={{ margin: "2px 0 0", fontSize: 11, color: x.dias != null && x.dias >= 60 ? tom(S.gold) : S.ts }}>{[x.dias != null ? `Última visita ${quando(x.dias)}` : null, r?.ultima ? `compra em ${fD(r.ultima + "T12:00")}` : null, !x.temGps ? "sem GPS (faça um check-in para capturar)" : x.geoEst ? "GPS estimado" : null].filter(Boolean).join(" · ") || "Sem compra registrada"}</p>
-          </div>
-        </div>);
-      })}
-      {lista.length > vc && <button onClick={() => setVc(v => v + 60)} style={{ ...chip(false), alignSelf: "center", marginTop: 6 }}>Mostrar mais ({lista.length - vc})</button>}
-    </div>
+    <div style={{ fontSize: 14, fontWeight: 700, color: S.txt, margin: "2px 2px 8px" }}>Quem visitar</div>
+    <EmpresasView rota={rotaCfg} token={token} allOrgs={orgs} excl={excl || []} rfv={rfv} user={user} visits={visits} plocs={plocs} prospDe={prospDe} onProspSalvar={onProspSalvar}
+      onOpen={o => onOpenFicha && onOpenFicha(o)} onEdit={o => onEdit && onEdit(o)} onNovaEmpresa={() => onNovaEmpresa && onNovaEmpresa()} onCrmChange={onCrmChange} />
 
     {/* Barra presa ao fim da área de conteúdo (.jc-main); no celular fica acima do menu inferior e longe do botão "topo" */}
     {sel.size > 0 && <div style={{ position: "sticky", bottom: mob ? 72 : 0, zIndex: 30, marginTop: 14, padding: mob ? "10px 12px" : "12px 16px", background: "var(--card-solid)", border: `1px solid ${S.pri}55`, borderRadius: 14, boxShadow: "0 -6px 22px rgba(0,0,0,.22)", marginRight: mob ? 52 : 0 }}>
