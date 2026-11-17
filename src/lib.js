@@ -84,6 +84,8 @@ function sL(k,f){try{return JSON.parse(localStorage.getItem(k))||f;}catch{return
 function sS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("sync:",e);}}
 // 2º parâmetro carrega a SESSÃO (autenticação no Worker)
 // Config (catálogos no D1 via Worker /api/config): usuários, segmentos, status, indústrias, origens
+let ETIQUETAS=[], ETQ_COR={}; // v118
+const etiquetasCat=()=>ETIQUETAS; const corEtiqueta=n=>ETQ_COR[n]||"#8899AB";
 async function cfgApi(token, method="GET", body=null){
   const r=await fetch(`${API}/api/config`,{method,cache:"no-store",
     headers:{"X-Session":token,"Content-Type":"application/json; charset=utf-8"},
@@ -109,6 +111,9 @@ async function loadCatalogos(token){
     const cg=by("cargo"); if(cg.length) CARGOS.splice(0,CARGOS.length,...cg.map(x=>x.nome));
     const cn=by("canal"); if(cn.length) CANAIS=cn.map(x=>x.nome);
     const ci=by("cargo_industria"); if(ci.length) CARGOS_IND=ci.map(x=>x.nome);
+    // v118: etiquetas das pessoas (mesma lista do agente de WhatsApp) — ativas para marcar; cor de todas para exibir
+    ETIQUETAS=by("etiqueta").map(x=>({nome:x.nome,cor:x.cor||"#8899AB"}));
+    ETQ_COR=Object.fromEntries(it.filter(x=>x.tipo==="etiqueta").map(x=>[x.nome,x.cor||"#8899AB"]));
     const us=by("usuario");
     if(us.length){
       USERS=us.map(x=>({id:x.agendor_id,n:x.nome}));
@@ -271,4 +276,4 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(!checkoutEsquecido(v)&&v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
-export {jornadaDia, minDiaCba, chaveMarca, marcasCadastro, _bk as chaveTexto, normBusca, contemBusca, cidadeCanon, unificarCidades, PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl, temCoord, checkoutEsquecido, saidaEfetiva, dedupVisitas };
+export {etiquetasCat, corEtiqueta, jornadaDia, minDiaCba, chaveMarca, marcasCadastro, _bk as chaveTexto, normBusca, contemBusca, cidadeCanon, unificarCidades, PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl, temCoord, checkoutEsquecido, saidaEfetiva, dedupVisitas };

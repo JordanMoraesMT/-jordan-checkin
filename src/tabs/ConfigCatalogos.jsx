@@ -10,8 +10,9 @@ const TIPOS = [
   { id: "cargo",     l: "Cargos",     emo: "💼", temEmail: false, temCor: false },
   { id: "canal",     l: "Canais",     emo: "🛒", temEmail: false, temCor: false },
   { id: "cargo_industria", l: "Cargos da indústria", emo: "🏭", temEmail: false, temCor: false },
+  { id: "etiqueta",  l: "Etiquetas",  emo: "🔖", temEmail: false, temCor: true }, // v118: etiquetas das pessoas (as mesmas do agente de WhatsApp)
 ];
-const PALETA = ["#0AAEE8","#12C265","#8B5CF6","#06B6D4","#FFB020","#FF4D8D","#FB4B3A","#06C281"];
+const PALETA = ["#0AAEE8","#12C265","#8B5CF6","#06B6D4","#FFB020","#FF4D8D","#FB4B3A","#06C281","#2A9D8F","#C8964E","#9B5DE5","#8899AB"];
 
 function ConfigCatalogos({ token }) {
   const [tab, setTab] = useState("usuario");

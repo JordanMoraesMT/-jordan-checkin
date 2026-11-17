@@ -7,6 +7,8 @@ import { ListFilter, CalendarPlus, Target, Unlink, Search, ArrowLeft, MapPin, Ph
 import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca, toLocalDate, marcasCadastro, chaveMarca, HOMES, fixMojibake, SECTORS } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal, ColunasMenu, ColFiltro } from "../components";
 import { otimizar } from "./PlanejarRota";
+import { EtqChips, EtqModal, etqDosContatos, etqTodas, porContato } from "../etiquetas";
+import { etiquetasCat } from "../lib";
 
 const DASH = "https://dashboard.jordanmt.com";
 const TIPOS = [
@@ -145,6 +147,11 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
     lista.sort((a, b) => (b.criado_em || "").localeCompare(a.criado_em || "") || b.id - a.id);
     setAtvs(lista);
   } catch (e) { setMsg("Histórico: " + e.message); } setLdA(false); };
+  // v118: etiquetas das pessoas (chips) + janela de edição
+  const [etqMap, setEtqMap] = useState(() => new Map()); const [etqAlvo, setEtqAlvo] = useState(null);
+  useEffect(() => { let ok = true; const ids = (ctts || []).map(c => c.id).filter(Boolean);
+    etqDosContatos(token, ids).then(l => { if (ok) setEtqMap(porContato(l)); }).catch(() => { if (ok) setEtqMap(new Map()); });
+    return () => { ok = false; }; }, [ctts]); // eslint-disable-line
   const carregaCtts = async () => { setLdC(true); try { const d = await crm(token, `/api/crm/contatos?${idQS}`); setCtts(d.contatos || []); } catch (e) { setMsg("Contatos: " + e.message); } setLdC(false); };
   const carregaArqs = async () => { setLdF(true); try { const d = await crm(token, `/api/crm/arquivos?${idQS}`); setArqs(d.arquivos || []); } catch (e) { setMsg("Arquivos: " + e.message); } setLdF(false); };
   useEffect(() => { setMsg(""); carregaInfo(); carregaAtvs(); carregaCtts(); carregaArqs(); }, [org.id]);
@@ -491,6 +498,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
           <div style={{ minWidth: 0 }}>
             <p style={{ margin: 0, fontSize: 14.5, fontWeight: 700, color: S.txt }}>{c.nome}{c.vinculado ? <span style={{ marginLeft: 8, fontSize: 9.5, fontWeight: 700, color: S.pl, border: `1px solid ${S.pl}55`, padding: "2px 7px", borderRadius: 6, verticalAlign: "middle" }}>🔗 vinculada</span> : null}</p>
             {c.cargo && <p style={{ margin: "1px 0 0", fontSize: 12, color: S.ts }}>{c.cargo}</p>}
+            <EtqChips lista={etqMap.get(c.id)} />
             {(c.telefone || c.whatsapp || c.email) && <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.td, wordBreak: "break-word" }}>{[c.telefone, c.whatsapp && "WA " + c.whatsapp, c.email].filter(Boolean).join(" · ")}</p>}
             {c.obs && <p style={{ margin: "3px 0 0", fontSize: 11.5, color: S.ts }}>{c.obs}</p>}
           </div>
@@ -498,6 +506,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
             {c.whatsapp && <a href={`https://wa.me/55${soDig(c.whatsapp)}`} target="_blank" rel="noopener noreferrer" style={{ width: 36, height: 36, borderRadius: 10, background: "#25D36622", display: "flex", alignItems: "center", justifyContent: "center" }}><MessageCircle size={17} color="#25D366" /></a>}
             {c.telefone && <a href={`tel:${soDig(c.telefone)}`} style={{ width: 36, height: 36, borderRadius: 10, background: S.pl + "22", display: "flex", alignItems: "center", justifyContent: "center" }}><Phone size={16} color={S.pl} /></a>}
             {lojasG.length > 0 && <button onClick={() => vincGrupo([c])} title={`Vincular ${c.nome} às ${lojasG.length} lojas do grupo`} style={{ width: 36, height: 36, borderRadius: 10, background: S.pri + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Link2 size={15} color={S.pl} /></button>}
+            <button onClick={() => setEtqAlvo(c)} title="Etiquetas (iguais às do WhatsApp Business)" aria-label={`Etiquetas de ${c.nome}`} style={{ width: 36, height: 36, borderRadius: 10, background: S.pl + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 15 }}>🏷️</button>
             <button onClick={() => setCttForm({ ...c })} title={c.vinculado ? "Editar (atualiza em TODAS as empresas vinculadas)" : "Editar"} style={{ width: 36, height: 36, borderRadius: 10, background: S.cl, border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Pencil size={14} color={S.ts} /></button>
             <button onClick={() => c.vinculado ? desvincular(c) : desvProprio(c)} title="Tirar desta empresa (o contato continua no CRM)" style={{ width: 36, height: 36, borderRadius: 10, background: S.gold + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Unlink size={14} color={S.gold} /></button>
             <button onClick={() => delCtt(c)} title="Excluir contato do CRM (some de todas as empresas)" style={{ width: 36, height: 36, borderRadius: 10, background: S.dng + "18", border: "none", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}><Trash2 size={14} color={S.dng} /></button>
@@ -505,6 +514,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
         </div>
       </Crd>)}
       {org.people && <p style={{ fontSize: 11.5, color: S.td, margin: "4px 2px" }}>Pessoas: {org.people}</p>}
+      {etqAlvo && <EtqModal token={token} contato={{ ...etqAlvo, cnpj: etqAlvo.cnpj || cnpjN }} ativas={etqMap.get(etqAlvo.id) || []} onFechar={() => setEtqAlvo(null)} onMudou={(id, l) => setEtqMap(m => { const n = new Map(m); n.set(id, l); return n; })} />}
     </div>}
 
     {/* visualizador de fotos — abre do Histórico ou da aba Fotos */}
@@ -590,7 +600,11 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
   // v86: tabela no padrão de Empresas (Nome · Empresa · Telefone · E-mail) + vincular ao grupo da empresa
   const [lista, setLista] = useState(null); const [vincs, setVincs] = useState([]); const [q, setQ] = useState(q0 || ""); const [vc, setVc] = useState(60);
   const [ordem, setOrdem] = useState(1); const [msg, setMsg] = useState("");
-  const carrega = async () => { try { const d = await crm(token, "/api/crm/contatos-todos?limit=5000"); setLista(d.contatos || []); } catch (e) { setLista([]); console.warn("pessoas:", e); }
+  // v118: etiquetas (filtro + contador + chips + editar)
+  const [etqMap, setEtqMap] = useState(() => new Map()); const [fEtq, setFEtq] = useState(() => { const v = sL("jc:pessoas-etq", []); return Array.isArray(v) ? v : []; }); const [etqAlvo, setEtqAlvo] = useState(null);
+  useEffect(() => { sS("jc:pessoas-etq", fEtq); }, [fEtq]);
+  const carregaEtq = async () => { try { setEtqMap(porContato(await etqTodas(token))); } catch (e) { console.warn("etiquetas:", e); } };
+  const carrega = async () => { carregaEtq(); try { const d = await crm(token, "/api/crm/contatos-todos?limit=5000"); setLista(d.contatos || []); } catch (e) { setLista([]); console.warn("pessoas:", e); }
     try { const v = await crm(token, "/api/crm/contato-vinculos-todos"); setVincs(v.vinculos || []); } catch (e) { setVincs([]); } };
   useEffect(() => { carrega(); }, []);
   const tudo = useMemo(() => [...(allOrgs || []), ...(excl || [])], [allOrgs, excl]);
@@ -598,9 +612,11 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
   const porCnpj = useMemo(() => new Map(tudo.filter(o => soDig(o.cnpj)).map(o => [soDig(o.cnpj), o])), [tudo]);
   const achaOrg = (c) => (c.org_id && porId.get(Number(c.org_id))) || (soDig(c.cnpj) && porCnpj.get(soDig(c.cnpj))) || null;
   const outras = useMemo(() => { const m = new Map(); vincs.forEach(v => { const o = (v.org_id && porId.get(Number(v.org_id))) || (soDig(v.cnpj) && porCnpj.get(soDig(v.cnpj))); if (!o) return; const a = m.get(v.contato_id) || []; if (!a.some(x => x.id === o.id)) a.push(o); m.set(v.contato_id, a); }); return m; }, [vincs, porId, porCnpj]);
+  const contEtq = useMemo(() => { const m = new Map(); etqMap.forEach(arr => arr.forEach(e => m.set(e.etiqueta, (m.get(e.etiqueta) || 0) + 1))); return m; }, [etqMap]);
   const filtrada = useMemo(() => { if (!lista) return []; const n = normBusca(q.trim());
-    const l = !n ? lista : lista.filter(c => { const o = achaOrg(c); return normBusca([c.nome, c.empresa, c.org_nome, o?.nickname, o?.name, grupoDe(o), c.cargo, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ")).includes(n); });
-    return [...l].sort((a, b) => ordem * String(a.nome || "").localeCompare(String(b.nome || ""))); }, [lista, q, ordem, porId, porCnpj]);
+    const l0 = !fEtq.length ? lista : lista.filter(c => (etqMap.get(c.id) || []).some(e => fEtq.includes(e.etiqueta)));
+    const l = !n ? l0 : l0.filter(c => { const o = achaOrg(c); return normBusca([c.nome, c.empresa, c.org_nome, o?.nickname, o?.name, grupoDe(o), c.cargo, c.telefone, c.whatsapp, c.email].filter(Boolean).join(" ")).includes(n); });
+    return [...l].sort((a, b) => ordem * String(a.nome || "").localeCompare(String(b.nome || ""))); }, [lista, q, ordem, porId, porCnpj, fEtq, etqMap]);
   const vincGrupo = async (c, o, lojas) => { const ja = new Set((outras.get(c.id) || []).map(x => x.id)); const faltam = lojas.filter(l => !ja.has(l.id));
     if (!faltam.length) { alert(`${c.nome} já está em todas as lojas do grupo.`); return; }
     if (!confirmaGrupo(c.nome, faltam, grupoDe(o))) return;
@@ -619,6 +635,16 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
       <input value={q} onChange={e => { setQ(e.target.value); setVc(60); }} placeholder="Pessoa, empresa, grupo, cargo, telefone ou e-mail" aria-label="Buscar pessoa" style={{ flex: 1, minWidth: 0, border: "none", background: "transparent", padding: 0, fontSize: 15 }} />
       {q && <button onClick={() => { setQ(""); setVc(60); }} aria-label="Limpar busca" style={{ border: "none", padding: 4, color: S.ts, display: "flex", background: "transparent" }}><X size={16} /></button>}
     </div>
+    {/* v118: filtro por etiqueta com contador */}
+    {(() => { const nomes = [...new Set([...etiquetasCat().map(c => c.nome), ...contEtq.keys()])]; if (!nomes.length) return null;
+      const pill = (on, cor) => ({ display: "inline-flex", alignItems: "center", gap: 6, height: 32, padding: "0 11px", borderRadius: 16, fontSize: 12.5, fontWeight: on ? 700 : 500, cursor: "pointer", border: `1px solid ${on ? cor : S.inpBdr}`, background: on ? cor + "22" : "transparent", color: on ? cor : S.txt });
+      return <div role="group" aria-label="Filtrar por etiqueta" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+        <span style={{ alignSelf: "center", fontSize: 12, color: S.ts, marginRight: 2 }}>🏷️ Etiquetas:</span>
+        <button onClick={() => { setFEtq([]); setVc(60); }} aria-pressed={!fEtq.length} style={pill(!fEtq.length, S.pl)}>Todas</button>
+        {nomes.map(n => { const on = fEtq.includes(n); const cor = (etiquetasCat().find(c => c.nome === n) || {}).cor || "#8899AB";
+          return <button key={n} onClick={() => { setFEtq(f => on ? f.filter(x => x !== n) : [...f, n]); setVc(60); }} aria-pressed={on} style={pill(on, cor)}>
+            <span style={{ width: 8, height: 8, borderRadius: 4, background: cor }} />{n}<span className="num" style={{ fontSize: 11, color: on ? cor : S.ts }}>{contEtq.get(n) || 0}</span></button>; })}
+      </div>; })()}
     {msg && <p style={{ fontSize: 12.5, color: S.acc, margin: "0 0 8px" }}>{msg}</p>}
     {lista === null && <p style={{ color: S.ts, textAlign: "center", padding: "1.5rem 0" }}>Carregando pessoas...</p>}
     {lista !== null && filtrada.length === 0 && <Crd><p style={{ margin: 0, fontSize: 12.5, color: S.ts, textAlign: "center" }}>Nenhuma pessoa encontrada.</p></Crd>}
@@ -634,7 +660,8 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
             return (<tr key={c.id}>
             <td style={{ ...td, maxWidth: 220 }}>
               <span style={{ display: "block", fontSize: 13.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</span>
-              {c.cargo && <span style={{ display: "block", fontSize: 11.5, color: S.ts }}>{c.cargo}</span>}</td>
+              {c.cargo && <span style={{ display: "block", fontSize: 11.5, color: S.ts }}>{c.cargo}</span>}
+              <EtqChips lista={etqMap.get(c.id)} small /></td>
             <td style={{ ...td, maxWidth: 300 }}>
               {o ? <button onClick={() => onOpenOrg(o)} title="Abrir a ficha" style={{ background: "transparent", border: "none", padding: 0, textAlign: "left", cursor: "pointer", color: S.pl, fontSize: 13, fontWeight: 600, display: "block", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.nickname || o.name}</button>
                 : <span style={{ color: S.ts }}>{c.empresa || c.org_nome || "sem empresa"}</span>}
@@ -645,6 +672,7 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
             <td style={{ ...td, maxWidth: 240, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.email ? <a href={`mailto:${c.email}`} style={{ color: S.pl, textDecoration: "none" }}>{c.email}</a> : <span style={{ color: S.ts }}>—</span>}</td>
             <td style={{ ...td, whiteSpace: "nowrap", textAlign: "right" }}><div style={{ display: "inline-flex", gap: 6 }}>
               {o && lojas.length > 0 && <button onClick={() => vincGrupo(c, o, lojas)} title={faltam ? `Vincular às ${faltam} loja(s) do grupo que faltam` : "Já está em todas as lojas do grupo"} style={{ ...ico(S.pri + "18", S.pri + "55"), opacity: faltam ? 1 : .45 }}><Link2 size={14} color={S.pl} /></button>}
+              <button onClick={() => setEtqAlvo({ ...c, cnpj: c.cnpj || o?.cnpj })} title="Etiquetas" aria-label={`Etiquetas de ${c.nome}`} style={{ ...ico(S.pl + "18", S.pl + "55"), fontSize: 14 }}>🏷️</button>
               {onPerson && o && <button onClick={() => onPerson(o)} title="Editar pessoas desta empresa" style={ico(S.gold + "18", S.gold + "55")}><Pencil size={14} color={S.gold}/></button>}
               {!o && <button onClick={async () => { if (!confirm(`Excluir o contato ${c.nome}?\n\nEle não está vinculado a nenhuma empresa da base.`)) return; try { await crm(token, `/api/crm/contatos?id=${c.id}`, { method: "DELETE" }); carrega(); } catch (e) { alert("Erro: " + e.message); } }} title="Excluir contato (sem empresa)" style={ico(S.dng + "18", S.dng + "55")}><Trash2 size={14} color={S.dng}/></button>}
             </div></td>
@@ -652,6 +680,7 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
         </tbody>
       </table>
     </div>}
+    {etqAlvo && <EtqModal token={token} contato={etqAlvo} ativas={etqMap.get(etqAlvo.id) || []} onFechar={() => setEtqAlvo(null)} onMudou={(id, l) => setEtqMap(m => { const n = new Map(m); l.length ? n.set(id, l) : n.delete(id); return n; })} />}
     {vc < filtrada.length && <button onClick={() => setVc(v => v + 60)} style={{ width: "100%", marginTop: 8, padding: 12, fontSize: 13, background: S.cl, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.txt }}>Ver mais ({filtrada.length - vc})</button>}
   </div>);
 }
