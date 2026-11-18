@@ -4,7 +4,7 @@ Login/sessão do TeamCheck, catálogos (`/api/config`), sync em KV, consulta de 
 (`/api/crm/etiquetas*`) e o e-mail de tarefas (cron seg/qua/sex 07:00 Cuiabá).
 
 - Código: `worker.js` · Configuração: `wrangler.toml` (D1 `DASHBOARD_DB`, KV `SYNC_KV`, `MAIL_FROM`, cron).
-- Segredos ficam só no Cloudflare: `ADMIN_KEY`, `RESEND_API_KEY`.
+- Segredo que fica só no Cloudflare: `RESEND_API_KEY` (e-mails). O `ADMIN_KEY` deixou de ser usado na v11 (rota `/admin/criar-acesso` removida).
 - **Deploy automático:** Cloudflare → Workers e Pages → agendor-proxy → Configurações → Build, ligado a este
   repositório, diretório raiz `workers/agendor-proxy`, comando `npx wrangler deploy`, caminhos monitorados
   `workers/agendor-proxy/*`. Um push que altere esta pasta publica o Worker.

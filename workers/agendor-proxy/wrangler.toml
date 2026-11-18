@@ -1,7 +1,7 @@
 # agendor-proxy — Cloudflare Worker (login/sessão, catálogos, sync KV, CNPJ, etiquetas, e-mails do cron)
 # Publicado pelo Cloudflare Workers Builds a cada push que altere esta pasta.
 # ATENÇÃO: este arquivo é a configuração do Worker (bindings, cron, logs). Variáveis criadas no painel ficam (keep_vars)
-# e os SEGREDOS (ADMIN_KEY, RESEND_API_KEY) também — o deploy não mexe neles.
+# e o SEGREDO RESEND_API_KEY também — o deploy não mexe nele. (ADMIN_KEY não é mais usado desde a v11.)
 name = "agendor-proxy"
 main = "worker.js"
 compatibility_date = "2026-06-12"

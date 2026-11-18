@@ -1,4 +1,10 @@
-// agendor-proxy — v10 (17/nov/2026) — SEGURANÇA
+// agendor-proxy — v11 (17/nov/2026)
+// Novidade da v11:
+//   POST /admin/criar-acesso (protegida só pela chave fixa ADMIN_KEY / cabeçalho X-Admin-Key) foi REMOVIDA.
+//   Nada no TeamCheck, Dashboard, catálogo ou extensão a chamava; o convite por e-mail (/admin/convidar, com sessão
+//   de admin) substitui. O segredo ADMIN_KEY pode ser apagado do painel. Agora a rota responde 404.
+//   Todo o resto é igual à v10 (travas de tentativa, CORS, sync/cnpj com sessão, etc.).
+// --- v10 (17/nov/2026) — SEGURANÇA ---
 // Novidades da v10 (auditoria de 17/11/2026):
 //   1. /api/config exige sessão (X-Session) em GET e POST. O TeamCheck já enviava a sessão — nada muda no app.
 //      op "delete" continua só para admin.
@@ -12,7 +18,7 @@
 //        · /forgot: 3 códigos por e-mail ou 10 por IP por hora → 429 (antes dava para pedir códigos sem fim,
 //          zerando as 5 tentativas a cada pedido, e encher a caixa de e-mail da pessoa)
 //        · /reset: 15 erros por IP em 15 min → 429 (somado às 5 tentativas por código que já existiam)
-//        · /admin/criar-acesso: 5 erros por IP em 15 min; chave comparada em tempo constante e exige ADMIN_KEY ≥ 32 caracteres
+//        · /admin/criar-acesso: (removida na v11)
 //   4. CORS só para os endereços da Jordan (lista ORIGENS + extensão do Chrome + variável CORS_EXTRA, separada por vírgula).
 //      Chamadas sem Origin (servidor→servidor) seguem iguais.
 //   5. Troca de senha (/reset) encerra as outras sessões daquela pessoa.
@@ -54,7 +60,7 @@
 //   - E-mail de alerta de tarefas pendentes (segunda/quarta/sexta) via Acionador Cron:
 //     handler `scheduled` — cron "0 11 * * 1,3,5" (= 07:00 de Cuiabá).
 //   - POST /admin/testar-alerta — dispara o e-mail de tarefas agora.
-//   - login/logout/me/forgot/reset/criar-acesso/config/sync/cnpj/gps-migrar inalterados.
+//   - login/logout/me/forgot/reset/config/sync/cnpj/gps-migrar inalterados (criar-acesso removida na v11).
 
 // v9: fluxo das etiquetas BAZAR (Tramontina, Ruvolo, Festcolor, Hiper Têxtil) / MATCON (Santana, Pado, Zagonel,
 // Plastilit, Dacar). Ao colocar a chave, encerra as etiquetas ativas listadas. Igual ao agente-whatsapp/src/etiquetas.js.
@@ -216,33 +222,6 @@ export default {
       const alvo = b && b.email ? String(b.email).trim().toLowerCase() : null;
       const n = await encerrarSessoes(env, alvo, request.headers.get("X-Session"));
       return json({ ok: true, encerradas: n, alvo: alvo || "todas (menos a sua)" }, cors);
-    }
-
-    // ===== ADMIN: criar acesso manual (mantido; requer X-Admin-Key) =====
-    if (path === "/admin/criar-acesso") {
-      if (request.method !== "POST") return json({ error: "method" }, cors, 405);
-      // v10: chave forte (≥ 32), comparação em tempo constante e trava de tentativas por conexão
-      if (await excedeu(env, "adminkey", [["ip", ip, 5]], 15)) return json({ error: "nao autorizado" }, cors, 429);
-      const chave = String(request.headers.get("X-Admin-Key") || "");
-      if (!env.ADMIN_KEY || String(env.ADMIN_KEY).length < 32 || !eqTexto(chave, String(env.ADMIN_KEY))) {
-        await registrar(env, "adminkey", "", ip);
-        return json({ error: "nao autorizado" }, cors, 403);
-      }
-      let body; try { body = await request.json(); } catch { return json({ error: "json invalido" }, cors, 400); }
-      const email = String(body.email || "").trim().toLowerCase();
-      const nome = String(body.nome || "").trim();
-      const senha = String(body.senha || "");
-      const admin = !!body.admin;
-      const userId = body.userId != null ? Number(body.userId) : null;
-      if (!email || !nome) return json({ error: "informe email e nome" }, cors, 400);
-      if (senha.length < 8) return json({ error: "senha precisa de ao menos 8 caracteres" }, cors, 400);
-      const existe = await env.SYNC_KV.get("auth:user:" + email);
-      if (existe) return json({ error: "ja existe acesso para este e-mail" }, cors, 409);
-      const salt = randHex(16);
-      const hash = await pbkdf2(senha, salt, 100000);
-      const rec = { name: nome, email, role: admin ? "admin" : "user", userId, pw: { salt, hash, iter: 100000 } };
-      await env.SYNC_KV.put("auth:user:" + email, JSON.stringify(rec));
-      return json({ ok: true, email, name: nome }, cors);
     }
 
     // ===== ADMIN: convidar por e-mail — requer sessão de ADMIN =====
@@ -580,12 +559,6 @@ async function encerrarSessoes(env, email, exceto) {
     cursor = l.list_complete ? undefined : l.cursor;
   } while (cursor);
   return n;
-}
-function eqTexto(a, b) {
-  const ea = new TextEncoder().encode(a), eb = new TextEncoder().encode(b);
-  let r = ea.length ^ eb.length;
-  for (let i = 0; i < Math.max(ea.length, eb.length); i++) r |= (ea[i] || 0) ^ (eb[i] || 0);
-  return r === 0;
 }
 function escH(x) { return String(x == null ? "" : x).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
