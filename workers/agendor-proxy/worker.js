@@ -1,4 +1,12 @@
-// agendor-proxy — v11 (17/nov/2026)
+// agendor-proxy — v12 (18/nov/2026)
+// Novidade da v12 — registro de acessos por 6 meses (Marco Civil da Internet, art. 15):
+//   Tabela log_acesso no D1 (criada sozinha): evento, e-mail, IP, origem (Origin), navegador (200 caracteres), data/hora.
+//   Eventos: login_ok, login_falha, login_bloqueado (429), logout, forgot, reset_ok, reset_falha, convite,
+//   encerrar_sessoes e "uso" (no máximo 1 linha por e-mail + IP + dia de Cuiabá, quando uma sessão é validada).
+//   NUNCA grava senha, código, token de sessão nem corpo da requisição. Falha ao gravar nunca derruba o login.
+//   Retenção: o cron (seg/qua/sex) apaga o que passar de 190 dias (6 meses + margem).
+//   GET /admin/log-acesso?email=&dias=30&evento= — só admin logado; até 1.000 linhas, mais recentes primeiro.
+// --- v11 (17/nov/2026) ---
 // Novidade da v11:
 //   POST /admin/criar-acesso (protegida só pela chave fixa ADMIN_KEY / cabeçalho X-Admin-Key) foi REMOVIDA.
 //   Nada no TeamCheck, Dashboard, catálogo ou extensão a chamava; o convite por e-mail (/admin/convidar, com sessão
@@ -116,22 +124,28 @@ export default {
       if (!email || !password) return json({ error: "Informe e-mail e senha" }, cors, 400);
       // v10: trava de tentativa e erro (por e-mail e por conexão)
       if (await excedeu(env, "login", [["par", email + "|" + ip, 6], ["email", email, 30], ["ip", ip, 25]], 15)) {
+        await logAcesso(env, request, "login_bloqueado", email);
         return json({ error: "Muitas tentativas. Aguarde 15 minutos e tente de novo." }, cors, 429);
       }
       const raw = await env.SYNC_KV.get("auth:user:" + email);
-      if (!raw) { await registrar(env, "login", email, ip); return json({ error: "E-mail ou senha incorretos" }, cors, 401); }
+      if (!raw) { await registrar(env, "login", email, ip); await logAcesso(env, request, "login_falha", email); return json({ error: "E-mail ou senha incorretos" }, cors, 401); }
       const u = JSON.parse(raw);
       const calc = await pbkdf2(password, u.pw.salt, u.pw.iter);
-      if (!eqHex(calc, u.pw.hash)) { await registrar(env, "login", email, ip); return json({ error: "E-mail ou senha incorretos" }, cors, 401); }
+      if (!eqHex(calc, u.pw.hash)) { await registrar(env, "login", email, ip); await logAcesso(env, request, "login_falha", email); return json({ error: "E-mail ou senha incorretos" }, cors, 401); }
       const session = randHex(32);
       await env.SYNC_KV.put("auth:session:" + session, JSON.stringify({ email }), { expirationTtl: 60 * 60 * 24 * 30 });
+      await logAcesso(env, request, "login_ok", email);
       return json({ ok: true, session, name: u.name, role: u.role, userId: u.userId, email }, cors);
     }
 
     // ===== AUTH: logout =====
     if (path === "/logout") {
       const s = request.headers.get("X-Session");
-      if (s) await env.SYNC_KV.delete("auth:session:" + s);
+      if (s) {
+        let em = null; try { const sr = await env.SYNC_KV.get("auth:session:" + s); em = sr ? JSON.parse(sr).email : null; } catch {}
+        await env.SYNC_KV.delete("auth:session:" + s);
+        await logAcesso(env, request, "logout", em);
+      }
       return json({ ok: true }, cors);
     }
 
@@ -144,6 +158,7 @@ export default {
       const ur = await env.SYNC_KV.get("auth:user:" + JSON.parse(sr).email);
       if (!ur) return json({ error: "Usuario nao encontrado" }, cors, 401);
       const u = JSON.parse(ur);
+      await usoDiario(env, request, u.email || JSON.parse(sr).email);
       return json({ ok: true, name: u.name, role: u.role, userId: u.userId, email: u.email || JSON.parse(sr).email }, cors);
     }
 
@@ -158,6 +173,7 @@ export default {
         return json({ error: "Você já pediu vários códigos. Use o último que chegou ou aguarde 1 hora." }, cors, 429);
       }
       await registrar(env, "forgot", email, ip);
+      await logAcesso(env, request, "forgot", email);
       const raw = await env.SYNC_KV.get("auth:user:" + email);
       // Resposta genérica se não existe (não revela cadastro)
       if (!raw) return json({ ok: true }, cors);
@@ -183,7 +199,7 @@ export default {
       if (password.length < 8) return json({ error: "A nova senha precisa ter ao menos 8 caracteres" }, cors, 400);
       if (await excedeu(env, "reset", [["ip", ip, 15]], 15)) return json({ error: "Muitas tentativas. Aguarde 15 minutos." }, cors, 429);
       const rr = await env.SYNC_KV.get("auth:reset:" + email);
-      if (!rr) return json({ error: "Código expirado ou inválido. Peça um novo." }, cors, 400);
+      if (!rr) { await logAcesso(env, request, "reset_falha", email); return json({ error: "Código expirado ou inválido. Peça um novo." }, cors, 400); }
       const rec = JSON.parse(rr);
       const now = Date.now();
       if (!rec.exp || rec.exp <= now) { await env.SYNC_KV.delete("auth:reset:" + email); return json({ error: "Código expirado. Peça um novo." }, cors, 400); }
@@ -194,6 +210,7 @@ export default {
         const left = 5 - tries;
         const ttl = Math.max(60, Math.floor((rec.exp - now) / 1000));
         await registrar(env, "reset", email, ip);
+        await logAcesso(env, request, "reset_falha", email);
         if (left <= 0) { await env.SYNC_KV.delete("auth:reset:" + email); return json({ error: "Muitas tentativas. Peça um novo código." }, cors, 429); }
         await env.SYNC_KV.put("auth:reset:" + email, JSON.stringify({ ...rec, tries }), { expirationTtl: ttl });
         return json({ error: "Código incorreto. Tentativas restantes: " + left }, cors, 400);
@@ -209,6 +226,7 @@ export default {
       await env.SYNC_KV.delete("auth:reset:" + email);
       // v10: senha nova derruba as sessões antigas dessa pessoa (quem tinha a senha antiga perde o acesso)
       await encerrarSessoes(env, email, null);
+      await logAcesso(env, request, "reset_ok", email);
       return json({ ok: true }, cors);
     }
 
@@ -221,7 +239,31 @@ export default {
       let b = {}; try { b = await request.json(); } catch {}
       const alvo = b && b.email ? String(b.email).trim().toLowerCase() : null;
       const n = await encerrarSessoes(env, alvo, request.headers.get("X-Session"));
+      await logAcesso(env, request, "encerrar_sessoes", adm.email);
       return json({ ok: true, encerradas: n, alvo: alvo || "todas (menos a sua)" }, cors);
+    }
+
+    // ===== ADMIN: consultar o registro de acessos (v12) — requer sessão de ADMIN =====
+    // GET /admin/log-acesso?email=&dias=30&evento=   (dias: 1 a 190; até 1.000 linhas, mais recentes primeiro)
+    if (path === "/admin/log-acesso") {
+      if (request.method !== "GET") return json({ error: "method" }, cors, 405);
+      const adm = await sessaoAdmin(request, env);
+      if (!adm) return json({ error: "apenas administrador logado" }, cors, 403);
+      const dias = Math.min(190, Math.max(1, parseInt(url.searchParams.get("dias") || "30", 10) || 30));
+      const em = String(url.searchParams.get("email") || "").trim().toLowerCase();
+      const ev = String(url.searchParams.get("evento") || "").trim();
+      try {
+        await garantirLog(env);
+        const conds = ["criado_em > datetime('now', ?)"], binds = [`-${dias} days`];
+        if (em) { conds.push("email=?"); binds.push(em); }
+        if (ev) { conds.push("evento=?"); binds.push(ev); }
+        const { results } = await env.DASHBOARD_DB.prepare(
+          "SELECT id, evento, email, ip, origem, user_agent, criado_em FROM log_acesso WHERE " + conds.join(" AND ") + " ORDER BY criado_em DESC, id DESC LIMIT 1000"
+        ).bind(...binds).all();
+        return json({ ok: true, dias, total: (results || []).length, acessos: results || [] }, cors);
+      } catch (e) {
+        return json({ error: String(e.message || e) }, cors, 500);
+      }
     }
 
     // ===== ADMIN: convidar por e-mail — requer sessão de ADMIN =====
@@ -266,6 +308,7 @@ export default {
       await env.SYNC_KV.put("auth:reset:" + email, JSON.stringify({ hash: hash2, salt: salt2, iter: 100000, exp, tries: 0 }), { expirationTtl: 48 * 3600 });
       const sent = await sendConviteEmail(env, email, nome, code, adm.name || "o administrador");
       if (!sent) return json({ ok: false, error: "Acesso criado, mas não consegui enviar o e-mail. Tente reenviar." }, cors, 502);
+      await logAcesso(env, request, "convite", adm.email);
       return json({ ok: true, email, userId, reenvio: !!existente }, cors);
     }
 
@@ -428,6 +471,7 @@ export default {
       const s = request.headers.get("X-Session");
       const sr = s ? await env.SYNC_KV.get("auth:session:" + s) : null;
       if (!sr) return json({ error: "sessao" }, cors, 401);
+      try { await usoDiario(env, request, JSON.parse(sr).email); } catch {}
       let nome = null; try { const ur = await env.SYNC_KV.get("auth:user:" + JSON.parse(sr).email); nome = ur ? JSON.parse(ur).name : null; } catch {}
       const raw = await env.SYNC_KV.get("visit:plocs");
       let obj = {};
@@ -508,6 +552,8 @@ export default {
     ctx.waitUntil(enviarAlertasTarefas(env));
     // v10: limpeza do registro de tentativas
     ctx.waitUntil((async () => { try { await garantirTentativa(env); await env.DASHBOARD_DB.prepare("DELETE FROM auth_tentativa WHERE criado_em < datetime('now','-2 days')").run(); } catch (e) {} })());
+    // v12: registro de acessos fica 190 dias (Marco Civil pede 6 meses)
+    ctx.waitUntil((async () => { try { await garantirLog(env); await env.DASHBOARD_DB.prepare("DELETE FROM log_acesso WHERE criado_em < datetime('now','-190 days')").run(); } catch (e) {} })());
   },
 };
 
@@ -564,6 +610,54 @@ function escH(x) { return String(x == null ? "" : x).replace(/[&<>"']/g, c => ({
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ───────────────────────── v12: registro de acessos (Marco Civil, art. 15) ─────────────────────────
+// Só metadados: evento, e-mail, IP, Origin e navegador. Nunca senha, código, token ou corpo. Erro aqui nunca derruba nada.
+let _logPronto = false;
+async function garantirLog(env) {
+  if (_logPronto || !env.DASHBOARD_DB) return;
+  await env.DASHBOARD_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS log_acesso (id INTEGER PRIMARY KEY AUTOINCREMENT, evento TEXT NOT NULL, email TEXT, ip TEXT, origem TEXT, user_agent TEXT, criado_em TEXT DEFAULT (datetime('now')))"
+  ).run();
+  await env.DASHBOARD_DB.prepare("CREATE INDEX IF NOT EXISTS ix_log_acesso_data ON log_acesso (criado_em)").run();
+  await env.DASHBOARD_DB.prepare("CREATE INDEX IF NOT EXISTS ix_log_acesso_email ON log_acesso (email, criado_em)").run();
+  _logPronto = true;
+}
+function metaReq(request) {
+  return {
+    ip: request.headers.get("CF-Connecting-IP") || "",
+    origem: (request.headers.get("Origin") || "").slice(0, 120),
+    ua: (request.headers.get("User-Agent") || "").slice(0, 200),
+  };
+}
+async function logAcesso(env, request, evento, email) {
+  try {
+    await garantirLog(env);
+    const m = metaReq(request);
+    await env.DASHBOARD_DB.prepare("INSERT INTO log_acesso (evento, email, ip, origem, user_agent) VALUES (?,?,?,?,?)")
+      .bind(evento, email ? String(email).toLowerCase().slice(0, 200) : null, m.ip, m.origem, m.ua).run();
+  } catch (e) {}
+}
+// "uso": no máximo 1 linha por e-mail + IP + dia (dia de Cuiabá, UTC−4). Memória do isolate evita ir ao D1 a cada chamada.
+const _usoVisto = new Set();
+async function usoDiario(env, request, email) {
+  try {
+    if (!email) return;
+    const em = String(email).toLowerCase().slice(0, 200);
+    const m = metaReq(request);
+    const dia = new Date(Date.now() - 4 * 3600000).toISOString().slice(0, 10);
+    const chave = em + "|" + m.ip + "|" + dia;
+    if (_usoVisto.has(chave)) return;
+    await garantirLog(env);
+    // início do dia de Cuiabá em UTC = dia 04:00:00
+    await env.DASHBOARD_DB.prepare(
+      "INSERT INTO log_acesso (evento, email, ip, origem, user_agent) SELECT 'uso', ?1, ?2, ?3, ?4 " +
+      "WHERE NOT EXISTS (SELECT 1 FROM log_acesso WHERE evento='uso' AND email=?1 AND ip=?2 AND criado_em >= ?5)"
+    ).bind(em, m.ip, m.origem, m.ua, dia + " 04:00:00").run();
+    if (_usoVisto.size > 5000) _usoVisto.clear();
+    _usoVisto.add(chave);
+  } catch (e) {}
+}
+
 // v8: sessão válida (qualquer papel) → registro do usuário; senão null
 async function sessaoUsuario(request, env) {
   const s = request.headers.get("X-Session");
@@ -574,6 +668,7 @@ async function sessaoUsuario(request, env) {
   const ur = await env.SYNC_KV.get("auth:user:" + em);
   if (!ur) return null;
   const u = JSON.parse(ur);
+  await usoDiario(env, request, u.email || em);
   return { ...u, email: u.email || em };
 }
 
@@ -586,7 +681,8 @@ async function sessaoAdmin(request, env) {
   const ur = await env.SYNC_KV.get("auth:user:" + JSON.parse(sr).email);
   if (!ur) return null;
   const u = JSON.parse(ur);
-  return u.role === "admin" ? u : null;
+  await usoDiario(env, request, u.email || JSON.parse(sr).email);
+  return u.role === "admin" ? { ...u, email: u.email || JSON.parse(sr).email } : null;
 }
 
 // Monta e envia o e-mail de tarefas pendentes para cada usuário com acesso e e-mail
