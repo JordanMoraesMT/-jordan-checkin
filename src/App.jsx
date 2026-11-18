@@ -169,7 +169,14 @@ export default function App(){
 
   // Check if day has visits but no active visit (can close route)
   const today=todayLocal();
-  const todayVisits=useMemo(()=>visits.filter(v=>{const d=toLocalDate(v.checkinTime);return d===today&&isRealVisit(v);}),[visits,today]);
+  // v123: visitas de HOJE do PRÓPRIO usuário (o "fechar o roteiro" é pessoal). Antes contava a equipe inteira
+  // (visits traz visits_{Jordan}, visits_{Alisson} e o D1) e a mesma visita vinda do app e do D1 contava 2 vezes.
+  const todayVisits=useMemo(()=>{const eu=(user?.name||"").trim().toLowerCase();const vistos=new Set();const out=[];
+    const lista=[...visits.filter(v=>!v.d1),...visits.filter(v=>v.d1)];// a cópia do app (horários reais) tem prioridade
+    for(const v of lista){if(toLocalDate(v.checkinTime)!==today||!isRealVisit(v))continue;
+      const dono=(v.userName||"").trim().toLowerCase();if(dono&&eu&&dono!==eu)continue;
+      const k=String(v.orgId)+"|"+today;if(vistos.has(k))continue;vistos.add(k);out.push(v);}
+    return out;},[visits,today,user?.name]);
   // v90: destino sem GPS ("Hotel (GPS ao fechar)") não conta como roteiro fechado — o aviso de fechar aparece e pede o local
   const hasEndBase=temCoord(dayBases[user?.id+"_"+today]?.end)||temCoord(dayBases[today]?.end);
   const canCloseRoute=todayVisits.length>0&&!active&&!hasEndBase;
