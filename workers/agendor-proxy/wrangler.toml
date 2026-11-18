@@ -11,6 +11,8 @@ keep_vars = true
 
 [vars]
 MAIL_FROM = "TeamCheck <nao-responda@send.jordanmt.com>"
+# v10: sync (?sync=) e CNPJ (?cnpj=) só com sessão válida (TeamCheck v120+ manda X-Session)
+SYNC_EXIGE_SESSAO = "1"
 
 [[d1_databases]]
 binding = "DASHBOARD_DB"
