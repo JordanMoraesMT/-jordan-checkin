@@ -1,4 +1,8 @@
-// agendor-proxy — v8 (nov/2026)
+// agendor-proxy — v9 (nov/2026)
+// Novidade da v9:
+//   Etiquetas: a regra "Resolvido" saiu (a etiqueta não existe mais). Entra o fluxo BAZAR / MATCON, igual ao do agente
+//   (agente-whatsapp/src/etiquetas.js): COTAÇÃO → AGUARD APROV → PV TRANSFORMAR → FINALIZADO. Ao colocar uma etiqueta,
+//   as etapas listadas em TRANSICOES_ETQ são encerradas (removido_em) na mesma pessoa. As demais não interferem.
 // Novidade da v8:
 //   B. Rotas das ETIQUETAS das pessoas (mesma sessão X-Session do app, mesmo D1):
 //      GET  /api/crm/etiquetas?cnpj=…  |  ?contato_id=…  |  ?ids=1,2,3   → etiquetas ATIVAS (com cor do catálogo)
@@ -6,7 +10,7 @@
 //      POST /api/crm/etiqueta { contato_id, cnpj?, etiqueta, remover?, obs? }
 //        · etiqueta precisa existir no catálogo (tipo 'etiqueta', ativo=1) para ser colocada
 //        · remover = preenche removido_em (nunca DELETE; o histórico fica)
-//        · "Resolvido" encerra as outras ativas da pessoa; qualquer outra encerra o "Resolvido"
+//        · (v9) fluxo BAZAR/MATCON: ao colocar, encerra as etapas de TRANSICOES_ETQ
 //        · origem 'teamcheck', user_nome = usuário da sessão
 //   A. Catálogo "etiqueta" (etiquetas das pessoas/contatos, iguais às do WhatsApp Business).
 //      A trava do op:"delete" agora conta uso em crm_contato_etiqueta (etiquetas ativas) — etiqueta em uso não é apagada.
@@ -30,6 +34,20 @@
 //     handler `scheduled` — cron "0 11 * * 1,3,5" (= 07:00 de Cuiabá).
 //   - POST /admin/testar-alerta — dispara o e-mail de tarefas agora.
 //   - login/logout/me/forgot/reset/criar-acesso/config/sync/cnpj/gps-migrar inalterados.
+
+// v9: fluxo das etiquetas BAZAR (Tramontina, Ruvolo, Festcolor, Hiper Têxtil) / MATCON (Santana, Pado, Zagonel,
+// Plastilit, Dacar). Ao colocar a chave, encerra as etiquetas ativas listadas. Igual ao agente-whatsapp/src/etiquetas.js.
+const ETQ_COT = ["BAZAR COTAÇÃO", "MATCON - COTAÇÃO"];
+const ETQ_AGU = ["BAZAR AGUARD APROV", "MATCON AGUARD APROV"];
+const TRANSICOES_ETQ = {
+  "BAZAR COTAÇÃO": ["BAZAR FINALIZADO"],
+  "BAZAR AGUARD APROV": ["BAZAR COTAÇÃO"],
+  "BAZAR FINALIZADO": ["BAZAR COTAÇÃO", "BAZAR AGUARD APROV", "PV TRANSFORMAR"],
+  "MATCON - COTAÇÃO": ["MATCON FINALIZADO"],
+  "MATCON AGUARD APROV": ["MATCON - COTAÇÃO"],
+  "MATCON FINALIZADO": ["MATCON - COTAÇÃO", "MATCON AGUARD APROV", "PV TRANSFORMAR"],
+  "PV TRANSFORMAR": [...ETQ_COT, ...ETQ_AGU],
+};
 
 export default {
   async fetch(request, env) {
@@ -326,16 +344,21 @@ export default {
           const ctt = await DB.prepare("SELECT id, cnpj FROM crm_contato WHERE id=?").bind(contatoId).first();
           if (!ctt) return json({ error: "contato nao encontrado" }, cors, 404);
           const cnpj = String(b.cnpj || ctt.cnpj || "").replace(/\D/g, "") || null;
-          const cat = await DB.prepare("SELECT nome, ativo FROM config_catalogo WHERE tipo='etiqueta' AND UPPER(TRIM(nome))=UPPER(TRIM(?))").bind(nomeIn).first();
+          // v9: compara no JS (o UPPER do D1 não converte letras acentuadas: "cotação" ≠ "COTAÇÃO")
+          const chave = x => String(x || "").trim().replace(/\s+/g, " ").toLocaleUpperCase("pt-BR");
+          const { results: catLista } = await DB.prepare("SELECT nome, ativo FROM config_catalogo WHERE tipo='etiqueta'").all();
+          const cat = (catLista || []).find(c => chave(c.nome) === chave(nomeIn)) || null;
           const etq = cat ? cat.nome : nomeIn;
           if (b.remover) {
             await DB.prepare("UPDATE crm_contato_etiqueta SET removido_em=datetime('now') WHERE contato_id=? AND etiqueta=? AND removido_em IS NULL").bind(contatoId, etq).run();
           } else {
             if (!cat || !cat.ativo) return json({ error: `Etiqueta "${nomeIn}" não existe ou está desativada no catálogo.` }, cors, 400);
-            if (etq === "Resolvido") await DB.prepare("UPDATE crm_contato_etiqueta SET removido_em=datetime('now') WHERE contato_id=? AND etiqueta<>'Resolvido' AND removido_em IS NULL").bind(contatoId).run();
-            else await DB.prepare("UPDATE crm_contato_etiqueta SET removido_em=datetime('now') WHERE contato_id=? AND etiqueta='Resolvido' AND removido_em IS NULL").bind(contatoId).run();
             await DB.prepare("INSERT OR IGNORE INTO crm_contato_etiqueta (contato_id, cnpj, etiqueta, origem, user_nome, obs) VALUES (?,?,?,?,?,?)")
               .bind(contatoId, cnpj, etq, "teamcheck", usr.name || usr.email || null, b.obs ? String(b.obs).slice(0, 300) : null).run();
+            // v9: fluxo BAZAR/MATCON — encerra as etapas anteriores/conflitantes da mesma pessoa
+            for (const outra of TRANSICOES_ETQ[etq] || []) {
+              await DB.prepare("UPDATE crm_contato_etiqueta SET removido_em=datetime('now') WHERE contato_id=? AND etiqueta=? AND removido_em IS NULL").bind(contatoId, outra).run();
+            }
           }
           const { results } = await DB.prepare(SEL + " AND e.contato_id=? ORDER BY e.criado_em DESC").bind(contatoId).all();
           return json({ ok: true, contato_id: contatoId, etiquetas: results || [] }, cors);

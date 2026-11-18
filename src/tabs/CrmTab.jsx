@@ -7,7 +7,7 @@ import { ListFilter, CalendarPlus, Target, Unlink, Search, ArrowLeft, MapPin, Ph
 import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca, toLocalDate, marcasCadastro, chaveMarca, HOMES, fixMojibake, SECTORS } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal, ColunasMenu, ColFiltro } from "../components";
 import { otimizar } from "./PlanejarRota";
-import { EtqChips, EtqModal, etqDosContatos, etqTodas, porContato } from "../etiquetas";
+import { EtqChips, EtqModal, etqDosContatos, etqTodas, porContato, PARA_TRANSMITIR } from "../etiquetas";
 import { etiquetasCat } from "../lib";
 
 const DASH = "https://dashboard.jordanmt.com";
@@ -641,7 +641,12 @@ function PessoasView({ token, allOrgs, excl, onOpenOrg, onPerson, q0 }) {
       return <div role="group" aria-label="Filtrar por etiqueta" style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
         <span style={{ alignSelf: "center", fontSize: 12, color: S.ts, marginRight: 2 }}>🏷️ Etiquetas:</span>
         <button onClick={() => { setFEtq([]); setVc(60); }} aria-pressed={!fEtq.length} style={pill(!fEtq.length, S.pl)}>Todas</button>
-        {nomes.map(n => { const on = fEtq.includes(n); const cor = (etiquetasCat().find(c => c.nome === n) || {}).cor || "#8899AB";
+        {/* v119: PV TRANSFORMAR em destaque — fila de pedidos a validar/transmitir no sistema da indústria */}
+        {nomes.includes(PARA_TRANSMITIR) && (() => { const on = fEtq.includes(PARA_TRANSMITIR); const n = contEtq.get(PARA_TRANSMITIR) || 0;
+          return <button onClick={() => { setFEtq(f => on ? f.filter(x => x !== PARA_TRANSMITIR) : [...f, PARA_TRANSMITIR]); setVc(60); }} aria-pressed={on} title="Etiqueta PV TRANSFORMAR: cliente aprovou, falta validar/transmitir o pedido no sistema da indústria"
+            style={{ ...pill(on, S.acc), fontWeight: 800, border: `1.5px solid ${S.acc}`, background: on ? S.acc + "33" : S.acc + "14", color: on ? S.acc : S.txt }}>
+            📤 Para transmitir<span className="num" style={{ fontSize: 11.5, fontWeight: 800, color: n ? S.acc : S.ts }}>{n}</span></button>; })()}
+        {nomes.filter(n => n !== PARA_TRANSMITIR).map(n => { const on = fEtq.includes(n); const cor = (etiquetasCat().find(c => c.nome === n) || {}).cor || "#8899AB";
           return <button key={n} onClick={() => { setFEtq(f => on ? f.filter(x => x !== n) : [...f, n]); setVc(60); }} aria-pressed={on} style={pill(on, cor)}>
             <span style={{ width: 8, height: 8, borderRadius: 4, background: cor }} />{n}<span className="num" style={{ fontSize: 11, color: on ? cor : S.ts }}>{contEtq.get(n) || 0}</span></button>; })}
       </div>; })()}
