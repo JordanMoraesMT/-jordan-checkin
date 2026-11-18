@@ -8,3 +8,5 @@ Login/sessão do TeamCheck, catálogos (`/api/config`), sync em KV, consulta de 
 - **Deploy automático:** Cloudflare → Workers e Pages → agendor-proxy → Configurações → Build, ligado a este
   repositório, diretório raiz `workers/agendor-proxy`, comando `npx wrangler deploy`, caminhos monitorados
   `workers/agendor-proxy/*`. Um push que altere esta pasta publica o Worker.
+
+_Deploy automático ligado em 17/11/2026 (Cloudflare Workers Builds, diretório raiz `workers/agendor-proxy`)._
