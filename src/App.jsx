@@ -422,7 +422,7 @@ export default function App(){
       <div className="jc-main" style={{flex:1,overflowY:"auto",padding:mob?"14px 14px 96px":"22px 28px 42px"}}><div style={{maxWidth:tab==="pdvs"||(tab.startsWith("crm")&&tab!=="crm_empresas"&&tab!=="crm_pessoas")?980:"none",margin:"0 auto"}}>
       {novaVersao&&<button onClick={atualizarApp} style={{width:"100%",display:"flex",alignItems:"center",gap:10,textAlign:"left",background:S.card,border:`1px solid ${S.pri}`,borderRadius:10,padding:"10px 12px",marginBottom:10,minHeight:44}}><RefreshCw size={16} strokeWidth={1.9} color={S.pl}/><span style={{fontSize:14,color:S.txt,flex:1}}>Saiu uma versão nova do app.</span><span style={{fontSize:13,color:S.pl,fontWeight:600,whiteSpace:"nowrap"}}>Atualizar</span></button>}
       {/* v74: um bloco só para quem está em atendimento agora (você, pendências do cliente e a equipe) */}
-      {tab==="pdvs"&&<CartaoSugestao sug={sugVisita.sug} ldId={ldId} onDispensar={sugVisita.dispensar}
+      {<CartaoSugestao sug={sugVisita.sug} ldId={ldId} onDispensar={sugVisita.dispensar}
         onCheckin={o2=>{sugVisita.limpar();checkin(o2);}}
         onCheckout={o2=>{sugVisita.limpar();setCoTarget((allOrgs||[]).find(x=>String(x.id)===String(o2.id))||o2);}}/>}
       {tab!=="config"&&(active||(teamActive&&isAdmin))&&<section aria-label="Em atendimento agora" style={{border:`1px solid ${S.brd}`,borderRadius:10,overflow:"hidden",marginBottom:12,background:S.card}}>
