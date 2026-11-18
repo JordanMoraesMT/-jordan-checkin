@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight, Gauge } from "lucide-react";
 import { chaveMarca, HOMES, API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, syncFetch, reenviarSyncPendente, temSyncPendente, unificarCidades, temCoord } from "./lib";
+import { useSugestaoVisita, CartaoSugestao, sugCheckinLigado } from "./proximidade";
 import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 const AnaliseTab=lazy(()=>import("./tabs/AnaliseTab").then(m=>({default:m.AnaliseTab})));// v75/76: análise de visitas (vendedor vê sem valores)
@@ -172,6 +173,10 @@ export default function App(){
   // v90: destino sem GPS ("Hotel (GPS ao fechar)") não conta como roteiro fechado — o aviso de fechar aparece e pede o local
   const hasEndBase=temCoord(dayBases[user?.id+"_"+today]?.end)||temCoord(dayBases[today]?.end);
   const canCloseRoute=todayVisits.length>0&&!active&&!hasEndBase;
+  // v121: check-in / check-out sugerido por proximidade (só sugere; o vendedor confirma)
+  const[sugLigado,setSugLigado]=useState(()=>sugCheckinLigado(sL("jc:user",null)));
+  useEffect(()=>{setSugLigado(sugCheckinLigado(user));},[user?.id]);// eslint-disable-line
+  const sugVisita=useSugestaoVisita({ligado:sugLigado,user,orgs:allOrgs,plocs,active,visits});
 
   const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{
     const tk=t||token;
@@ -417,6 +422,9 @@ export default function App(){
       <div className="jc-main" style={{flex:1,overflowY:"auto",padding:mob?"14px 14px 96px":"22px 28px 42px"}}><div style={{maxWidth:tab==="pdvs"||(tab.startsWith("crm")&&tab!=="crm_empresas"&&tab!=="crm_pessoas")?980:"none",margin:"0 auto"}}>
       {novaVersao&&<button onClick={atualizarApp} style={{width:"100%",display:"flex",alignItems:"center",gap:10,textAlign:"left",background:S.card,border:`1px solid ${S.pri}`,borderRadius:10,padding:"10px 12px",marginBottom:10,minHeight:44}}><RefreshCw size={16} strokeWidth={1.9} color={S.pl}/><span style={{fontSize:14,color:S.txt,flex:1}}>Saiu uma versão nova do app.</span><span style={{fontSize:13,color:S.pl,fontWeight:600,whiteSpace:"nowrap"}}>Atualizar</span></button>}
       {/* v74: um bloco só para quem está em atendimento agora (você, pendências do cliente e a equipe) */}
+      {tab==="pdvs"&&<CartaoSugestao sug={sugVisita.sug} ldId={ldId} onDispensar={sugVisita.dispensar}
+        onCheckin={o2=>{sugVisita.limpar();checkin(o2);}}
+        onCheckout={o2=>{sugVisita.limpar();setCoTarget((allOrgs||[]).find(x=>String(x.id)===String(o2.id))||o2);}}/>}
       {tab!=="config"&&(active||(teamActive&&isAdmin))&&<section aria-label="Em atendimento agora" style={{border:`1px solid ${S.brd}`,borderRadius:10,overflow:"hidden",marginBottom:12,background:S.card}}>
         {active&&<button onClick={()=>{setTab("pdvs");setFocusReq({id:active.orgId,name:active.orgName,t:Date.now()});}} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 12px",minHeight:48,border:"none",borderRadius:0,background:"transparent",textAlign:"left"}}>
           <span style={{width:8,height:8,borderRadius:4,background:S.ok,flexShrink:0}}/>
@@ -476,7 +484,7 @@ export default function App(){
       {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} plocs={plocs} dayBases={dayBases} user={user} visits={visits} token={token} bump={crmBump}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs} bump={crmBump} onCrmChange={()=>setCrmBump(b=>b+1)}/>
 
-      {tab==="config"&&<ConfigTab instEvt={instEvt} user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
+      {tab==="config"&&<ConfigTab instEvt={instEvt} sugLigado={sugLigado} setSugLigado={setSugLigado} user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
         onSync={doSync} onLoadHistory={loadHistory} onSyncPull={()=>{syncPull();setSyncStatus("Forçando sync...");}}
         onShareGPS={async()=>{if(!Object.keys(plocs).length){alert("Nenhum GPS salvo");return;}setSyncStatus("Enviando GPS...");try{const r=await syncFetch(`plocs`);const d=await r.json();const merged={...(d.active||{}),...plocs};await syncFetch(`plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:merged})});setSyncStatus(`${Object.keys(merged).length} GPS enviados!`);}catch(e){setSyncStatus("Erro: "+e.message);}}}
         onShowDB={()=>setShowDB(true)} onShowEnd={()=>setShowEndDay(true)}

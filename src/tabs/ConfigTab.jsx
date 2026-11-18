@@ -1,5 +1,6 @@
 // TeamCheck — aba ConfigTab
 import { useState } from "react";
+import { InterruptorSugestao } from "../proximidade";
 import { HOMES, TZ, S, DASH, API, csv, getBase, getEnd, sL, sS, normBusca, syncFetch } from "../lib";
 import { HotelGeoInput, ProgressBar } from "../components";
 import { ConfigCatalogos } from "./ConfigCatalogos";
@@ -37,7 +38,7 @@ const ARow=({emo,t,d,onClick,disabled,color})=>{const cor=color||S.pri;return(
     <span className="cf-bar" style={{position:"absolute",left:0,bottom:0,height:3,width:"100%",background:cor,transform:"scaleX(0)",transformOrigin:"left",transition:"transform .3s"}}/>
   </div>
 );};
-function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStatus,syncing,syncMsg,onSync,onLoadHistory,onSyncPull,onShareGPS,onShowDB,onShowEnd,onDeleteGPS,onSaveGPS,onClearVisits,onClearAllGPS,onLogout,doSync}){
+function ConfigTab({instEvt,sugLigado,setSugLigado,user,orgs,allOrgs,token,visits,plocs,dayBases,today,syncStatus,syncing,syncMsg,onSync,onLoadHistory,onSyncPull,onShareGPS,onShowDB,onShowEnd,onDeleteGPS,onSaveGPS,onClearVisits,onClearAllGPS,onLogout,doSync}){
   const[gpsSearch,setGpsSearch]=useState("");const[histLoading,setHistLoading]=useState(false);const[shareLoading,setShareLoading]=useState(false);
   const[gpsAddSearch,setGpsAddSearch]=useState("");const[gpsAddTarget,setGpsAddTarget]=useState(null);const[gpsAddLat,setGpsAddLat]=useState(null);const[gpsAddLng,setGpsAddLng]=useState(null);
   const gpsResults=gpsSearch.trim().length>=2?orgs.filter(o=>{const q=normBusca(gpsSearch).replace(/[.\-\/]/g,"");return plocs[o.id]&&normBusca([o.name,o.nickname,o.cnpj?.replace(/[.\-\/]/g,"")].filter(Boolean).join(" ")).includes(q);}).slice(0,10):[];
@@ -109,6 +110,9 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
       </div>
       <p style={{fontSize:11,color:S.td,margin:"8px 0 0"}}>Mesmo sistema de temas do Dashboard. A escolha fica salva neste aparelho.</p>
     </div>
+    {setSugLigado&&<div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem",marginBottom:12,boxShadow:S.shadow}}>
+      <InterruptorSugestao user={user} valor={!!sugLigado} onChange={setSugLigado}/>
+    </div>}
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(240px,1fr))",gap:12,marginBottom:12}}>
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
       <p style={{fontSize:14,fontWeight:700,margin:"0 0 6px",color:S.txt}}>{user?.name}</p>
@@ -118,7 +122,7 @@ function ConfigTab({instEvt,user,orgs,allOrgs,token,visits,plocs,dayBases,today,
     <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:14,padding:"16px 18px"}}>
       <p style={{fontSize:12.5,color:S.t2,margin:0}}>{orgs.length} clientes · {visits.length} visitas · {Object.keys(plocs).length} GPS</p>
       <p className="mono" style={{fontSize:11.5,color:syncStatus.startsWith?.("Erro")?S.dng:S.pl,margin:"6px 0 0"}}>Sync {syncStatus||"aguardando..."}</p>
-      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v120</p>
+      <p className="mono" style={{fontSize:11,color:S.td,margin:"3px 0 0"}}>User {user?.id} · Polling 15s · TZ Cuiabá · v121</p>
     </div>
     </div>
     <ProgressBar active={syncing||histLoading||shareLoading} msg={syncing?syncMsg:histLoading?"Carregando historico...":"Enviando GPS..."}/>

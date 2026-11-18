@@ -1,4 +1,8 @@
-// agendor-proxy — v12 (18/nov/2026)
+// agendor-proxy — v13 (18/nov/2026)
+// Novidade da v13: o evento "uso" do log_acesso NÃO é gravado quando o cabeçalho Origin vem vazio (chamada de
+//   servidor para servidor, ex.: o /me que o Dashboard faz pelo Cloudflare). Era ruído com IP do Cloudflare; desde a
+//   v360 o próprio Dashboard grava o uso com o IP real. Logins, logout, reset etc. continuam sendo gravados sempre.
+// --- v12 (18/nov/2026) ---
 // Novidade da v12 — registro de acessos por 6 meses (Marco Civil da Internet, art. 15):
 //   Tabela log_acesso no D1 (criada sozinha): evento, e-mail, IP, origem (Origin), navegador (200 caracteres), data/hora.
 //   Eventos: login_ok, login_falha, login_bloqueado (429), logout, forgot, reset_ok, reset_falha, convite,
@@ -644,6 +648,7 @@ async function usoDiario(env, request, email) {
     if (!email) return;
     const em = String(email).toLowerCase().slice(0, 200);
     const m = metaReq(request);
+    if (!m.origem) return;   // v13: servidor→servidor (sem Origin) não conta como uso
     const dia = new Date(Date.now() - 4 * 3600000).toISOString().slice(0, 10);
     const chave = em + "|" + m.ip + "|" + dia;
     if (_usoVisto.has(chave)) return;
