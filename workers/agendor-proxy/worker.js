@@ -1,4 +1,25 @@
-// agendor-proxy — v9 (nov/2026)
+// agendor-proxy — v10 (17/nov/2026) — SEGURANÇA
+// Novidades da v10 (auditoria de 17/11/2026):
+//   1. /api/config exige sessão (X-Session) em GET e POST. O TeamCheck já enviava a sessão — nada muda no app.
+//      op "delete" continua só para admin.
+//   2. ?sync= e ?cnpj= — chave SYNC_EXIGE_SESSAO (variável do Worker):
+//        · ausente/0 (TRANSIÇÃO): sem sessão ainda funciona (compatível com o app atual); COM sessão, ela é conferida.
+//        · "1" (FECHADO): sem sessão válida → 401. Ligar DEPOIS que o TeamCheck passar a mandar X-Session nessas chamadas.
+//      Nome da chave do sync limitado a [A-Za-z0-9_.:-] e corpo do PUT a 5 MB. ?cnpj= só aceita 14 dígitos.
+//   3. Limite de tentativas (tabela auth_tentativa no D1, criada sozinha):
+//        · /login: 6 erros do mesmo e-mail na mesma conexão, 30 do e-mail no total ou 25 da conexão, em 15 min → 429
+//          (um estranho não consegue travar o seu login de casa só errando a sua senha de outro lugar)
+//        · /forgot: 3 códigos por e-mail ou 10 por IP por hora → 429 (antes dava para pedir códigos sem fim,
+//          zerando as 5 tentativas a cada pedido, e encher a caixa de e-mail da pessoa)
+//        · /reset: 15 erros por IP em 15 min → 429 (somado às 5 tentativas por código que já existiam)
+//        · /admin/criar-acesso: 5 erros por IP em 15 min; chave comparada em tempo constante e exige ADMIN_KEY ≥ 32 caracteres
+//   4. CORS só para os endereços da Jordan (lista ORIGENS + extensão do Chrome + variável CORS_EXTRA, separada por vírgula).
+//      Chamadas sem Origin (servidor→servidor) seguem iguais.
+//   5. Troca de senha (/reset) encerra as outras sessões daquela pessoa.
+//   6. POST /admin/encerrar-sessoes (admin logado) — encerra TODAS as sessões abertas, menos a sua. Body opcional
+//      { email } para encerrar só as de uma pessoa.
+//   7. E-mails (tarefas, convite, código) escapam o texto vindo do banco — nada de HTML injetado.
+//   8. Cron: limpa auth_tentativa com mais de 2 dias.
 // Novidade da v9:
 //   Etiquetas: a regra "Resolvido" saiu (a etiqueta não existe mais). Entra o fluxo BAZAR / MATCON, igual ao do agente
 //   (agente-whatsapp/src/etiquetas.js): COTAÇÃO → AGUARD APROV → PV TRANSFORMAR → FINALIZADO. Ao colocar uma etiqueta,
@@ -49,16 +70,36 @@ const TRANSICOES_ETQ = {
   "PV TRANSFORMAR": [...ETQ_COT, ...ETQ_AGU],
 };
 
+// v10 — origens que podem chamar este Worker pelo navegador (CORS). Outras origens não recebem o cabeçalho
+// e o navegador bloqueia a resposta. Para incluir um endereço sem mexer no código: variável CORS_EXTRA.
+const ORIGENS = [
+  "https://teamcheck.jordanmt.com",
+  "https://jordan-checkin.vercel.app",
+  "https://dashboard.jordanmt.com",
+  "https://catalogo.jordanmt.com",
+  "https://promocoes.jordanmt.com",
+  "http://localhost:5173",
+  "http://localhost:3000",
+];
+function corsPara(request, env) {
+  const o = request.headers.get("Origin") || "";
+  const extra = String(env.CORS_EXTRA || "").split(",").map(s => s.trim()).filter(Boolean);
+  const base = { "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS", "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session", "Vary": "Origin" };
+  if (!o) return base;                                     // servidor→servidor: CORS não se aplica
+  if (ORIGENS.includes(o) || extra.includes(o) || o.startsWith("chrome-extension://")) return { ...base, "Access-Control-Allow-Origin": o };
+  return null;                                             // origem desconhecida
+}
+const SYNC_CHAVE_OK = /^[A-Za-z0-9_.:-]{1,120}$/;
+const SYNC_MAX_BYTES = 5 * 1024 * 1024;
+
 export default {
   async fetch(request, env) {
-    const cors = {
-      "Access-Control-Allow-Origin": "*",
-      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Session",
-    };
-    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+    const corsOk = corsPara(request, env);
+    if (request.method === "OPTIONS") return corsOk ? new Response(null, { status: 204, headers: corsOk }) : new Response(null, { status: 403 });
+    const cors = corsOk || { "Vary": "Origin" };
     const url = new URL(request.url);
     const path = url.pathname;
+    const ip = request.headers.get("CF-Connecting-IP") || "";
 
     // ===== AUTH: login =====
     if (path === "/login") {
@@ -67,11 +108,15 @@ export default {
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
       if (!email || !password) return json({ error: "Informe e-mail e senha" }, cors, 400);
+      // v10: trava de tentativa e erro (por e-mail e por conexão)
+      if (await excedeu(env, "login", [["par", email + "|" + ip, 6], ["email", email, 30], ["ip", ip, 25]], 15)) {
+        return json({ error: "Muitas tentativas. Aguarde 15 minutos e tente de novo." }, cors, 429);
+      }
       const raw = await env.SYNC_KV.get("auth:user:" + email);
-      if (!raw) return json({ error: "E-mail ou senha incorretos" }, cors, 401);
+      if (!raw) { await registrar(env, "login", email, ip); return json({ error: "E-mail ou senha incorretos" }, cors, 401); }
       const u = JSON.parse(raw);
       const calc = await pbkdf2(password, u.pw.salt, u.pw.iter);
-      if (!eqHex(calc, u.pw.hash)) return json({ error: "E-mail ou senha incorretos" }, cors, 401);
+      if (!eqHex(calc, u.pw.hash)) { await registrar(env, "login", email, ip); return json({ error: "E-mail ou senha incorretos" }, cors, 401); }
       const session = randHex(32);
       await env.SYNC_KV.put("auth:session:" + session, JSON.stringify({ email }), { expirationTtl: 60 * 60 * 24 * 30 });
       return json({ ok: true, session, name: u.name, role: u.role, userId: u.userId, email }, cors);
@@ -102,6 +147,11 @@ export default {
       let body; try { body = await request.json(); } catch { return json({ error: "json invalido" }, cors, 400); }
       const email = String(body.email || "").trim().toLowerCase();
       if (!email) return json({ error: "Informe o e-mail" }, cors, 400);
+      // v10: no máximo 3 códigos por e-mail (10 por conexão) por hora — conta TODO pedido, exista o e-mail ou não
+      if (await excedeu(env, "forgot", [["email", email, 3], ["ip", ip, 10]], 60)) {
+        return json({ error: "Você já pediu vários códigos. Use o último que chegou ou aguarde 1 hora." }, cors, 429);
+      }
+      await registrar(env, "forgot", email, ip);
       const raw = await env.SYNC_KV.get("auth:user:" + email);
       // Resposta genérica se não existe (não revela cadastro)
       if (!raw) return json({ ok: true }, cors);
@@ -125,6 +175,7 @@ export default {
       const password = String(body.password || "");
       if (!email || !code || !password) return json({ error: "Preencha e-mail, código e nova senha" }, cors, 400);
       if (password.length < 8) return json({ error: "A nova senha precisa ter ao menos 8 caracteres" }, cors, 400);
+      if (await excedeu(env, "reset", [["ip", ip, 15]], 15)) return json({ error: "Muitas tentativas. Aguarde 15 minutos." }, cors, 429);
       const rr = await env.SYNC_KV.get("auth:reset:" + email);
       if (!rr) return json({ error: "Código expirado ou inválido. Peça um novo." }, cors, 400);
       const rec = JSON.parse(rr);
@@ -136,6 +187,7 @@ export default {
         const tries = (rec.tries || 0) + 1;
         const left = 5 - tries;
         const ttl = Math.max(60, Math.floor((rec.exp - now) / 1000));
+        await registrar(env, "reset", email, ip);
         if (left <= 0) { await env.SYNC_KV.delete("auth:reset:" + email); return json({ error: "Muitas tentativas. Peça um novo código." }, cors, 429); }
         await env.SYNC_KV.put("auth:reset:" + email, JSON.stringify({ ...rec, tries }), { expirationTtl: ttl });
         return json({ error: "Código incorreto. Tentativas restantes: " + left }, cors, 400);
@@ -149,13 +201,33 @@ export default {
       u.pw = { salt: nsalt, hash: nhash, iter: 100000 };
       await env.SYNC_KV.put("auth:user:" + email, JSON.stringify(u));
       await env.SYNC_KV.delete("auth:reset:" + email);
+      // v10: senha nova derruba as sessões antigas dessa pessoa (quem tinha a senha antiga perde o acesso)
+      await encerrarSessoes(env, email, null);
       return json({ ok: true }, cors);
+    }
+
+    // ===== ADMIN: encerrar sessões (v10) — requer sessão de ADMIN =====
+    // Sem body: encerra TODAS as sessões, menos a de quem chamou. { email }: só as dessa pessoa.
+    if (path === "/admin/encerrar-sessoes") {
+      if (request.method !== "POST") return json({ error: "method" }, cors, 405);
+      const adm = await sessaoAdmin(request, env);
+      if (!adm) return json({ error: "apenas administrador logado" }, cors, 403);
+      let b = {}; try { b = await request.json(); } catch {}
+      const alvo = b && b.email ? String(b.email).trim().toLowerCase() : null;
+      const n = await encerrarSessoes(env, alvo, request.headers.get("X-Session"));
+      return json({ ok: true, encerradas: n, alvo: alvo || "todas (menos a sua)" }, cors);
     }
 
     // ===== ADMIN: criar acesso manual (mantido; requer X-Admin-Key) =====
     if (path === "/admin/criar-acesso") {
       if (request.method !== "POST") return json({ error: "method" }, cors, 405);
-      if (!env.ADMIN_KEY || request.headers.get("X-Admin-Key") !== env.ADMIN_KEY) return json({ error: "nao autorizado" }, cors, 403);
+      // v10: chave forte (≥ 32), comparação em tempo constante e trava de tentativas por conexão
+      if (await excedeu(env, "adminkey", [["ip", ip, 5]], 15)) return json({ error: "nao autorizado" }, cors, 429);
+      const chave = String(request.headers.get("X-Admin-Key") || "");
+      if (!env.ADMIN_KEY || String(env.ADMIN_KEY).length < 32 || !eqTexto(chave, String(env.ADMIN_KEY))) {
+        await registrar(env, "adminkey", "", ip);
+        return json({ error: "nao autorizado" }, cors, 403);
+      }
       let body; try { body = await request.json(); } catch { return json({ error: "json invalido" }, cors, 400); }
       const email = String(body.email || "").trim().toLowerCase();
       const nome = String(body.nome || "").trim();
@@ -229,6 +301,9 @@ export default {
 
     // ===== CONFIG: catálogos do CRM — D1 =====
     if (path === "/api/config") {
+      // v10: antes era aberto a qualquer pessoa (lia usuários/e-mails e criava/renomeava cadastros sem login)
+      const usrCfg = await sessaoUsuario(request, env);
+      if (!usrCfg) return json({ error: "sessao" }, cors, 401);
       const DB = env.DASHBOARD_DB;
       try {
         if (request.method === "GET") {
@@ -394,10 +469,23 @@ export default {
       return json({ ok: true, total: ids.length, migrados: ok, ignorados: skip }, cors);
     }
 
-    // ===== SYNC (KV) — inalterado =====
+    // ===== v10: portão do SYNC e do CNPJ =====
+    // SYNC_EXIGE_SESSAO="1" → sessão obrigatória. Sem a variável (transição) → sessão conferida SE vier.
+    if (url.searchParams.has("sync") || url.searchParams.has("cnpj")) {
+      const temSessao = !!request.headers.get("X-Session");
+      const exige = String(env.SYNC_EXIGE_SESSAO || "") === "1";
+      if (temSessao || exige) {
+        const u = await sessaoUsuario(request, env);
+        if (!u) return json({ error: "sessao" }, cors, 401);
+      }
+    }
+
+    // ===== SYNC (KV) =====
     if (url.searchParams.has("sync")) {
       const uid = url.searchParams.get("sync");
       if (!uid) return json({ error: "missing sync id" }, cors);
+      if (!SYNC_CHAVE_OK.test(uid)) return json({ error: "sync id invalido" }, cors, 400);
+      if (request.method === "PUT" && Number(request.headers.get("Content-Length") || 0) > SYNC_MAX_BYTES) return json({ error: "conteudo grande demais" }, cors, 413);
       try {
         if (request.method === "GET") {
           const d = await env.SYNC_KV.get("visit:" + uid);
@@ -405,6 +493,7 @@ export default {
         }
         if (request.method === "PUT") {
           const body = await request.text();
+          if (body.length > SYNC_MAX_BYTES) return json({ error: "conteudo grande demais" }, cors, 413);
           const durable = (uid === "dayBases" || uid === "plocs" || uid.startsWith("visits_") || uid === "analisePremissas" || uid.startsWith("semana_"));
           await env.SYNC_KV.put("visit:" + uid, body, durable ? {} : { expirationTtl: 86400 });
           return json({ ok: true }, cors);
@@ -418,10 +507,12 @@ export default {
       }
     }
 
-    // ===== CNPJ (BrasilAPI) — inalterado =====
+    // ===== CNPJ (BrasilAPI) — v10: só 14 dígitos (antes repassava qualquer texto para a BrasilAPI) =====
     if (url.searchParams.has("cnpj")) {
+      const cnpjQ = String(url.searchParams.get("cnpj") || "").replace(/\D/g, "");
+      if (cnpjQ.length !== 14) return json({ error: "cnpj invalido" }, cors, 400);
       try {
-        const r = await fetch("https://brasilapi.com.br/api/cnpj/v1/" + url.searchParams.get("cnpj"));
+        const r = await fetch("https://brasilapi.com.br/api/cnpj/v1/" + cnpjQ);
         const data = await r.text();
         return new Response(data, { status: r.status, headers: { "Content-Type": "application/json", ...cors } });
       } catch (e) {
@@ -436,8 +527,67 @@ export default {
   // Acionador Cron: "0 11 * * 1,3,5"  (11:00 UTC = 07:00 em Cuiabá)
   async scheduled(event, env, ctx) {
     ctx.waitUntil(enviarAlertasTarefas(env));
+    // v10: limpeza do registro de tentativas
+    ctx.waitUntil((async () => { try { await garantirTentativa(env); await env.DASHBOARD_DB.prepare("DELETE FROM auth_tentativa WHERE criado_em < datetime('now','-2 days')").run(); } catch (e) {} })());
   },
 };
+
+// ───────────────────────── v10: trava de tentativas (D1) ─────────────────────────
+// Uma linha por tentativa que conta (erro de login, pedido de código, erro de código, chave admin errada).
+let _tentativaPronta = false;
+async function garantirTentativa(env) {
+  if (_tentativaPronta || !env.DASHBOARD_DB) return;
+  await env.DASHBOARD_DB.prepare(
+    "CREATE TABLE IF NOT EXISTS auth_tentativa (id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT NOT NULL, email TEXT, ip TEXT, criado_em TEXT DEFAULT (datetime('now')))"
+  ).run();
+  await env.DASHBOARD_DB.prepare("CREATE INDEX IF NOT EXISTS ix_auth_tentativa ON auth_tentativa (tipo, criado_em)").run();
+  _tentativaPronta = true;
+}
+async function registrar(env, tipo, email, ip) {
+  try { await garantirTentativa(env); await env.DASHBOARD_DB.prepare("INSERT INTO auth_tentativa (tipo,email,ip) VALUES (?,?,?)").bind(tipo, email || "", ip || "").run(); } catch (e) {}
+}
+// regras: [["email"|"ip", valor, limite], ...] dentro da janela (minutos). Falha do D1 nunca bloqueia o login.
+async function excedeu(env, tipo, regras, minutos) {
+  try {
+    await garantirTentativa(env);
+    for (const [campo, valor, limite] of regras) {
+      if (!valor) continue;
+      const r = await env.DASHBOARD_DB.prepare(
+        campo === "par"
+          ? "SELECT COUNT(*) n FROM auth_tentativa WHERE tipo=? AND (email || '|' || ip)=? AND criado_em > datetime('now', ?)"
+          : `SELECT COUNT(*) n FROM auth_tentativa WHERE tipo=? AND ${campo === "ip" ? "ip" : "email"}=? AND criado_em > datetime('now', ?)`
+      ).bind(tipo, valor, `-${minutos} minutes`).first();
+      if (((r && r.n) || 0) >= limite) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+// Encerra sessões no KV. email=null → todas; exceto = token que fica.
+async function encerrarSessoes(env, email, exceto) {
+  let cursor, n = 0;
+  do {
+    const l = await env.SYNC_KV.list({ prefix: "auth:session:", cursor });
+    for (const k of l.keys) {
+      const tok = k.name.slice("auth:session:".length);
+      if (exceto && tok === exceto) continue;
+      if (email) {
+        const v = await env.SYNC_KV.get(k.name);
+        let em = ""; try { em = JSON.parse(v || "{}").email || ""; } catch {}
+        if (em !== email) continue;
+      }
+      await env.SYNC_KV.delete(k.name); n++;
+    }
+    cursor = l.list_complete ? undefined : l.cursor;
+  } while (cursor);
+  return n;
+}
+function eqTexto(a, b) {
+  const ea = new TextEncoder().encode(a), eb = new TextEncoder().encode(b);
+  let r = ea.length ^ eb.length;
+  for (let i = 0; i < Math.max(ea.length, eb.length); i++) r |= (ea[i] || 0) ^ (eb[i] || 0);
+  return r === 0;
+}
+function escH(x) { return String(x == null ? "" : x).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -564,7 +714,7 @@ function casca(inner) {
 }
 
 async function sendResetEmail(env, toEmail, toName, code) {
-  const nome = toName ? (" " + toName.split(" ")[0]) : "";
+  const nome = toName ? (" " + escH(toName.split(" ")[0])) : "";
   const html = casca(`
     <p style="margin:0 0 14px;font-size:14px;color:#E8ECF1;text-align:center">Olá${nome}, use o código abaixo para redefinir sua senha:</p>
     <div style="font-size:34px;font-weight:bold;letter-spacing:8px;color:#0578A6;background:#0F1B2D;border:1px solid #243349;border-radius:10px;padding:16px 0;margin:0 0 14px;text-align:center">${code}</div>
@@ -573,13 +723,13 @@ async function sendResetEmail(env, toEmail, toName, code) {
 }
 
 async function sendConviteEmail(env, toEmail, toName, code, quemConvidou) {
-  const nome = toName ? (" " + toName.split(" ")[0]) : "";
+  const nome = toName ? (" " + escH(toName.split(" ")[0])) : "";
   const html = casca(`
-    <p style="margin:0 0 12px;font-size:14px;color:#E8ECF1">Olá${nome}! <b>${quemConvidou}</b> criou um acesso para você no <b>TeamCheck</b>, o app de campo e CRM da Jordan Representações.</p>
+    <p style="margin:0 0 12px;font-size:14px;color:#E8ECF1">Olá${nome}! <b>${escH(quemConvidou)}</b> criou um acesso para você no <b>TeamCheck</b>, o app de campo e CRM da Jordan Representações.</p>
     <p style="margin:0 0 8px;font-size:13px;color:#8899AB">Para criar sua senha:</p>
     <ol style="margin:0 0 16px;padding-left:20px;font-size:13px;color:#E8ECF1;line-height:1.8">
       <li>Abra <a href="https://jordan-checkin.vercel.app" style="color:#0AAEE8">jordan-checkin.vercel.app</a></li>
-      <li>Digite seu e-mail (<b>${toEmail}</b>) e toque em <b>"Primeiro acesso — tenho um código"</b></li>
+      <li>Digite seu e-mail (<b>${escH(toEmail)}</b>) e toque em <b>"Primeiro acesso — tenho um código"</b></li>
       <li>Informe o código abaixo e crie sua senha</li>
     </ol>
     <div style="font-size:34px;font-weight:bold;letter-spacing:8px;color:#2A9D8F;background:#0F1B2D;border:1px solid #243349;border-radius:10px;padding:16px 0;margin:0 0 14px;text-align:center">${code}</div>
@@ -588,11 +738,11 @@ async function sendConviteEmail(env, toEmail, toName, code, quemConvidou) {
 }
 
 async function sendTarefasEmail(env, toEmail, toName, tarefas, semana) {
-  const nome = toName ? (" " + toName.split(" ")[0]) : "";
+  const nome = toName ? (" " + escH(toName.split(" ")[0])) : "";
   const hoje = hojeCuiaba();
   const linha = (t, corPrazo) => `
     <tr>
-      <td style="padding:8px 10px;border-bottom:1px solid #243349;font-size:12.5px;color:#E8ECF1"><b>${(t.org_nome || "—")}</b><br><span style="color:#8899AB">${(t.texto || "").slice(0, 120)}</span></td>
+      <td style="padding:8px 10px;border-bottom:1px solid #243349;font-size:12.5px;color:#E8ECF1"><b>${escH(t.org_nome || "—")}</b><br><span style="color:#8899AB">${escH((t.texto || "").slice(0, 120))}</span></td>
       <td style="padding:8px 10px;border-bottom:1px solid #243349;font-size:12px;color:${corPrazo};white-space:nowrap;text-align:right">${t.due_em ? fmtCuiaba(t.due_em) : "sem prazo"}</td>
     </tr>`;
   const grupo = (titulo, cor, lista) => lista.length ? `

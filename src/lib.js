@@ -82,6 +82,46 @@ async function pendenciasDe(token,orgId,cnpj){
 }
 function sL(k,f){try{return JSON.parse(localStorage.getItem(k))||f;}catch{return f;}}
 function sS(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){console.warn("sync:",e);}}
+// v120: toda chamada ao sync (?sync=) e ao CNPJ reserva (?cnpj=) do agendor-proxy leva a sessão (X-Session).
+// 401 = sessão vencida → avisa o App (vai para o login SEM apagar nada do aparelho).
+// GET com 401 lança erro (a rotina para: não grava lista vazia por cima da nuvem).
+// PUT/DELETE com 401 fica guardado em "jc:sync-pend" e é reenviado depois do login (reenviarSyncPendente).
+const SYNC_PEND="jc:sync-pend";
+const sessaoAtual=()=>{const t=sL("jc:session","");return typeof t==="string"?t:"";};
+let _expAvisada=0;
+function avisaSessaoExpirada(){const t=Date.now();if(t-_expAvisada<3000)return;_expAvisada=t;try{window.dispatchEvent(new Event("jc:sessao-expirada"));}catch{}}
+function erroSessao(){const e=new Error("Sessão expirada — entre de novo.");e.sessao=true;return e;}
+async function syncFetch(chave,opts={}){
+  const tok=sessaoAtual();const method=String(opts.method||"GET").toUpperCase();
+  const headers={...(opts.headers||{})};if(tok)headers["X-Session"]=tok;
+  const r=await fetch(`${API}?sync=${chave}`,{...opts,headers});
+  if(r.status===401){
+    if(method!=="GET"){const p=sL(SYNC_PEND,{});p[chave]={method,body:typeof opts.body==="string"?opts.body:null,em:Date.now()};sS(SYNC_PEND,p);}
+    avisaSessaoExpirada();throw erroSessao();
+  }
+  return r;
+}
+const temSyncPendente=()=>Object.keys(sL(SYNC_PEND,{})).length>0;
+// Reenvia o que ficou pendente. GPS (plocs) e visitas (visits_*) são JUNTADOS com a nuvem, não sobrescritos.
+async function reenviarSyncPendente(){
+  const pend=sL(SYNC_PEND,{});const chaves=Object.keys(pend).sort((a,b)=>(pend[a].em||0)-(pend[b].em||0));
+  let ok=0,falha=0;
+  for(const k of chaves){const it=pend[k];
+    try{
+      let body=it.body;
+      if(it.method==="PUT"&&body&&(k==="plocs"||k.startsWith("visits_"))){
+        const loc=(JSON.parse(body)||{}).active;const nuv=(await (await syncFetch(k,{cache:"no-store"})).json()||{}).active;
+        if(k==="plocs"){const m={...(nuv||{}),...(loc||{})};sL("jc:deletedGPS",[]).forEach(id=>{delete m[id];});body=JSON.stringify({active:m});}
+        else{const id=v=>v.orgId+"|"+(v.userName||"")+"|"+v.checkinTime;const vistos=new Set();const all=[];
+          [...(Array.isArray(loc)?loc:[]),...(Array.isArray(nuv)?nuv:[])].forEach(v=>{const c=id(v);if(!vistos.has(c)){vistos.add(c);all.push(v);}});
+          body=JSON.stringify({active:all.slice(0,200)});}
+      }
+      const r=await syncFetch(k,{method:it.method,headers:body?{"Content-Type":"application/json"}:{},...(body?{body}:{})});
+      if(r.ok){const p=sL(SYNC_PEND,{});if(p[k]&&p[k].em===it.em){delete p[k];sS(SYNC_PEND,p);}ok++;}else falha++;
+    }catch(e){falha++;if(e.sessao)break;}
+  }
+  return{ok,falha};
+}
 // 2º parâmetro carrega a SESSÃO (autenticação no Worker)
 // Config (catálogos no D1 via Worker /api/config): usuários, segmentos, status, indústrias, origens
 let ETIQUETAS=[], ETQ_COR={}; // v118
@@ -197,7 +237,9 @@ function fixMojibake(s){
   return best;
 }
 function strip(o){const a=o.address||{};const desc=fixMojibake(o.description||"");return{id:o.id,name:fixMojibake(o.name||""),nickname:fixMojibake(o.nickname||""),legalName:fixMojibake(o.legalName||""),cnpj:o.cnpj||"",cat:o.category?.name||"",sector:o.sector?.name||"",products:(o.products||[]).map(p=>p.name).join(", "),owner:o.ownerUser?.name||"",ownerId:o.ownerUser?.id||null,grupo:desc.startsWith("Grupo:")?desc:"",addr:{street:fixMojibake(a.streetName||a.street||""),number:a.streetNumber||a.number||"",district:fixMojibake(a.district||a.neighborhood||""),city:fixMojibake(a.city||""),city_name:fixMojibake(a.city_name||a.city||""),state:a.state||""},people:(o.people||[]).map(p=>p.name).join(", "),email:o.contact?.email||"",phone:o.contact?.whatsapp||o.contact?.work||o.contact?.mobile||"",ranking:o.ranking||0};}
-async function fetchCNPJ(cnpj){const clean=cnpj.replace(/[.\-\/]/g,"");try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);if(r.ok)return r.json();}catch{}const r2=await fetch(`${API}?cnpj=${clean}`);if(!r2.ok)throw new Error("CNPJ nao encontrado");return r2.json();}
+async function fetchCNPJ(cnpj){const clean=String(cnpj||"").replace(/\D/g,"");if(clean.length!==14)throw new Error("CNPJ precisa ter 14 dígitos");try{const r=await fetch(`https://brasilapi.com.br/api/cnpj/v1/${clean}`);if(r.ok)return r.json();}catch{}
+  // v120: reserva pelo agendor-proxy — com a sessão e só os 14 dígitos
+  const tok=sessaoAtual();const r2=await fetch(`${API}?cnpj=${clean}`,{headers:tok?{"X-Session":tok}:{}});if(r2.status===401){avisaSessaoExpirada();throw erroSessao();}if(!r2.ok)throw new Error("CNPJ nao encontrado");return r2.json();}
 // ─── Base do dia (origem/destino) ───
 // v90: uma base só vale com coordenada. O destino "Hotel (GPS ao fechar)" nasce sem lat/lng e, se o roteiro
 // não era fechado, o cálculo usava (0,0) → ~8.300 km de "retorno". Base sem coordenada nunca entra no cálculo.
@@ -276,4 +318,5 @@ function getVCoord(v,plocs){if(v.lat&&v.lng)return{lat:v.lat,lng:v.lng};if(plocs
 function getVEndCoord(v,plocs){if(!checkoutEsquecido(v)&&v.checkoutLat&&v.checkoutLng)return{lat:v.checkoutLat,lng:v.checkoutLng};return getVCoord(v,plocs);}
 const MIN_OBS=50;
 
+export {syncFetch, reenviarSyncPendente, temSyncPendente};
 export {etiquetasCat, corEtiqueta, jornadaDia, minDiaCba, chaveMarca, marcasCadastro, _bk as chaveTexto, normBusca, contemBusca, cidadeCanon, unificarCidades, PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl, temCoord, checkoutEsquecido, saidaEfetiva, dedupVisitas };

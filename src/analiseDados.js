@@ -1,6 +1,6 @@
 // TeamCheck — carga compartilhada da Análise de visitas (v79)
 // Uma só leitura (com cache de 10 min) serve a Análise, o Rotas › Planejar, o cartão da semana e o balão "perto daqui".
-import { API, DASH, USERS } from "./lib";
+import { API, DASH, USERS, syncFetch } from "./lib";
 import { INDUSTRIAS, PREMISSAS_PADRAO, setTramTaxas } from "./analiseVisitas.js";
 
 const k14 = x => String(x || "").replace(/\D/g, "").padStart(14, "0");
@@ -10,13 +10,13 @@ let cacheBase = null, cachePrem = null;
 
 export function carregarPremissas(forcar = false) {
   if (cachePrem && !forcar && Date.now() - cachePrem.t < DEZ_MIN) return cachePrem.p;
-  const p = fetch(`${API}?sync=analisePremissas`).then(r => r.json()).then(d => d && d.active && d.active.inicio
+  const p = syncFetch(`analisePremissas`).then(r => r.json()).then(d => d && d.active && d.active.inicio
     ? { ...PREMISSAS_PADRAO, ...d.active, taxas: { ...PREMISSAS_PADRAO.taxas, ...(d.active.taxas || {}) } } : PREMISSAS_PADRAO).catch(() => PREMISSAS_PADRAO);
   cachePrem = { t: Date.now(), p }; return p;
 }
 export async function salvarPremissas(p) {
   cachePrem = { t: Date.now(), p: Promise.resolve(p) };
-  await fetch(`${API}?sync=analisePremissas`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: p }) });
+  await syncFetch(`analisePremissas`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: p }) });
 }
 
 /** check-outs desde o início + vendas por cliente×representada (período e 12 meses) */
@@ -36,7 +36,7 @@ export function carregarBase(token, inicio, hoje) {
     porInd(pIni, pFim), porInd(p12, pFim),
     fetch(`${DASH}/api/crm/tram-taxas`, H).then(r => r.ok ? r.json() : null).catch(() => null),
     // v88: visitas do app (têm check-in E check-out) — últimas 200 de cada usuário
-    Promise.all((USERS || []).map(u => fetch(`${API}?sync=visits_${u.id}`, { cache: "no-store" }).then(r => r.json()).then(d => Array.isArray(d && d.active) ? d.active : []).catch(() => []))).then(l => l.flat()),
+    Promise.all((USERS || []).map(u => syncFetch(`visits_${u.id}`, { cache: "no-store" }).then(r => r.json()).then(d => Array.isArray(d && d.active) ? d.active : []).catch(() => []))).then(l => l.flat()),
   ]).then(([a, v, f, tt, kv]) => {
     setTramTaxas(tt); // v87: taxa Tramontina por cliente direto dos extratos (sem rota → foto de tramTaxas.js)
     const ok = !!(a && a.atividades);

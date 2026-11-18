@@ -67,7 +67,7 @@ const IcEye=({off})=>(off
 
 
 const LB=({t,children})=><div style={{marginBottom:6}}><p style={{fontSize:10,color:S.ts,margin:"0 0 2px",textTransform:"uppercase",letterSpacing:.5}}>{t}</p>{children}</div>;
-function Login({onLogin}){
+function Login({onLogin,aviso}){
   useEffect(()=>{if(!document.getElementById("tclg-fonts")){const l=document.createElement("link");l.id="tclg-fonts";l.rel="stylesheet";l.href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap";document.head.appendChild(l);}},[]);
   const SS=(k,d)=>{try{const v=sessionStorage.getItem(k);return v==null?d:v;}catch{return d;}};
   const[mode,setMode0]=useState(()=>SS("tc:lmode","login"));
@@ -93,6 +93,7 @@ function Login({onLogin}){
         <div className="tclg-sub">Representação Inteligente · Jordan Representações</div>
       </div>
       <div className="tclg-body">
+        {aviso&&mode==="login"&&<div role="status" style={{margin:"0 0 14px",padding:"10px 12px",borderRadius:10,border:"1px solid #C8964E",background:"#FFF6E8",color:"#7A4F14",fontSize:12.5,fontWeight:600,lineHeight:1.45}}>{aviso}</div>}
         {mode==="login"&&<>
           <label className="tclg-label">E-mail</label>
           <div className="tclg-field"><IcMail/><input className="tclg-input" type="email" autoComplete="username" value={email} onChange={e=>setEmail(e.target.value)} placeholder="seu@email.com" onKeyDown={e=>e.key==="Enter"&&doLogin()}/></div>

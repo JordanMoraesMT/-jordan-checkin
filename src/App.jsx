@@ -1,7 +1,7 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight, Gauge } from "lucide-react";
-import { chaveMarca, HOMES, API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, unificarCidades, temCoord } from "./lib";
+import { chaveMarca, HOMES, API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, syncFetch, reenviarSyncPendente, temSyncPendente, unificarCidades, temCoord } from "./lib";
 import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
 import { RotasTab } from "./tabs/RotasTab";
 const AnaliseTab=lazy(()=>import("./tabs/AnaliseTab").then(m=>({default:m.AnaliseTab})));// v75/76: análise de visitas (vendedor vê sem valores)
@@ -59,10 +59,10 @@ export default function App(){
   useEffect(()=>{if(!localStorage.getItem("jc:cleaned_v19")){(async()=>{localStorage.setItem("jc:cleaned_v19","1");try{if("caches" in window){const keys=await caches.keys();await Promise.all(keys.map(k=>caches.delete(k)));}if("serviceWorker" in navigator){const regs=await navigator.serviceWorker.getRegistrations();for(const r of regs)await r.unregister();}location.reload();}catch{}})();}},[]);
   useEffect(()=>{if(token&&user&&!orgs.length&&!syncing)doSync();},[token,user]);
 
-  const syncPush=async(data)=>{try{await fetch(`${API}?sync=${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:data})});}catch(e){console.warn("syncPush:",e);}};
-  const syncClear=async()=>{try{await fetch(`${API}?sync=${user.id}`,{method:"DELETE"});}catch(e){console.warn("syncClear:",e);}};
-  const syncVisitSave=async(visit)=>{try{const r=await fetch(`${API}?sync=visits_${user.id}`);const d=await r.json();const all=[visit,...(d.active||[])].slice(0,200);await fetch(`${API}?sync=visits_${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:all})});}catch(e){console.warn("syncVisitSave:",e);}};
-  const syncVisitLoad=async()=>{try{const ids=[743088,743347];let remote=[];for(const uid of ids){const r=await fetch(`${API}?sync=visits_${uid}`,{cache:"no-store"});const buf=await r.arrayBuffer();const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);const d=JSON.parse(txt);if(d.active)remote.push(...d.active.map(v=>({...v,orgName:fixMojibake(v.orgName||""),city:fixMojibake(v.city||""),note:fixMojibake(v.note||"")})));}if(remote.length){setVisits(prev=>{const chave=(v,t)=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(t);
+  const syncPush=async(data)=>{try{await syncFetch(`${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:data})});}catch(e){console.warn("syncPush:",e);}};
+  const syncClear=async()=>{try{await syncFetch(`${user.id}`,{method:"DELETE"});}catch(e){console.warn("syncClear:",e);}};
+  const syncVisitSave=async(visit)=>{try{const r=await syncFetch(`visits_${user.id}`);const d=await r.json();const all=[visit,...(d.active||[])].slice(0,200);await syncFetch(`visits_${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:all})});}catch(e){console.warn("syncVisitSave:",e);}};
+  const syncVisitLoad=async()=>{try{const ids=[743088,743347];let remote=[];for(const uid of ids){const r=await syncFetch(`visits_${uid}`,{cache:"no-store"});const buf=await r.arrayBuffer();const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);const d=JSON.parse(txt);if(d.active)remote.push(...d.active.map(v=>({...v,orgName:fixMojibake(v.orgName||""),city:fixMojibake(v.city||""),note:fixMojibake(v.note||"")})));}if(remote.length){setVisits(prev=>{const chave=(v,t)=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(t);
       // v90: identidade da visita = cliente + usuário + HORA do check-in. Antes era cliente+dia: a 2ª visita ao mesmo
       // cliente no dia nunca chegava aos outros aparelhos (ex.: América Santa Helena 08/10 09:18).
       const exata=v=>v.orgId+"|"+(v.userName||"")+"|"+v.checkinTime;
@@ -73,9 +73,9 @@ export default function App(){
       const existing=new Set(base.map(exata));
       const newOnes=remote.filter(r=>!existing.has(exata(r)));
       if(newOnes.length||base.length!==prev.length)return[...base,...newOnes];return prev;});}}catch(e){console.warn("syncVisitLoad:",e);}};
-  const syncPlocs=async(locs)=>{try{await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:locs})});}catch(e){console.warn("syncPlocs:",e);}};
-  const syncDayBasesSave=async(bases)=>{if(!bases||!Object.keys(bases).length)return;try{await fetch(`${API}?sync=dayBases`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:bases})});}catch(e){console.warn("syncBases:",e);}};
-  const syncDayBasesLoad=async()=>{try{const r=await fetch(`${API}?sync=dayBases`);const d=await r.json();if(d.active&&Object.keys(d.active).length){setDayBases(prev=>{const merged={...prev};for(const k in d.active){merged[k]={...(d.active[k]||{}),...(prev[k]||{})};}sS("jc:dayBases",merged);return merged;});}}catch(e){console.warn("syncBasesLoad:",e);}};
+  const syncPlocs=async(locs)=>{try{await syncFetch(`plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:locs})});}catch(e){console.warn("syncPlocs:",e);}};
+  const syncDayBasesSave=async(bases)=>{if(!bases||!Object.keys(bases).length)return;try{await syncFetch(`dayBases`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:bases})});}catch(e){console.warn("syncBases:",e);}};
+  const syncDayBasesLoad=async()=>{try{const r=await syncFetch(`dayBases`);const d=await r.json();if(d.active&&Object.keys(d.active).length){setDayBases(prev=>{const merged={...prev};for(const k in d.active){merged[k]={...(d.active[k]||{}),...(prev[k]||{})};}sS("jc:dayBases",merged);return merged;});}}catch(e){console.warn("syncBasesLoad:",e);}};
   const[teamActive,setTeamActive]=useState(null);
   // v73: aba aberta há muito tempo roda versão antiga — detecta deploy novo e oferece atualizar
   const[novaVersao,setNovaVersao]=useState(false);
@@ -116,18 +116,23 @@ export default function App(){
     await loadProsp();return{ok,falha};};
   const[syncStatus,setSyncStatus]=useState("");
   const syncPull=async()=>{try{
-    const r=await fetch(`${API}?sync=${user.id}`);const d=await r.json();
+    const r=await syncFetch(`${user.id}`);const d=await r.json();
     setActive(prev=>{if(d.active&&(!prev||prev.fromSync))return{...d.active,fromSync:true};if(!d.active&&prev?.fromSync)return null;return prev;});
     const otherId=user.id===743088?743347:743088;
-    const r2=await fetch(`${API}?sync=${otherId}`);const d2=await r2.json();
+    const r2=await syncFetch(`${otherId}`);const d2=await r2.json();
     setTeamActive(d2.active||null);
-    const r3=await fetch(`${API}?sync=plocs`);const d3=await r3.json();
+    const r3=await syncFetch(`plocs`);const d3=await r3.json();
     // v44: GPS durável do D1 (crm_gps) entra no merge — sobrevive a qualquer perda do KV
     let d1gps={};try{const rg=await fetch(`${DASH_CRM}/api/crm/gps`,{headers:{"X-Session":token}});const dg=await rg.json();(dg.gps||[]).forEach(g=>{if(g.org_id)d1gps[g.org_id]={lat:g.lat,lng:g.lng,...(g.geo?{geo:1}:{})};});}catch(e){}
     if(d3.active||Object.keys(d1gps).length){const deleted=sL("jc:deletedGPS",[]);setPlocs(prev=>{const cloud={...d1gps,...(d3.active||{})};deleted.forEach(id=>{delete cloud[id];});const m={...cloud,...prev};sS("jc:pdvLocs",m);return m;});}
     setSyncStatus(`OK ${fT(new Date())} | eu:${d.active?"ativo":"--"}${user?.id===743088?` | equipe:${d2.active?d2.active.orgName:"--"}`:""}`);
   }catch(e){setSyncStatus("Erro: "+e.message);}};
   useEffect(()=>{if(!token||!user)return;syncPull();syncVisitLoad();syncDayBasesLoad();const iv=setInterval(()=>{syncPull();syncDayBasesLoad();},15000);return()=>clearInterval(iv);},[token,user]);
+  // v120: sessão vencida (401 no sync/CNPJ) → tela de login SEM apagar nada do aparelho (visitas, GPS, rascunhos);
+  // depois do login, reenvia o que não chegou à nuvem (lib.reenviarSyncPendente).
+  const[sesExp,setSesExp]=useState(false);
+  useEffect(()=>{const f=()=>{setSesExp(true);setToken("");sS("jc:session","");clearSSOCookie();};window.addEventListener("jc:sessao-expirada",f);return()=>window.removeEventListener("jc:sessao-expirada",f);},[]);// eslint-disable-line
+  useEffect(()=>{if(!token||!user||!temSyncPendente())return;let vivo=true;(async()=>{const r=await reenviarSyncPendente();if(vivo&&r.ok)setSyncStatus(`Reenviado após o login: ${r.ok} item(ns)${r.falha?` · ${r.falha} com erro`:""}`);})();return()=>{vivo=false;};},[token,user]);
 
   const[mAlert,setMAlert]=useState(false);
   useEffect(()=>{if(!token||!user)return;const ck=()=>{const h=new Date().getHours();const td=new Date().toDateString();const has=visits.some(v=>new Date(v.checkinTime).toDateString()===td)||active;setMAlert(h>=8&&h<12&&!has);};ck();const iv=setInterval(ck,300000);return()=>clearInterval(iv);},[token,user,visits,active]);
@@ -277,7 +282,7 @@ export default function App(){
       const idsAtr=new Set(atr.map(l=>l.id));
       const itensEmail=[...atr.map(l=>({nome:"⚠ "+l.nome,local:["importante e atrasado",l.bairro,l.cidade].filter(Boolean).join(" · "),dias:l.dEq})),...sem.filter(l=>!idsAtr.has(l.id)).map(l=>({nome:l.nome,local:[l.bairro,l.cidade].filter(Boolean).join(" · "),dias:l.diasSem}))];
       // guarda a lista (só nomes, local e dias — nada de valores) para o e-mail de segunda-feira (worker v7)
-      try{fetch(`${API}?sync=semana_${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:{gerado:hoje,total:itensEmail.length,atrasados:atr.length,itens:itensEmail.slice(0,15)}})}).catch(()=>{});}catch{}
+      try{syncFetch(`semana_${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:{gerado:hoje,total:itensEmail.length,atrasados:atr.length,itens:itensEmail.slice(0,15)}})}).catch(()=>{});}catch{}
     }catch(e){console.warn("análise em segundo plano:",e);}},6000);return()=>{vivo=false;clearTimeout(t);};},[token,user,allOrgs.length,!!rfvMap]);// eslint-disable-line
   const quickAction=(org)=>{if(!org)return;const cn=(org.cnpj||"").replace(/\D/g,"");setRemTarget({org,pend:[],lo:true});
     pendenciasDe(token,org.id,cn).then(pl=>setRemTarget(t=>t&&t.org.id===org.id?{...t,pend:pl,lo:false}:t)).catch(()=>setRemTarget(t=>t?{...t,lo:false}:t));};
@@ -340,7 +345,7 @@ export default function App(){
     setCrmFocus({org,t:Date.now()});setTab("crm_empresas");
   },[allOrgs,token,user]);
 
-  if(!token||!user)return <Login onLogin={(t,u)=>{setToken(t);setUser(u);sS("jc:session",t);sS("jc:user",u);setSSOCookie(t);}}/>;
+  if(!token||!user)return <Login aviso={sesExp?"Sua sessão expirou. Entre de novo — nada do que estava no aparelho foi apagado, e o que faltou enviar vai sozinho depois do login.":""} onLogin={(t,u)=>{setSesExp(false);setToken(t);setUser(u);sS("jc:session",t);sS("jc:user",u);setSSOCookie(t);}}/>;
 
   // ─── Navegação: grupos iguais ao Dashboard (sidebar) + lista plana (bottom nav mobile) ───
   const isAdmin=user?.id===743088;
@@ -473,11 +478,11 @@ export default function App(){
 
       {tab==="config"&&<ConfigTab instEvt={instEvt} user={user} orgs={orgs} allOrgs={allOrgs} token={token} doSync={doSync} visits={visits} plocs={plocs} dayBases={dayBases} today={today} syncStatus={syncStatus} syncing={syncing} syncMsg={syncMsg}
         onSync={doSync} onLoadHistory={loadHistory} onSyncPull={()=>{syncPull();setSyncStatus("Forçando sync...");}}
-        onShareGPS={async()=>{if(!Object.keys(plocs).length){alert("Nenhum GPS salvo");return;}setSyncStatus("Enviando GPS...");try{const r=await fetch(`${API}?sync=plocs`);const d=await r.json();const merged={...(d.active||{}),...plocs};await fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:merged})});setSyncStatus(`${Object.keys(merged).length} GPS enviados!`);}catch(e){setSyncStatus("Erro: "+e.message);}}}
+        onShareGPS={async()=>{if(!Object.keys(plocs).length){alert("Nenhum GPS salvo");return;}setSyncStatus("Enviando GPS...");try{const r=await syncFetch(`plocs`);const d=await r.json();const merged={...(d.active||{}),...plocs};await syncFetch(`plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:merged})});setSyncStatus(`${Object.keys(merged).length} GPS enviados!`);}catch(e){setSyncStatus("Erro: "+e.message);}}}
         onShowDB={()=>setShowDB(true)} onShowEnd={()=>setShowEndDay(true)}
         onDeleteGPS={(orgId)=>{setPlocs(p=>{const n={...p};delete n[orgId];sS("jc:pdvLocs",n);
           const del=sL("jc:deletedGPS",[]);if(!del.includes(orgId)){del.push(orgId);sS("jc:deletedGPS",del);}
-          fetch(`${API}?sync=plocs`).then(r=>r.json()).then(d=>{const cloud={...d.active||{}};delete cloud[orgId];fetch(`${API}?sync=plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:cloud})});}).catch(()=>{});
+          syncFetch(`plocs`).then(r=>r.json()).then(d=>{const cloud={...d.active||{}};delete cloud[orgId];syncFetch(`plocs`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:cloud})});}).catch(()=>{});
           return n;});}}
         onSaveGPS={(orgId,lat,lng)=>{setPlocs(p=>{const n={...p,[orgId]:{lat,lng}};sS("jc:pdvLocs",n);
           const del=sL("jc:deletedGPS",[]).filter(id=>id!==orgId);sS("jc:deletedGPS",del);
