@@ -22,7 +22,13 @@ const DASH_CRM = "https://dashboard.jordanmt.com";
 // v124: Juvina (assistente por voz) dentro do TeamCheck — só admin. A página lê o cookie "ses" (.jordanmt.com)
 // e confere no /me do agendor-proxy; só abre em iframe a partir de *.jordanmt.com (frame-ancestors).
 const JUVINA_URL="https://juvina.jordanmt.com/voz";
-function JuvinaTab(){
+function JuvinaTab({tema}){
+  // v125: tema claro/escuro do TeamCheck. Vai no endereço ao abrir (?tema=claro|escuro) e, quando troca com a aba
+  // aberta, por postMessage {tipo:"tema",tema} — sem recarregar a Juvina (não perde a conversa).
+  const nomeTema=t=>t==="light"?"claro":"escuro";
+  const[src]=useState(()=>JUVINA_URL+"?tema="+nomeTema(tema));
+  const ref=useRef(null);
+  useEffect(()=>{try{ref.current?.contentWindow?.postMessage({tipo:"tema",tema:nomeTema(tema)},"https://juvina.jordanmt.com");}catch{}},[tema]);
   const noDominio=typeof location!=="undefined"&&/(^|\.)jordanmt\.com$/.test(location.hostname);
   if(!noDominio)return(
     <div style={{padding:"22px 18px",maxWidth:560,margin:"0 auto"}}>
@@ -32,7 +38,7 @@ function JuvinaTab(){
         <a href="https://teamcheck.jordanmt.com/" style={{display:"inline-block",padding:"10px 16px",borderRadius:10,background:S.pri,color:"#fff",fontSize:13,fontWeight:700,textDecoration:"none"}}>Abrir em teamcheck.jordanmt.com</a>
       </div>
     </div>);
-  return <iframe src={JUVINA_URL} title="Juvina" allow="microphone; autoplay" style={{flex:1,width:"100%",height:"100%",minHeight:0,border:0,display:"block",background:"#0F1B2D"}}/>;
+  return <iframe ref={ref} src={src} title="Juvina" allow="microphone; autoplay" onLoad={()=>{try{ref.current?.contentWindow?.postMessage({tipo:"tema",tema:nomeTema(tema)},"https://juvina.jordanmt.com");}catch{}}} style={{flex:1,width:"100%",height:"100%",minHeight:0,border:0,display:"block",background:S.bg}}/>;
 }
 
 export default function App(){
@@ -508,7 +514,7 @@ export default function App(){
       {tab==="rotas"&&<RotasTab excl={exclOrgs} onEdit={o2=>setEditTarget(o2)} onNovaEmpresa={()=>setSearchAdd(true)} onProspSalvar={salvarProsp} onCrmChange={()=>setCrmBump(b=>b+1)} sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs} orgs={orgs} rfv={rfvMap} token={token} pendMapa={pendMapa} prospDe={prospDe} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}
       {tab==="analise"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando análise…</p>}><AnaliseTab token={token} allOrgs={allOrgs} rfv={rfvMap} user={user} isAdmin={isAdmin} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/></Suspense>}
       {tab==="relatorio"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando relatório…</p>}><RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/></Suspense>}
-      {tab==="juvina"&&isAdmin&&<JuvinaTab/>}
+      {tab==="juvina"&&isAdmin&&<JuvinaTab tema={tema}/>}
       {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} plocs={plocs} dayBases={dayBases} user={user} visits={visits} token={token} bump={crmBump}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs} bump={crmBump} onCrmChange={()=>setCrmBump(b=>b+1)}/>
 
