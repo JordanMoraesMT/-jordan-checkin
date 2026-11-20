@@ -22,6 +22,8 @@ const chaveMarca=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,""
 // O histórico de vendas (itens) não muda. O cadastro de Indústrias manda: item inativo sai; reativado volta.
 const EX_REPRESENTADAS=["Ruvolo","WD-40","Ventimais","Vasap"];
 let MARCAS_FORA=new Set(EX_REPRESENTADAS.map(chaveMarca));
+// v128: a marca saiu da representação? (mesma regra da prospecção) — usado na estimativa de comissão da Análise de visitas
+const marcaFora=n=>MARCAS_FORA.has(chaveMarca(n));
 function marcasCadastro(){const out=[],seen=new Set();const add=v=>{const k=chaveMarca(v);if(k&&!seen.has(k)&&!MARCAS_FORA.has(k)){seen.add(k);out.push(v);}};
   (BRANDS||[]).forEach(b=>add(MARCAS_VENDAS.find(m=>chaveMarca(m)===chaveMarca(b))||b));MARCAS_VENDAS.forEach(add);return out;}
 let SECTORS=[{id:4512997,n:"Açougues"},{id:4513651,n:"Agropecuarias"},{id:4513000,n:"Atacados"},{id:4512998,n:"Decoração"},{id:4513649,n:"Eletromoveis"},{id:4724740,n:"Embalagens"},{id:4513001,n:"Garden"},{id:4512999,n:"Mat. Construção"},{id:4513019,n:"Outros"},{id:4513020,n:"Papelaria"},{id:4513650,n:"Presenteiros"},{id:4512995,n:"Supermercados"},{id:4512996,n:"Variedades"}];
@@ -327,4 +329,5 @@ function getVEndCoord(v,plocs){if(!checkoutEsquecido(v)&&v.checkoutLat&&v.checko
 const MIN_OBS=50;
 
 export {syncFetch, reenviarSyncPendente, temSyncPendente};
+export {marcaFora, EX_REPRESENTADAS};
 export {etiquetasCat, corEtiqueta, jornadaDia, minDiaCba, chaveMarca, marcasCadastro, _bk as chaveTexto, normBusca, contemBusca, cidadeCanon, unificarCidades, PEND_PREFIXO, pendenciasDe, fD1, bairroCanon, CARGOS, CARGOS_IND, SEG_INDUSTRIA, cargosDe, CANAIS, API, OSRM, DASH, crmFire, HOMES, LUNCH_START, LUNCH_END, PG, TZ, toLocalDate, todayLocal, TYPES, CATS, BRANDS, SECTORS, CAT_IDS, ORIGINS, USERS, CC, CITY_GEO, BRG, RGC, geoEstimate, S, PC, fT, fD, fDS, fTU, fDU, mins, hrsMin, hourDec, hav, sL, sS, cfgApi, loadCatalogos, agErr, trAg, gps, roadKm, csv, txtCel, fixMojibake, strip, fetchCNPJ, getBase, getEnd, isRealVisit, getVCoord, getVEndCoord, MIN_OBS, gcalUrl, temCoord, checkoutEsquecido, saidaEfetiva, dedupVisitas };

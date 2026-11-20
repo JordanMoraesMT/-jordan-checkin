@@ -7,6 +7,7 @@
 // Função pura (sem React/fetch) — conferível fora do app.
 
 import { TRAM_TAXA_CLIENTE } from "./tramTaxas.js";
+import { marcaFora } from "./lib.js";
 
 export const INDUSTRIAS = ["TRAMONTINA", "PADO", "Zagonel", "Plastilit", "Santana", "Festcolor", "Ruvolo", "Hiper Têxtil"];
 // Plastilit tem taxa por linha: tubos (categoria "Tubos") × conexões e demais — vira duas "contas" no cálculo
@@ -55,6 +56,9 @@ export function setTramTaxas(t) { if (t && t.ok && t.clientes && Object.keys(t.c
 export const tramTaxasInfo = () => TRAM_VIVO;
 // taxa (%) de uma indústria para um cliente (aplica exceções por razão social)
 export function taxaDe(ind, org, P) {
+  // v128: marca que não é mais representada (Ruvolo, WD-40, Ventimais, Vasap — ou inativa no cadastro de Indústrias)
+  // não gera comissão daqui para a frente: sai da estimativa. As vendas (faturamento) continuam como histórico.
+  if (marcaFora(ind)) return 0;
   const ex = (P.excecoes || []).find(e => e.ind === ind && new RegExp(e.razao, "i").test(`${org?.legalName || ""} ${org?.name || ""}`));
   if (ex) return ex.taxa;
   // Tramontina: taxa REAL do cliente nos extratos (mix de linhas/promoções), quando houver

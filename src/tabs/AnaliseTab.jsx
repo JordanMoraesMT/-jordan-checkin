@@ -3,7 +3,7 @@
 // Vendedor vê a própria carteira SEM nenhum valor: só situação da visita e se vale investir uma nova visita.
 import { useState, useEffect, useMemo } from "react";
 import { ChevronDown, ChevronUp, Download, SlidersHorizontal, Search, X } from "lucide-react";
-import { S, USERS, API, DASH, todayLocal, csv, CC, CATS, CANAIS, sL, sS } from "../lib";
+import { S, USERS, API, DASH, todayLocal, csv, CC, CATS, CANAIS, sL, sS, marcaFora } from "../lib";
 import { SearchSelect, MultiSelect, DateField, Kpi, ColunasMenu, ColFiltro } from "../components";
 import { analisar, PREMISSAS_PADRAO, CONTAS, ROTULO_CONTA, tramTaxasInfo } from "../analiseVisitas.js";
 import { carregarBase, carregarPremissas, salvarPremissas } from "../analiseDados.js";
@@ -319,7 +319,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
         <div>
           <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: S.txt }}>Taxa média por representada (%)</p>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 8 }}>
-            {CONTAS.map(ind => <label key={ind} style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 12.5, color: S.t2 }}>{ROTULO_CONTA[ind] || ind}</span>
+            {CONTAS.filter(ind => !marcaFora(ind)).map(ind => <label key={ind} style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 12.5, color: S.t2 }}>{ROTULO_CONTA[ind] || ind}</span>
               <input type="number" step="0.01" value={pe.taxas[ind] ?? 5} onChange={e => setPe(p => ({ ...p, taxas: { ...p.taxas, [ind]: +e.target.value } }))} className="num" style={{ height: 40, boxSizing: "border-box" }} /></label>)}
           </div>
           <p style={{ margin: "6px 0 0", fontSize: 12, color: S.ts }}>Tramontina 4,16% e Pado 5% vêm dos extratos (out/25–jun/26); Pado 1,5% para Vale Formoso e Irmãos Domingos. Plastilit: tubos (categoria "Tubos") a 3% e o resto a 4% — a soma item a item dá o ponderado de cada pedido. Tramontina: usa a taxa real de cada cliente nos extratos quando existe ({(() => { const t = tramTaxasInfo(); const mm = x => x ? x.split("-").reverse().join("/") : "?"; return t ? `${t.total} clientes, extratos ${mm(t.desde)} a ${mm(t.ate)}, atualiza sozinho a cada extrato novo` : `152 clientes, foto de ${TRAM_GERADO.split("-").reverse().join("/")}`; })()}); os demais, a média acima.</p>
