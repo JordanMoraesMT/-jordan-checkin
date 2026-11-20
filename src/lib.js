@@ -18,7 +18,11 @@ let BRANDS=["TRAMONTINA","PADO","HIPER TEXTIL","PLASTILIT","FESTCOLOR","ZAGONEL"
 // (itens) para casar com "quem já compra"; marcas novas (ex.: TINTAS DACAR) entram com o nome do cadastro.
 const MARCAS_VENDAS=["TRAMONTINA","PADO","Zagonel","Plastilit","Ruvolo","Santana","Festcolor","Hiper Têxtil"];
 const chaveMarca=s=>String(s||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").toUpperCase().replace(/\s+/g," ").trim();
-function marcasCadastro(){const out=[],seen=new Set();const add=v=>{const k=chaveMarca(v);if(k&&!seen.has(k)){seen.add(k);out.push(v);}};
+// v127: marcas que a Jordan NÃO representa mais (20/11/2026) — saem da prospecção e dos filtros de marca.
+// O histórico de vendas (itens) não muda. O cadastro de Indústrias manda: item inativo sai; reativado volta.
+const EX_REPRESENTADAS=["Ruvolo","WD-40","Ventimais","Vasap"];
+let MARCAS_FORA=new Set(EX_REPRESENTADAS.map(chaveMarca));
+function marcasCadastro(){const out=[],seen=new Set();const add=v=>{const k=chaveMarca(v);if(k&&!seen.has(k)&&!MARCAS_FORA.has(k)){seen.add(k);out.push(v);}};
   (BRANDS||[]).forEach(b=>add(MARCAS_VENDAS.find(m=>chaveMarca(m)===chaveMarca(b))||b));MARCAS_VENDAS.forEach(add);return out;}
 let SECTORS=[{id:4512997,n:"Açougues"},{id:4513651,n:"Agropecuarias"},{id:4513000,n:"Atacados"},{id:4512998,n:"Decoração"},{id:4513649,n:"Eletromoveis"},{id:4724740,n:"Embalagens"},{id:4513001,n:"Garden"},{id:4512999,n:"Mat. Construção"},{id:4513019,n:"Outros"},{id:4513020,n:"Papelaria"},{id:4513650,n:"Presenteiros"},{id:4512995,n:"Supermercados"},{id:4512996,n:"Variedades"}];
 let CARGOS_IND=["Coordenador","Promotor","Representante Comercial"]; // catálogo "cargo_industria"
@@ -148,6 +152,10 @@ async function loadCatalogos(token){
     const sg=by("segmento");  if(sg.length)  SECTORS=sg.map(x=>({id:x.agendor_id,n:x.nome}));
     const or=by("origem");    if(or.length)  ORIGINS=or.map(x=>({id:x.agendor_id,n:x.nome}));
     const ind=by("industria");if(ind.length) BRANDS=ind.map(x=>x.nome);
+    { // v127: indústria inativa no cadastro sai da prospecção; ativa volta mesmo se estiver em EX_REPRESENTADAS
+      const fora=new Set(EX_REPRESENTADAS.map(chaveMarca));
+      it.filter(x=>x.tipo==="industria").forEach(x=>{const k=chaveMarca(x.nome);if(x.ativo===0)fora.add(k);else fora.delete(k);});
+      MARCAS_FORA=fora; }
     const cg=by("cargo"); if(cg.length) CARGOS.splice(0,CARGOS.length,...cg.map(x=>x.nome));
     const cn=by("canal"); if(cn.length) CANAIS=cn.map(x=>x.nome);
     const ci=by("cargo_industria"); if(ci.length) CARGOS_IND=ci.map(x=>x.nome);
