@@ -3,7 +3,7 @@
 // Fonte de verdade: D1 (via Worker do Dashboard). Agendor segue como espelho.
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { ListFilter, CalendarPlus, Target, Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal, Link2 } from "lucide-react";
+import { Sparkles, ListFilter, CalendarPlus, Target, Unlink, Search, ArrowLeft, MapPin, Phone, MessageCircle, Mail, Users2, FileText, Camera, Paperclip, Trash2, RefreshCw, ExternalLink, BarChart3, Pencil, StickyNote, Handshake, PhoneCall, Send, Clock, Building2, Plus, X, Download, Navigation, Star, Calendar, Check, Headset, SlidersHorizontal, Link2 } from "lucide-react";
 import {CARGOS, cargosDe, CANAIS, S, CC, fT, fD, fD1, gps, sL, sS, CATS, USERS, crmFire, csv, txtCel, todayLocal, normBusca, toLocalDate, marcasCadastro, chaveMarca, HOMES, fixMojibake, SECTORS } from "../lib";
 import { SearchSelect, MultiSelect, DateField, TarefaModal, ColunasMenu, ColFiltro } from "../components";
 import { otimizar } from "./PlanejarRota";
@@ -127,7 +127,7 @@ function AtvCard({ a, onOrg, onDel, canDel, onFinish }) {
 // ─────────────────────────────────────────────────────────────
 //  Tela do cliente — cabeçalho + Histórico | Contatos | Fotos | Dados
 // ─────────────────────────────────────────────────────────────
-function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange, backLabel, onRemoto, allOrgs, prospDe, onProspFim }) {
+function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson, rfv, onCrmChange, backLabel, onRemoto, allOrgs, prospDe, onProspFim, onIris }) {
   const [sub, setSub] = useState("hist");
   const [info, setInfo] = useState(null);           // /api/crm/cliente
   const [atvs, setAtvs] = useState([]); const [ldA, setLdA] = useState(false);
@@ -358,6 +358,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
     </div>
     <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 6 }}>
       {cnpjN && <button onClick={() => window.open(`${DASH}/?cliente=${cnpjN}`, "_blank", "noopener")} style={{ ...btnSec, height: 40, fontSize: 13.5 }}><BarChart3 size={15} />Dashboard</button>}
+      {cnpjN && onIris && <button onClick={() => onIris(org)} title="Abrir a Íris já com este cliente" style={{ ...btnSec, height: 40, fontSize: 13.5 }}><Sparkles size={15} />Íris</button>}
       <button onClick={() => onEdit && onEdit(org)} style={{ ...btnSec, height: 40, fontSize: 13.5 }}><Pencil size={14} />Editar</button>
       <button onClick={() => onPerson && onPerson(org)} style={{ ...btnSec, height: 40, fontSize: 13.5 }}><Users2 size={14} />Pessoas</button>
     </div>
@@ -1240,7 +1241,7 @@ export function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNova
 // ─────────────────────────────────────────────────────────────
 //  Aba principal: busca de cliente + feed de atividades (Início)
 // ─────────────────────────────────────────────────────────────
-export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl, pessoasQ, onRemoto, prospDe, onProspFim, onProspSalvar, onIrRotas }) {
+export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, token, user, allOrgs, visits, plocs, onEdit, onPerson, rfv, onNovaEmpresa, excl, pessoasQ, onRemoto, prospDe, onProspFim, onProspSalvar, onIrRotas, onIris }) {
   // secao controlada pelo menu lateral do App: inicio | empresas | pessoas
   const [sel, setSel] = useState(null);
   // Abrir a ficha de um cliente vindo de outra tela (ex.: clique no card em PDVs)
@@ -1292,7 +1293,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   if (!visible) return null;
   // v106: a ficha mostra sempre a versão atual do cliente (depois de editar, sem precisar sair e voltar)
   const selAt = sel ? ([...(allOrgs || []), ...(excl || [])].find(o => o.id === sel.id) || sel) : null;
-  if (sel) return <ClienteCRM org={selAt} allOrgs={allOrgs} prospDe={prospDe} onProspFim={onProspFim} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
+  if (sel) return <ClienteCRM onIris={onIris} org={selAt} allOrgs={allOrgs} prospDe={prospDe} onProspFim={onProspFim} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
 
   return (<div>
     {secao === "empresas" && <EmpresasView plocs={plocs} onIrRotas={onIrRotas} token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} visits={visits} prospDe={prospDe} onProspSalvar={onProspSalvar} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}

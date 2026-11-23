@@ -1,6 +1,6 @@
 // TeamCheck — App (orquestração principal)
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
-import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight, Gauge, Mic, KeyRound } from "lucide-react";
+import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight, Gauge, KeyRound, Sparkles, Settings2 } from "lucide-react";
 import { chaveMarca, HOMES, API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, syncFetch, reenviarSyncPendente, temSyncPendente, unificarCidades, temCoord } from "./lib";
 import { useSugestaoVisita, CartaoSugestao, sugCheckinLigado } from "./proximidade";
 import { Login, Banner, NoteModal, PendenciasAlerta, NewClientModal, PeopleModal, EditModal, JourneyModal, DayEndModal, DivergentModal, SearchOrAddModal, JordanLogo } from "./components";
@@ -19,29 +19,33 @@ import { CrmTab } from "./tabs/CrmTab";
 // ─── CRM próprio (D1 via Worker do Dashboard) — registro em segundo plano ───
 const DASH_CRM = "https://dashboard.jordanmt.com";
 
-// v124: Juvina (assistente por voz) dentro do TeamCheck — só admin. A página lê o cookie "ses" (.jordanmt.com)
-// e confere no /me do agendor-proxy; só abre em iframe a partir de *.jordanmt.com (frame-ancestors).
-// v126: telas da Juvina embutidas (iframe em juvina.jordanmt.com) — "Juvina" (voz) e "Senhas" (cofre).
+// v129: telas embutidas por iframe em *.jordanmt.com — "Íris" (iris.jordanmt.com), "Senhas" e "Funções" (Juvina).
+// As páginas leem o cookie "ses" (.jordanmt.com) e só abrem em iframe a partir de *.jordanmt.com (frame-ancestors).
 // Tema claro/escuro: vai no endereço ao abrir (?tema=claro|escuro) e, a cada troca e a cada carga do iframe, por
-// postMessage {tipo:"tema",tema} SÓ para https://juvina.jordanmt.com (sem recarregar; não perde a conversa).
-// Nada do conteúdo do iframe é lido nem guardado pelo TeamCheck (as senhas só existem dentro da página da Juvina).
+// postMessage {tipo:"tema",tema} SÓ para a origem da própria tela (nunca "*"). A Íris recebe também
+// {tipo:"contexto",contexto:{cliente,cnpj,tela}} (ficha do cliente ou visita em andamento) para já buscar o cliente.
+// Nada do conteúdo do iframe é lido nem guardado pelo TeamCheck.
 const JUVINA_ORIGEM="https://juvina.jordanmt.com";
-function JuvinaEmbutida({tema,caminho,query="",titulo,allow,idFrame,emoji,nome}){
+const IRIS_ORIGEM="https://iris.jordanmt.com";
+function TelaEmbutida({origem,tema,caminho,query="",titulo,allow,idFrame,emoji,nome,contexto}){
   const nomeTema=t=>t==="light"?"claro":"escuro";
-  const[src]=useState(()=>`${JUVINA_ORIGEM}${caminho}?${query?query+"&":""}tema=${nomeTema(tema)}`);
-  const ref=useRef(null);
-  const avisaTema=()=>{try{ref.current?.contentWindow?.postMessage({tipo:"tema",tema:nomeTema(tema)},JUVINA_ORIGEM);}catch{}};
-  useEffect(avisaTema,[tema]);// eslint-disable-line
+  const[src]=useState(()=>`${origem}${caminho}?${query?query+"&":""}tema=${nomeTema(tema)}`);
+  const ref=useRef(null);const carregou=useRef(false);
+  const manda=msg=>{try{ref.current?.contentWindow?.postMessage(msg,origem);}catch{}};
+  const avisaTema=()=>manda({tipo:"tema",tema:nomeTema(tema)});
+  const avisaContexto=()=>{if(contexto&&contexto.cnpj)manda({tipo:"contexto",contexto});};
+  useEffect(()=>{if(carregou.current)avisaTema();},[tema]);// eslint-disable-line
+  useEffect(()=>{if(carregou.current)avisaContexto();},[contexto?.cnpj,contexto?.tela]);// eslint-disable-line
   const noDominio=typeof location!=="undefined"&&/(^|\.)jordanmt\.com$/.test(location.hostname);
   if(!noDominio)return(
     <div style={{padding:"22px 18px",maxWidth:560,margin:"0 auto"}}>
       <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem 1.1rem"}}>
         <p style={{margin:"0 0 6px",fontSize:15,fontWeight:700,color:S.txt}}>{emoji} {nome}</p>
-        <p style={{margin:"0 0 14px",fontSize:13,color:S.ts,lineHeight:1.5}}>{nome==="Juvina"?"A Juvina":"Esta tela"} só abre dentro do TeamCheck pelo endereço <b>teamcheck.jordanmt.com</b> (é ele que leva o seu login até ela). Este aparelho está em <b>{location.hostname}</b>.</p>
+        <p style={{margin:"0 0 14px",fontSize:13,color:S.ts,lineHeight:1.5}}>{nome==="Íris"?"A Íris":"Esta tela"} só abre dentro do TeamCheck pelo endereço <b>teamcheck.jordanmt.com</b> (é ele que leva o seu login até ela). Este aparelho está em <b>{location.hostname}</b>.</p>
         <a href="https://teamcheck.jordanmt.com/" style={{display:"inline-block",padding:"10px 16px",borderRadius:10,background:S.pri,color:"#fff",fontSize:13,fontWeight:700,textDecoration:"none"}}>Abrir em teamcheck.jordanmt.com</a>
       </div>
     </div>);
-  return <iframe ref={ref} id={idFrame} src={src} title={titulo} allow={allow} onLoad={avisaTema} style={{flex:1,width:"100%",height:"100%",minHeight:0,border:0,display:"block",background:S.bg}}/>;
+  return <iframe ref={ref} id={idFrame} src={src} title={titulo} allow={allow} onLoad={()=>{carregou.current=true;avisaTema();avisaContexto();}} style={{flex:1,width:"100%",height:"100%",minHeight:0,border:0,display:"block",background:S.bg}}/>;
 }
 
 export default function App(){
@@ -212,6 +216,11 @@ export default function App(){
   const[sugLigado,setSugLigado]=useState(()=>sugCheckinLigado(sL("jc:user",null)));
   useEffect(()=>{setSugLigado(sugCheckinLigado(user));},[user?.id]);// eslint-disable-line
   const sugVisita=useSugestaoVisita({ligado:sugLigado,user,orgs:allOrgs,plocs,active,visits});
+  // v129: Íris — contexto do cliente (ficha → botão "Íris") ou da visita em andamento; nunca vai para "*"
+  const[irisCtx,setIrisCtx]=useState(null);
+  const abrirIris=o=>{const cn=String(o?.cnpj||"").replace(/\D/g,"");setIrisCtx(cn?{cliente:o.nickname||o.name||"",cnpj:cn,tela:"ficha"}:null);setTab("iris");};
+  useEffect(()=>{if(tab!=="iris")setIrisCtx(null);if(tab==="juvina")setTab("iris");},[tab]);// a tela Juvina (/voz) saiu
+  const irisContexto=useMemo(()=>{if(irisCtx)return irisCtx;if(!active)return null;const o=(allOrgs||[]).find(x=>String(x.id)===String(active.orgId));const cn=String(o?.cnpj||"").replace(/\D/g,"");return cn?{cliente:o.nickname||o.name||active.orgName||"",cnpj:cn,tela:"checkin"}:null;},[irisCtx,active,allOrgs]);
 
   const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{
     const tk=t||token;
@@ -392,15 +401,16 @@ export default function App(){
   const NAVG=[
     {grp:"CAMPO",itens:[{id:"pdvs",I:Store,l:"PDVs"},{id:"mapa",I:MapPin,l:"Mapa"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"agenda",I:Calendar,l:"Agenda"}]},
     {grp:"CRM",itens:[{id:"crm_inicio",I:BookUser,l:"Início"},{id:"crm_empresas",I:Building2,l:"Empresas"},{id:"crm_pessoas",I:Contact,l:"Pessoas"}]},
-    {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true},{id:"juvina",I:Mic,l:"Juvina",admin:true}]:[]),{id:"senhas",I:KeyRound,l:"Senhas"},{id:"analise",I:Gauge,l:"Análise de visitas"},{id:"relatorio",I:BarChart3,l:"Relatório"}]},
+    {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true}]:[]),{id:"iris",I:Sparkles,l:"Íris"},...(isAdmin?[{id:"funcoes",I:Settings2,l:"Funções",admin:true}]:[]),{id:"senhas",I:KeyRound,l:"Senhas"},{id:"analise",I:Gauge,l:"Análise de visitas"},{id:"relatorio",I:BarChart3,l:"Relatório"}]},
     {grp:"SISTEMA",itens:[{id:"config",I:Settings,l:"Configurações"}]},
   ];
-  const embutida=tab==="juvina"||tab==="senhas";// v126: telas da Juvina ocupam a área toda, sem rolagem própria
-  const TITULOS={pdvs:["PDVs","Pontos de venda"],crm_inicio:["CRM","Feed de atividades"],crm_empresas:["Empresas","Carteira de clientes"],crm_pessoas:["Pessoas","Contatos"],mapa:["Mapa","Clientes no mapa"],rotas:["Rotas","Roteiro do dia"],relatorio:["Relatório","Período, jornada e km"],equipe:["Equipe","Produtividade"],analise:["Análise de visitas","Carteira, jornada e saúde"],agenda:["Agenda","Tarefas e retornos"],juvina:["Juvina","Assistente por voz"],senhas:["Senhas","Sistemas das indústrias"],config:["Configurações","Sistema"]};
+  const embutida=tab==="iris"||tab==="senhas"||tab==="funcoes";// telas embutidas ocupam a área toda, sem rolagem própria
+  const TITULOS={pdvs:["PDVs","Pontos de venda"],crm_inicio:["CRM","Feed de atividades"],crm_empresas:["Empresas","Carteira de clientes"],crm_pessoas:["Pessoas","Contatos"],mapa:["Mapa","Clientes no mapa"],rotas:["Rotas","Roteiro do dia"],relatorio:["Relatório","Período, jornada e km"],equipe:["Equipe","Produtividade"],analise:["Análise de visitas","Carteira, jornada e saúde"],agenda:["Agenda","Tarefas e retornos"],iris:["Íris","Assistente"],funcoes:["Funções","Juvina"],senhas:["Senhas","Sistemas das indústrias"],config:["Configurações","Sistema"]};
   // Bottom nav (mobile): CRM entra como atalho único (→ Início); Empresas/Pessoas ficam na gaveta lateral
   const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"mapa",I:MapPin,l:"Mapa"},{id:"crm_inicio",I:BookUser,l:"CRM"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
-  // v124: admin tem a Juvina na barra do celular, no lugar do Relatório (que continua na gaveta lateral)
-  const tabs=isAdmin?[...baseTabs.slice(0,4),{id:"equipe",I:Users,l:"Equipe"},...baseTabs.slice(4).map(t=>t.id==="relatorio"?{id:"juvina",I:Mic,l:"Juvina"}:t)]:baseTabs;
+  // v129: na barra do celular, a Íris ocupa o lugar do Relatório (que continua no menu ☰) — para todos
+  const comIris=l=>l.map(t=>t.id==="relatorio"?{id:"iris",I:Sparkles,l:"Íris"}:t);
+  const tabs=isAdmin?[...baseTabs.slice(0,4),{id:"equipe",I:Users,l:"Equipe"},...comIris(baseTabs.slice(4))]:comIris(baseTabs);
   const navAtivo=(id)=>id.startsWith("crm")?tab.startsWith("crm"):tab===id;
   const irPara=(id)=>{if(id==="mapa")setMapaLigado(true);setTab(id);if(mob)setNavOpen(false);};
   const sair=()=>{setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);clearSSOCookie();};
@@ -513,13 +523,14 @@ export default function App(){
       {canCloseRoute&&tab!=="config"&&<div style={{background:S.acc+"18",border:`1px solid ${S.acc}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.acc,margin:"0 0 8px"}}>{todayVisits.length} visita(s) hoje — fechar o roteiro?</p><button onClick={()=>setShowEndDay(true)} style={{width:"100%",padding:10,fontSize:13,background:S.acc,border:"none",fontWeight:600,borderRadius:8,color:"#fff"}}>Fechar roteiro do dia</button></div>}
 
       <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}} focusReq={focusReq} rfv={rfvMap} excl={exclOrgs} pendMapa={pendMapa} prospDe={prospDe}/>
-      <CrmTab visible={tab.startsWith("crm")} prospDe={prospDe} onProspSalvar={salvarProsp} onIrRotas={()=>{try{localStorage.setItem("jc:rotasModo","planejar");}catch{}setTab("rotas");}} onProspFim={x=>{fetch(`${DASH_CRM}/api/crm/prospeccoes?id=${x.id}`,{method:"DELETE",headers:{"X-Session":token}}).catch(()=>{});setProspMap(p=>{const n={...p};n[x.chave]=(n[x.chave]||[]).filter(y=>y.id!==x.id);return n;});}} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs} pessoasQ={pessoaQ0} onRemoto={quickAction}/>
+      <CrmTab onIris={abrirIris} visible={tab.startsWith("crm")} prospDe={prospDe} onProspSalvar={salvarProsp} onIrRotas={()=>{try{localStorage.setItem("jc:rotasModo","planejar");}catch{}setTab("rotas");}} onProspFim={x=>{fetch(`${DASH_CRM}/api/crm/prospeccoes?id=${x.id}`,{method:"DELETE",headers:{"X-Session":token}}).catch(()=>{});setProspMap(p=>{const n={...p};n[x.chave]=(n[x.chave]||[]).filter(y=>y.id!==x.id);return n;});}} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs} pessoasQ={pessoaQ0} onRemoto={quickAction}/>
       <Suspense fallback={null}>{mapaLigado&&<MapaTab visible={tab==="mapa"} orgs={orgs} plocs={plocs} user={user} rfv={rfvMap} excl={exclOrgs} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}</Suspense>
       {tab==="rotas"&&<RotasTab excl={exclOrgs} onEdit={o2=>setEditTarget(o2)} onNovaEmpresa={()=>setSearchAdd(true)} onProspSalvar={salvarProsp} onCrmChange={()=>setCrmBump(b=>b+1)} sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs} orgs={orgs} rfv={rfvMap} token={token} pendMapa={pendMapa} prospDe={prospDe} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}
       {tab==="analise"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando análise…</p>}><AnaliseTab token={token} allOrgs={allOrgs} rfv={rfvMap} user={user} isAdmin={isAdmin} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/></Suspense>}
       {tab==="relatorio"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando relatório…</p>}><RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/></Suspense>}
-      {tab==="juvina"&&isAdmin&&<JuvinaEmbutida tema={tema} caminho="/voz" titulo="Juvina" allow="microphone; autoplay" emoji="🎙️" nome="Juvina"/>}
-      {tab==="senhas"&&<JuvinaEmbutida tema={tema} caminho="/voz/cofre" query="embutido=1" titulo="Senhas dos sistemas" idFrame="juvina-senhas" allow="clipboard-write" emoji="🔑" nome="Senhas"/>}
+      {tab==="iris"&&<TelaEmbutida origem={IRIS_ORIGEM} tema={tema} caminho="/" titulo="Íris" idFrame="iris" allow="clipboard-write" emoji="✨" nome="Íris" contexto={irisContexto}/>}
+      {tab==="funcoes"&&isAdmin&&<TelaEmbutida origem={JUVINA_ORIGEM} tema={tema} caminho="/voz/funcoes" query="embutido=1" titulo="Funções da Juvina" idFrame="juvina-funcoes" allow="clipboard-write" emoji="⚙" nome="Funções"/>}
+      {tab==="senhas"&&<TelaEmbutida origem={JUVINA_ORIGEM} tema={tema} caminho="/voz/cofre" query="embutido=1" titulo="Senhas dos sistemas" idFrame="juvina-senhas" allow="clipboard-write" emoji="🔑" nome="Senhas"/>}
       {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} plocs={plocs} dayBases={dayBases} user={user} visits={visits} token={token} bump={crmBump}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs} bump={crmBump} onCrmChange={()=>setCrmBump(b=>b+1)}/>
 
