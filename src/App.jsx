@@ -420,12 +420,11 @@ export default function App(){
     {/* SIDEBAR — mesma estrutura do Dashboard (grupos + itens); no mobile vira gaveta */}
     {mob&&navOpen&&<div onClick={()=>setNavOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.45)",zIndex:49}}/>}
     <div style={{width:navOpen?230:0,minWidth:navOpen?230:0,transition:"all .25s",overflow:"hidden",background:S.chrome,borderRight:`1px solid ${S.chromeBdr}`,position:mob?"fixed":"relative",top:0,left:0,height:"100vh",zIndex:mob?50:1,display:"flex",flexDirection:"column",boxShadow:mob&&navOpen?"0 0 40px rgba(0,0,0,.5)":"none"}}>
-      <div style={{height:74,display:"flex",flexDirection:"column",alignItems:"flex-start",justifyContent:"center",gap:3,padding:"8px 18px 4px",flexShrink:0}}>
+      {/* v130: padrão do Dashboard — logo branca e "Representação Inteligente" embaixo dela */}
+      <div style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:5,padding:"14px 18px 8px",flexShrink:0,whiteSpace:"nowrap"}}>
         <img src="/logo-white.png" alt="Jordan" style={{height:26,objectFit:"contain"}}/>
-        <div style={{lineHeight:1.15,whiteSpace:"nowrap"}}>
-          <span style={{fontSize:12.5,fontWeight:700,letterSpacing:".06em",color:S.chromeFg}}>TeamCheck</span>
-          <span style={{fontSize:9.5,color:S.navGrp,letterSpacing:".02em",marginLeft:6}}>Representação Inteligente</span>
-        </div>
+        <div style={{fontSize:10,fontWeight:600,letterSpacing:.5,color:S.navGrp,lineHeight:1.2}}>Representação Inteligente</div>
+        <div style={{fontSize:12.5,fontWeight:700,letterSpacing:".06em",color:S.chromeFg,lineHeight:1.2,marginTop:2}}>TeamCheck</div>
       </div>
       <div style={{flex:1,overflowY:"auto",padding:"0 8px 18px"}}>
         {NAVG.map((g,gi)=>(
