@@ -740,7 +740,7 @@ function ProspModal({ titulo, sub, compra = [], atuais = [], lote = false, onSal
 
 // v117: a mesma tabela serve Rotas › Planejar (prop `rota`): a seleção vira a seleção do roteiro e entram
 //  ordenação por prioridade/distância, "ocultar atender a distância", Cuiabá + VG e os selos do roteiro.
-export function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user, onCrmChange, visits, prospDe, onProspSalvar, plocs, onIrRotas, rota }) {
+export function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNovaEmpresa, user, onCrmChange, visits, prospDe, onProspSalvar, plocs, onIrRotas, rota, onIris }) {
   const rfvDe = (o) => { if (!rfv) return null; const k = soDig(o.cnpj); if (k && rfv.byCnpj[k.padStart(14, "0")]) return rfv.byCnpj[k.padStart(14, "0")]; return rfv.byOrg[o.id] || null; };
   const PREF = rota ? "jc:rotas-lista-prefs" : "jc:empresas-prefs";
   const p0 = sL(PREF, {});
@@ -1068,6 +1068,14 @@ export function EmpresasView({ token, allOrgs, excl, rfv, onOpen, onEdit, onNova
           <button onClick={() => setFiltAberto(v => !v)} aria-expanded={filtAberto} style={{ flexShrink: 0, height: 36, padding: "0 12px", borderRadius: 18, display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, border: `1px solid ${filtAberto || chips.length ? S.txt : S.inpBdr}`, background: filtAberto || chips.length ? S.txt : "transparent", color: filtAberto || chips.length ? S.bg : S.txt, cursor: "pointer" }}><SlidersHorizontal size={14} strokeWidth={2} />Filtros{chips.length ? ` · ${chips.length}` : ""}</button>
           {chips.map(c => <button key={c.k} onClick={c.tira} title="Remover filtro" style={{ flexShrink: 0, height: 36, padding: "0 10px 0 12px", borderRadius: 18, display: "flex", alignItems: "center", gap: 6, fontSize: 13, border: `1px solid ${S.inpBdr}`, background: "transparent", color: S.txt, whiteSpace: "nowrap", cursor: "pointer" }}>{c.l}<X size={12} strokeWidth={2.2} color="var(--t3)" /></button>)}
           {chips.length > 1 && <button onClick={limpar} style={{ flexShrink: 0, height: 36, padding: "0 8px", border: "none", background: "transparent", color: S.ts, fontSize: 13, cursor: "pointer" }}>Limpar</button>}
+          {/* v133: "Íris" — abre a Íris com o cliente MARCADO na lista (só lê a seleção; um cliente por vez) */}
+          {!rota && onIris && (() => {
+            const ids = [...selE]; const o1 = ids.length === 1 ? (allOrgs || []).find(x => x.id === ids[0]) : null;
+            const temCnpj = o1 && String(o1.cnpj || "").replace(/\D/g, "");
+            const dica = !ids.length ? "Marque um cliente para abrir na Íris" : ids.length > 1 ? "Marque só um cliente" : !temCnpj ? "Este cliente não tem CNPJ" : "Abrir a Íris já com este cliente";
+            const ok = !!temCnpj; const soIcone = typeof window !== "undefined" && window.innerWidth < 640;
+            return <button onClick={() => { if (ok) onIris(o1); }} disabled={!ok} aria-disabled={!ok} title={dica} aria-label="Íris" style={{ flexShrink: 0, height: 36, padding: soIcone ? "0 10px" : "0 14px", borderRadius: 18, display: "flex", alignItems: "center", gap: 6, fontSize: 13, fontWeight: 600, border: `1px solid ${ok ? S.pri : S.inpBdr}`, background: ok ? S.pri : "transparent", color: ok ? "#fff" : S.td, opacity: ok ? 1 : 0.6, cursor: ok ? "pointer" : "default", whiteSpace: "nowrap" }}><Sparkles size={15} strokeWidth={2} />{!soIcone && "Íris"}</button>;
+          })()}
         </div>
         {filtAberto && <div style={{ background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10, padding: 12, marginBottom: 12, display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(160px,1fr))", gap: 8 }}>
           <MultiSelect values={fCat} onChange={v => { setFCat(v); setVc(60); }} placeholder="Categoria" allLabel="Todas" colorFor={c => CC[c] || S.pri} options={[...CATS, "Excluido"]} />
@@ -1297,7 +1305,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   if (sel) return <ClienteCRM onIris={onIris} org={selAt} allOrgs={allOrgs} prospDe={prospDe} onProspFim={onProspFim} token={token} user={user} visits={visits} plocs={plocs} rfv={rfv} onBack={() => { setSel(null); carregaFeed(); }} onEdit={onEdit} onPerson={onPerson} onCrmChange={onCrmChange} onRemoto={onRemoto} backLabel={secao === "pessoas" ? "Voltar a Pessoas" : "Voltar ao CRM"} />;
 
   return (<div>
-    {secao === "empresas" && <EmpresasView plocs={plocs} onIrRotas={onIrRotas} token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} visits={visits} prospDe={prospDe} onProspSalvar={onProspSalvar} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}
+    {secao === "empresas" && <EmpresasView onIris={onIris} plocs={plocs} onIrRotas={onIrRotas} token={token} allOrgs={allOrgs} excl={excl} rfv={rfv} user={user} visits={visits} prospDe={prospDe} onProspSalvar={onProspSalvar} onOpen={o => setSel(o)} onEdit={onEdit} onNovaEmpresa={onNovaEmpresa} onCrmChange={onCrmChange} />}
     {secao === "pessoas" && <PessoasView token={token} allOrgs={allOrgs} excl={excl} onOpenOrg={o => setSel(o)} onPerson={onPerson} q0={pessoasQ} />}
     {secao === "inicio" && <div>
     <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
