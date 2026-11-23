@@ -2,7 +2,7 @@
 // Responsável pré-selecionado com o usuário logado, e ranking dos principais clientes (matriz RFV)
 // quando há filtros ativos. Card do cliente com distância, Traçar rota e Ficha (padrão Agendor).
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { Crosshair, X, Navigation, ContactRound, Trophy, Search, Maximize2, Minimize2 } from "lucide-react";
+import { Crosshair, X, Navigation, ContactRound, Trophy, Search, Maximize2, Minimize2, Sparkles } from "lucide-react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
@@ -41,7 +41,7 @@ function clusterIcon(cluster) {
 }
 const RFV_CORES = { "Campeão": "#C8964E", "Leal": "#2A9D8F", "Em Crescimento": "#0AAEE8", "Em Risco": "#FFB020", "Inativo": "#FB4B3A" };
 
-function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
+function MapaTab({ visible, orgs, plocs, onOpenFicha, onIris, user, rfv, excl }) {
   const mob = typeof window !== "undefined" && window.innerWidth <= 768;
   const mapRef = useRef(null); const divRef = useRef(null); const layerRef = useRef(null); const meRef = useRef(null);
   const [sel, setSel] = useState(null);
@@ -208,6 +208,7 @@ function MapaTab({ visible, orgs, plocs, onOpenFicha, user, rfv, excl }) {
         <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
           <a href={`https://www.google.com/maps/dir/?api=1&destination=${sel.lat},${sel.lng}`} target="_blank" rel="noopener" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: S.pri, color: "#fff", borderRadius: 9, padding: "10px 8px", fontSize: 13, fontWeight: 600, textDecoration: "none" }}><Navigation size={15} />Traçar rota</a>
           <button onClick={() => onOpenFicha && onOpenFicha(sel.o)} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: S.acc, color: "#fff", border: "none", borderRadius: 9, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}><ContactRound size={15} />Ficha</button>
+          {onIris && String(sel.o?.cnpj || "").replace(/\D/g, "") && <button onClick={() => onIris(sel.o)} title="Abrir a Íris já com este cliente" aria-label="Íris" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, background: "transparent", color: S.pl, border: `1px solid ${S.pri}`, borderRadius: 9, padding: "10px 8px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}><Sparkles size={15} />Íris</button>}
         </div>
       </div>}
     </div>

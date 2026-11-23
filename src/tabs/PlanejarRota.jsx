@@ -214,7 +214,7 @@ function ConfirmaModal({ itens, onIncluir, onDeixar }) {
 
 const grupoDe = o => fixMojibake(String(o.grupo || "").replace("Grupo: ", "").trim());
 
-function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pendMapa, prospDe, excl, onEdit, onNovaEmpresa, onProspSalvar, onCrmChange }) {
+function PlanejarRota({ onIris, orgs, plocs, visits, rfv, user, token, onOpenFicha, pendMapa, prospDe, excl, onEdit, onNovaEmpresa, onProspSalvar, onCrmChange }) {
   const PREF = `jc:rotaPlan:${user?.id || "x"}`;
   const p0 = useMemo(() => sL(PREF, {}), []); // eslint-disable-line
   const mob = typeof window !== "undefined" && window.innerWidth <= 768;
@@ -666,6 +666,7 @@ function PlanejarRota({ orgs, plocs, visits, rfv, user, token, onOpenFicha, pend
           </div>
           <a href={`https://www.google.com/maps/dir/?api=1&destination=${p.lat},${p.lng}&travelmode=driving`} target="_blank" rel="noopener" title="Abrir no Google Maps" style={{ padding: "7px 9px", borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: S.inp, color: S.pl, fontSize: 11.5, fontWeight: 700, textDecoration: "none" }}>Maps</a>
           <a href={`https://waze.com/ul?ll=${p.lat},${p.lng}&navigate=yes`} target="_blank" rel="noopener" title="Abrir no Waze" style={{ padding: "7px 9px", borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: S.inp, color: S.pl, fontSize: 11.5, fontWeight: 700, textDecoration: "none" }}>Waze</a>
+          {onIris && String(p.o?.cnpj || "").replace(/\D/g, "") && <button onClick={() => onIris(p.o)} title="Abrir a Íris já com este cliente" aria-label="Íris" style={{ padding: 6, borderRadius: 8, border: `1px solid ${S.inpBdr}`, background: S.inp, cursor: "pointer", display: "flex" }}><Sparkles size={15} color={S.pl} /></button>}
           <button onClick={() => tirar(p.id)} disabled={lo} title="Tirar do roteiro" style={{ padding: 6, borderRadius: 8, border: `1px solid ${S.dng}44`, background: "transparent", cursor: "pointer", display: "flex" }}><X size={15} color={S.dng} /></button>
         </div>))}
         {roteiro.volta && <div style={{ fontSize: 12, color: S.pl, fontWeight: 600, padding: "10px 0 2px" }}>🏠 Volta · +{fmtKm(roteiro.volta.km)} km · {fmtMin(roteiro.volta.min)} · chega {hhmm(roteiro.fim)}</div>}

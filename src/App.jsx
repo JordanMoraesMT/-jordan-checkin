@@ -19,33 +19,30 @@ import { CrmTab } from "./tabs/CrmTab";
 // ─── CRM próprio (D1 via Worker do Dashboard) — registro em segundo plano ───
 const DASH_CRM = "https://dashboard.jordanmt.com";
 
-// v129: telas embutidas por iframe em *.jordanmt.com — "Íris" (iris.jordanmt.com), "Senhas" e "Funções" (Juvina).
+// v129: telas embutidas por iframe em *.jordanmt.com — "Senhas" e "Funções" (Juvina). (v134: a Íris saiu daqui e abre na página própria.)
 // As páginas leem o cookie "ses" (.jordanmt.com) e só abrem em iframe a partir de *.jordanmt.com (frame-ancestors).
 // Tema claro/escuro: vai no endereço ao abrir (?tema=claro|escuro) e, a cada troca e a cada carga do iframe, por
-// postMessage {tipo:"tema",tema} SÓ para a origem da própria tela (nunca "*"). A Íris recebe também
-// {tipo:"contexto",contexto:{cliente,cnpj,tela}} (ficha do cliente ou visita em andamento) para já buscar o cliente.
+// postMessage {tipo:"tema",tema} SÓ para a origem da própria tela (nunca "*").
 // Nada do conteúdo do iframe é lido nem guardado pelo TeamCheck.
 const JUVINA_ORIGEM="https://juvina.jordanmt.com";
 const IRIS_ORIGEM="https://iris.jordanmt.com";
-function TelaEmbutida({origem,tema,caminho,query="",titulo,allow,idFrame,emoji,nome,contexto}){
+function TelaEmbutida({origem,tema,caminho,query="",titulo,allow,idFrame,emoji,nome}){
   const nomeTema=t=>t==="light"?"claro":"escuro";
   const[src]=useState(()=>`${origem}${caminho}?${query?query+"&":""}tema=${nomeTema(tema)}`);
   const ref=useRef(null);const carregou=useRef(false);
   const manda=msg=>{try{ref.current?.contentWindow?.postMessage(msg,origem);}catch{}};
   const avisaTema=()=>manda({tipo:"tema",tema:nomeTema(tema)});
-  const avisaContexto=()=>{if(contexto&&contexto.cnpj)manda({tipo:"contexto",contexto});};
   useEffect(()=>{if(carregou.current)avisaTema();},[tema]);// eslint-disable-line
-  useEffect(()=>{if(carregou.current)avisaContexto();},[contexto?.cnpj,contexto?.tela]);// eslint-disable-line
   const noDominio=typeof location!=="undefined"&&/(^|\.)jordanmt\.com$/.test(location.hostname);
   if(!noDominio)return(
     <div style={{padding:"22px 18px",maxWidth:560,margin:"0 auto"}}>
       <div style={{background:S.card,border:`1px solid ${S.brd}`,borderRadius:12,padding:"1rem 1.1rem"}}>
         <p style={{margin:"0 0 6px",fontSize:15,fontWeight:700,color:S.txt}}>{emoji} {nome}</p>
-        <p style={{margin:"0 0 14px",fontSize:13,color:S.ts,lineHeight:1.5}}>{nome==="Íris"?"A Íris":"Esta tela"} só abre dentro do TeamCheck pelo endereço <b>teamcheck.jordanmt.com</b> (é ele que leva o seu login até ela). Este aparelho está em <b>{location.hostname}</b>.</p>
+        <p style={{margin:"0 0 14px",fontSize:13,color:S.ts,lineHeight:1.5}}>Esta tela só abre dentro do TeamCheck pelo endereço <b>teamcheck.jordanmt.com</b> (é ele que leva o seu login até ela). Este aparelho está em <b>{location.hostname}</b>.</p>
         <a href="https://teamcheck.jordanmt.com/" style={{display:"inline-block",padding:"10px 16px",borderRadius:10,background:S.pri,color:"#fff",fontSize:13,fontWeight:700,textDecoration:"none"}}>Abrir em teamcheck.jordanmt.com</a>
       </div>
     </div>);
-  return <iframe ref={ref} id={idFrame} src={src} title={titulo} allow={allow} onLoad={()=>{carregou.current=true;avisaTema();avisaContexto();}} style={{flex:1,width:"100%",height:"100%",minHeight:0,border:0,display:"block",background:S.bg}}/>;
+  return <iframe ref={ref} id={idFrame} src={src} title={titulo} allow={allow} onLoad={()=>{carregou.current=true;avisaTema();}} style={{flex:1,width:"100%",height:"100%",minHeight:0,border:0,display:"block",background:S.bg}}/>;
 }
 
 export default function App(){
@@ -217,11 +214,12 @@ export default function App(){
   const[sugLigado,setSugLigado]=useState(()=>sugCheckinLigado(sL("jc:user",null)));
   useEffect(()=>{setSugLigado(sugCheckinLigado(user));},[user?.id]);// eslint-disable-line
   const sugVisita=useSugestaoVisita({ligado:sugLigado,user,orgs:allOrgs,plocs,active,visits});
-  // v129: Íris — contexto do cliente (ficha → botão "Íris") ou da visita em andamento; nunca vai para "*"
-  const[irisCtx,setIrisCtx]=useState(null);
-  const abrirIris=useCallback(o=>{const cn=String(o?.cnpj||"").replace(/\D/g,"");setIrisCtx(cn?{cliente:o.nickname||o.name||"",cnpj:cn,tela:"ficha"}:null);setTab("iris");},[]);// eslint-disable-line
-  useEffect(()=>{if(tab!=="iris")setIrisCtx(null);if(tab==="juvina")setTab("iris");},[tab]);// a tela Juvina (/voz) saiu
-  const irisContexto=useMemo(()=>{if(irisCtx)return irisCtx;if(!active)return null;const o=(allOrgs||[]).find(x=>String(x.id)===String(active.orgId));const cn=String(o?.cnpj||"").replace(/\D/g,"");return cn?{cliente:o.nickname||o.name||active.orgName||"",cnpj:cn,tela:"checkin"}:null;},[irisCtx,active,allOrgs]);
+  // v134: a Íris abre na PÁGINA PRÓPRIA (iris.jordanmt.com), sempre na mesma aba nomeada "iris" — o 2º clique reaproveita a aba
+  // e troca o cliente. Sem noopener para o nome da aba funcionar (endereço nosso). Login: cookie "ses" em .jordanmt.com.
+  const urlIris=(cn)=>`${IRIS_ORIGEM}/?${cn?"cliente="+cn+"&":""}tema=${tema==="light"?"claro":"escuro"}`;
+  const abrirIris=useCallback(o=>{const cn=String(o?.cnpj||"").replace(/\D/g,"");if(!cn)return;window.open(urlIris(cn),"iris");},[tema]);// eslint-disable-line
+  const abrirIrisMenu=()=>{window.open(urlIris(""),"iris");};
+  useEffect(()=>{if(tab==="juvina"||tab==="iris")setTab("pdvs");},[tab]);// a aba embutida da Íris (e a Juvina /voz) saíram
 
   const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{
     const tk=t||token;
@@ -402,18 +400,18 @@ export default function App(){
   const NAVG=[
     {grp:"CAMPO",itens:[{id:"pdvs",I:Store,l:"PDVs"},{id:"mapa",I:MapPin,l:"Mapa"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"agenda",I:Calendar,l:"Agenda"}]},
     {grp:"CRM",itens:[{id:"crm_inicio",I:BookUser,l:"Início"},{id:"crm_empresas",I:Building2,l:"Empresas"},{id:"crm_pessoas",I:Contact,l:"Pessoas"}]},
-    {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true}]:[]),{id:"iris",I:Sparkles,l:"Íris"},...(isAdmin?[{id:"funcoes",I:Settings2,l:"Funções",admin:true}]:[]),{id:"senhas",I:KeyRound,l:"Senhas"},{id:"analise",I:Gauge,l:"Análise de visitas"},{id:"relatorio",I:BarChart3,l:"Relatório"}]},
+    {grp:"GESTÃO",itens:[...(isAdmin?[{id:"equipe",I:Users,l:"Equipe",admin:true}]:[]),{id:"iris",I:Sparkles,l:"Íris",externo:true},...(isAdmin?[{id:"funcoes",I:Settings2,l:"Funções",admin:true}]:[]),{id:"senhas",I:KeyRound,l:"Senhas"},{id:"analise",I:Gauge,l:"Análise de visitas"},{id:"relatorio",I:BarChart3,l:"Relatório"}]},
     {grp:"SISTEMA",itens:[{id:"config",I:Settings,l:"Configurações"}]},
   ];
-  const embutida=tab==="iris"||tab==="senhas"||tab==="funcoes";// telas embutidas ocupam a área toda, sem rolagem própria
+  const embutida=tab==="senhas"||tab==="funcoes";// telas embutidas ocupam a área toda, sem rolagem própria
   const TITULOS={pdvs:["PDVs","Pontos de venda"],crm_inicio:["CRM","Feed de atividades"],crm_empresas:["Empresas","Carteira de clientes"],crm_pessoas:["Pessoas","Contatos"],mapa:["Mapa","Clientes no mapa"],rotas:["Rotas","Roteiro do dia"],relatorio:["Relatório","Período, jornada e km"],equipe:["Equipe","Produtividade"],analise:["Análise de visitas","Carteira, jornada e saúde"],agenda:["Agenda","Tarefas e retornos"],iris:["Íris","Assistente"],funcoes:["Funções","Juvina"],senhas:["Senhas","Sistemas das indústrias"],config:["Configurações","Sistema"]};
   // Bottom nav (mobile): CRM entra como atalho único (→ Início); Empresas/Pessoas ficam na gaveta lateral
   const baseTabs=[{id:"pdvs",I:Store,l:"PDVs"},{id:"mapa",I:MapPin,l:"Mapa"},{id:"crm_inicio",I:BookUser,l:"CRM"},{id:"rotas",I:MapIcon,l:"Rotas"},{id:"relatorio",I:BarChart3,l:"Relatório"},{id:"agenda",I:Calendar,l:"Agenda"},{id:"config",I:Settings,l:"Config"}];
   // v129: na barra do celular, a Íris ocupa o lugar do Relatório (que continua no menu ☰) — para todos
-  const comIris=l=>l.map(t=>t.id==="relatorio"?{id:"iris",I:Sparkles,l:"Íris"}:t);
+  const comIris=l=>l.map(t=>t.id==="relatorio"?{id:"iris",I:Sparkles,l:"Íris",externo:true}:t);
   const tabs=isAdmin?[...baseTabs.slice(0,4),{id:"equipe",I:Users,l:"Equipe"},...comIris(baseTabs.slice(4))]:comIris(baseTabs);
   const navAtivo=(id)=>id.startsWith("crm")?tab.startsWith("crm"):tab===id;
-  const irPara=(id)=>{if(id==="mapa")setMapaLigado(true);setTab(id);if(mob)setNavOpen(false);};
+  const irPara=(id)=>{if(id==="iris"){abrirIrisMenu();if(mob)setNavOpen(false);return;}if(id==="mapa")setMapaLigado(true);setTab(id);if(mob)setNavOpen(false);};
   // v131: Sair de verdade — avisa o servidor de sessão (/logout, keepalive, espera no máx. 2,5 s), apaga as duas cópias do
   // cookie e volta para a tela de entrada. Como a sessão é compartilhada, encerra também o Dashboard e a Íris neste navegador.
   const sair=async()=>{if(saindo)return;setSaindo(true);const ses=token||readCookie("ses");
@@ -528,12 +526,11 @@ export default function App(){
 
       <PdvsTab onIris={abrirIris} visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}} focusReq={focusReq} rfv={rfvMap} excl={exclOrgs} pendMapa={pendMapa} prospDe={prospDe}/>
       <CrmTab onIris={abrirIris} visible={tab.startsWith("crm")} prospDe={prospDe} onProspSalvar={salvarProsp} onIrRotas={()=>{try{localStorage.setItem("jc:rotasModo","planejar");}catch{}setTab("rotas");}} onProspFim={x=>{fetch(`${DASH_CRM}/api/crm/prospeccoes?id=${x.id}`,{method:"DELETE",headers:{"X-Session":token}}).catch(()=>{});setProspMap(p=>{const n={...p};n[x.chave]=(n[x.chave]||[]).filter(y=>y.id!==x.id);return n;});}} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs} pessoasQ={pessoaQ0} onRemoto={quickAction}/>
-      <Suspense fallback={null}>{mapaLigado&&<MapaTab visible={tab==="mapa"} orgs={orgs} plocs={plocs} user={user} rfv={rfvMap} excl={exclOrgs} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}</Suspense>
-      {tab==="rotas"&&<RotasTab excl={exclOrgs} onEdit={o2=>setEditTarget(o2)} onNovaEmpresa={()=>setSearchAdd(true)} onProspSalvar={salvarProsp} onCrmChange={()=>setCrmBump(b=>b+1)} sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs} orgs={orgs} rfv={rfvMap} token={token} pendMapa={pendMapa} prospDe={prospDe} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}
+      <Suspense fallback={null}>{mapaLigado&&<MapaTab onIris={abrirIris} visible={tab==="mapa"} orgs={orgs} plocs={plocs} user={user} rfv={rfvMap} excl={exclOrgs} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}</Suspense>
+      {tab==="rotas"&&<RotasTab onIris={abrirIris} excl={exclOrgs} onEdit={o2=>setEditTarget(o2)} onNovaEmpresa={()=>setSearchAdd(true)} onProspSalvar={salvarProsp} onCrmChange={()=>setCrmBump(b=>b+1)} sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs} orgs={orgs} rfv={rfvMap} token={token} pendMapa={pendMapa} prospDe={prospDe} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}
       {tab==="analise"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando análise…</p>}><AnaliseTab token={token} allOrgs={allOrgs} rfv={rfvMap} user={user} isAdmin={isAdmin} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/></Suspense>}
       {tab==="relatorio"&&<Suspense fallback={<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando relatório…</p>}><RelatorioTab visits={visits} dayBases={dayBases} user={user} token={token} plocs={plocs} onEditBase={(d,start,end,uid)=>{const key=uid?uid+"_"+d:d;setDayBases(p=>{const n={...p,[key]:{...p[key],start,end}};sS("jc:dayBases",n);return n;});}}/></Suspense>}
-      {tab==="iris"&&<TelaEmbutida origem={IRIS_ORIGEM} tema={tema} caminho="/" titulo="Íris" idFrame="iris" allow="clipboard-write" emoji="✨" nome="Íris" contexto={irisContexto}/>}
-      {tab==="funcoes"&&isAdmin&&<TelaEmbutida origem={JUVINA_ORIGEM} tema={tema} caminho="/voz/funcoes" query="embutido=1" titulo="Funções da Juvina" idFrame="juvina-funcoes" allow="clipboard-write" emoji="⚙" nome="Funções"/>}
+          {tab==="funcoes"&&isAdmin&&<TelaEmbutida origem={JUVINA_ORIGEM} tema={tema} caminho="/voz/funcoes" query="embutido=1" titulo="Funções da Juvina" idFrame="juvina-funcoes" allow="clipboard-write" emoji="⚙" nome="Funções"/>}
       {tab==="senhas"&&<TelaEmbutida origem={JUVINA_ORIGEM} tema={tema} caminho="/voz/cofre" query="embutido=1" titulo="Senhas dos sistemas" idFrame="juvina-senhas" allow="clipboard-write" emoji="🔑" nome="Senhas"/>}
       {tab==="equipe"&&isAdmin&&<EquipeTab sel={equipeSel} setSel={setEquipeSel} plocs={plocs} dayBases={dayBases} user={user} visits={visits} token={token} bump={crmBump}/>}
       <AgendaTab visible={tab==="agenda"} token={token} user={user} allOrgs={allOrgs} bump={crmBump} onCrmChange={()=>setCrmBump(b=>b+1)}/>
@@ -560,7 +557,7 @@ export default function App(){
     {!embutida&&<button onClick={()=>{const el=document.querySelector(".jc-main");if(el)el.scrollTo({top:0,behavior:"smooth"});}} style={{position:"fixed",bottom:mob?84:24,right:16,width:44,height:44,borderRadius:50,background:S.pri,border:"none",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:`0 3px 12px ${S.pri}66`,zIndex:30,cursor:"pointer",padding:0}}><ChevronUp size={22} strokeWidth={2.5} color="#fff"/></button>}
 
     {/* BOTTOM NAV — só no celular (agilidade de campo); no desktop a navegação é a sidebar */}
-    {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=>{const act=navAtivo(t.id);return <button key={t.id} onClick={()=>{if(t.id==="mapa")setMapaLigado(true);setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:act?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:act?700:400,color:act?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={act?2.2:1.6}/>{t.l}</button>;})}</div></div>}
+    {mob&&<div style={{position:"fixed",bottom:0,left:0,right:0,background:`linear-gradient(180deg, ${S.chrome}, ${S.chromeTop})`,borderTop:`1px solid ${S.chromeBdr}`,display:"flex",justifyContent:"center",zIndex:40,boxShadow:`0 -6px 18px ${S.contentShadow}`}}><div style={{display:"flex",width:"100%",padding:"5px 4px"}}>{tabs.map(t=>{const act=navAtivo(t.id);return <button key={t.id} onClick={()=>{if(t.id==="iris"){abrirIrisMenu();return;}if(t.id==="mapa")setMapaLigado(true);setTab(t.id);}} style={{flex:1,border:"none",borderRadius:10,margin:"0 2px",background:act?S.navActive:"transparent",padding:"6px 2px 5px",fontSize:10,fontWeight:act?700:400,color:act?S.navActiveFg:S.navFg,display:"flex",flexDirection:"column",alignItems:"center",gap:2,cursor:"pointer"}}><t.I size={22} strokeWidth={act?2.2:1.6}/>{t.l}</button>;})}</div></div>}
 
     {coTarget&&<NoteModal token={token} marcasCompra={marcasCompraDe((allOrgs||[]).find(o=>o.id===coTarget.id)||coTarget)} marcasProsp={prospDe((allOrgs||[]).find(o=>o.id===coTarget.id)||coTarget).map(x=>x.industria)} org={coTarget} pendencias={active&&coTarget.id===active.orgId?pendAtivas:[]} onSave={checkout} onCancel={()=>setCoTarget(null)}/>}
     {sugestao&&sugestao.itens[sugestao.i]&&(()=>{const x=sugestao.itens[sugestao.i];const o=x.org;const g=plocs[o.id];return(<div role="status" aria-live="polite" style={{position:"fixed",left:12,right:12,bottom:mob?88:24,zIndex:55,display:"flex",justifyContent:"center",pointerEvents:"none"}}>
