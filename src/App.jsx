@@ -1,5 +1,5 @@
 // TeamCheck — App (orquestração principal)
-import { useState, useEffect, useMemo, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, lazy, Suspense } from "react";
 import { Store, Map as MapIcon, MapPin, BarChart3, Calendar, Users, Settings, Plus, RefreshCw, ChevronUp, BookUser, Building2, Contact, Menu, Sun, Moon, ChevronRight, Gauge, KeyRound, Sparkles, Settings2 } from "lucide-react";
 import { chaveMarca, HOMES, API, USERS, PEND_PREFIXO, pendenciasDe, fD1, toLocalDate, todayLocal, S, fT, fD, mins, hrsMin, hav, sL, sS, gps, fixMojibake, isRealVisit, loadCatalogos, syncFetch, reenviarSyncPendente, temSyncPendente, unificarCidades, temCoord } from "./lib";
 import { useSugestaoVisita, CartaoSugestao, sugCheckinLigado } from "./proximidade";
@@ -56,7 +56,8 @@ export default function App(){
   // v43: auto-ajuste ao equipamento — telas estreitas ganham escala proporcional (some o "explodido")
   useEffect(()=>{const fit=()=>{const w=window.innerWidth;const z=w<420?Math.max(0.8,Math.min(1,w/415)):1;document.body.style.zoom=z===1?"":String(z);};fit();window.addEventListener("resize",fit);return()=>{window.removeEventListener("resize",fit);document.body.style.zoom="";};},[]);
   const setSSOCookie=(t)=>{try{const base="ses="+encodeURIComponent(t)+"; path=/; max-age=2592000; samesite=lax";document.cookie=base+"; domain=.jordanmt.com; secure";document.cookie=base;}catch{}};
-  const clearSSOCookie=()=>{try{document.cookie="ses=; path=/; max-age=0; domain=.jordanmt.com";document.cookie="ses=; path=/; max-age=0";}catch{}};
+  // v131: apaga as DUAS cópias do cookie "ses" (a deste endereço e a de .jordanmt.com, que o Dashboard e a Íris usam)
+  const clearSSOCookie=()=>{try{const z="ses=; path=/; max-age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; samesite=lax";document.cookie=z+"; domain=.jordanmt.com; secure";document.cookie=z+"; domain=.jordanmt.com";document.cookie=z+"; secure";document.cookie=z;}catch{}};
   const readCookie=(n)=>{try{const m=document.cookie.match(new RegExp("(?:^|; )"+n+"=([^;]+)"));return m?decodeURIComponent(m[1]):"";}catch{return "";}};
   const[token,setToken]=useState(()=>sL("jc:session",""));const[user,setUser]=useState(()=>sL("jc:user",null));const[orgs,setOrgs]=useState([]);const[allOrgs,setAllOrgs]=useState([]);const[exclOrgs,setExclOrgs]=useState([]);
   // v124: regrava o cookie "ses" sempre que o app abre logado (o Safari/iPhone apaga cookie de script em até 7 dias,
@@ -163,7 +164,7 @@ export default function App(){
   useEffect(()=>{if(!token||!user)return;syncPull();syncVisitLoad();syncDayBasesLoad();const iv=setInterval(()=>{syncPull();syncDayBasesLoad();},15000);return()=>clearInterval(iv);},[token,user]);
   // v120: sessão vencida (401 no sync/CNPJ) → tela de login SEM apagar nada do aparelho (visitas, GPS, rascunhos);
   // depois do login, reenvia o que não chegou à nuvem (lib.reenviarSyncPendente).
-  const[sesExp,setSesExp]=useState(false);
+  const[sesExp,setSesExp]=useState(false);const[saindo,setSaindo]=useState(false);
   useEffect(()=>{const f=()=>{setSesExp(true);setToken("");sS("jc:session","");clearSSOCookie();};window.addEventListener("jc:sessao-expirada",f);return()=>window.removeEventListener("jc:sessao-expirada",f);},[]);// eslint-disable-line
   useEffect(()=>{if(!token||!user||!temSyncPendente())return;let vivo=true;(async()=>{const r=await reenviarSyncPendente();if(vivo&&r.ok)setSyncStatus(`Reenviado após o login: ${r.ok} item(ns)${r.falha?` · ${r.falha} com erro`:""}`);})();return()=>{vivo=false;};},[token,user]);
 
@@ -218,7 +219,7 @@ export default function App(){
   const sugVisita=useSugestaoVisita({ligado:sugLigado,user,orgs:allOrgs,plocs,active,visits});
   // v129: Íris — contexto do cliente (ficha → botão "Íris") ou da visita em andamento; nunca vai para "*"
   const[irisCtx,setIrisCtx]=useState(null);
-  const abrirIris=o=>{const cn=String(o?.cnpj||"").replace(/\D/g,"");setIrisCtx(cn?{cliente:o.nickname||o.name||"",cnpj:cn,tela:"ficha"}:null);setTab("iris");};
+  const abrirIris=useCallback(o=>{const cn=String(o?.cnpj||"").replace(/\D/g,"");setIrisCtx(cn?{cliente:o.nickname||o.name||"",cnpj:cn,tela:"ficha"}:null);setTab("iris");},[]);// eslint-disable-line
   useEffect(()=>{if(tab!=="iris")setIrisCtx(null);if(tab==="juvina")setTab("iris");},[tab]);// a tela Juvina (/voz) saiu
   const irisContexto=useMemo(()=>{if(irisCtx)return irisCtx;if(!active)return null;const o=(allOrgs||[]).find(x=>String(x.id)===String(active.orgId));const cn=String(o?.cnpj||"").replace(/\D/g,"");return cn?{cliente:o.nickname||o.name||active.orgName||"",cnpj:cn,tela:"checkin"}:null;},[irisCtx,active,allOrgs]);
 
@@ -413,7 +414,11 @@ export default function App(){
   const tabs=isAdmin?[...baseTabs.slice(0,4),{id:"equipe",I:Users,l:"Equipe"},...comIris(baseTabs.slice(4))]:comIris(baseTabs);
   const navAtivo=(id)=>id.startsWith("crm")?tab.startsWith("crm"):tab===id;
   const irPara=(id)=>{if(id==="mapa")setMapaLigado(true);setTab(id);if(mob)setNavOpen(false);};
-  const sair=()=>{setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);clearSSOCookie();};
+  // v131: Sair de verdade — avisa o servidor de sessão (/logout, keepalive, espera no máx. 2,5 s), apaga as duas cópias do
+  // cookie e volta para a tela de entrada. Como a sessão é compartilhada, encerra também o Dashboard e a Íris neste navegador.
+  const sair=async()=>{if(saindo)return;setSaindo(true);const ses=token||readCookie("ses");
+    if(ses){try{await Promise.race([fetch(`${API}/logout`,{method:"POST",headers:{"X-Session":ses},keepalive:true}).catch(()=>{}),new Promise(r=>setTimeout(r,2500))]);}catch{}}
+    clearSSOCookie();setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);setSaindo(false);};
   const dataHoje=fD(new Date());
 
   return(<div style={{display:"flex",height:"100vh",overflow:"hidden",background:S.chrome,color:S.txt,fontFamily:"'Archivo',system-ui,sans-serif"}}>
@@ -461,7 +466,7 @@ export default function App(){
           <div style={{fontSize:13,fontWeight:600,color:S.chromeFg}}>{user?.name}</div>
           <div style={{fontSize:11,color:S.navGrp}}>{dataHoje}</div>
         </div>}
-        {!mob&&<button onClick={sair} style={{padding:"7px 15px",borderRadius:8,border:`1px solid ${S.chromeBdr}`,background:"transparent",color:S.chromeFg,fontSize:12.5,fontWeight:500,cursor:"pointer"}}>Sair</button>}
+        {!mob&&<button onClick={sair} disabled={saindo} style={{padding:"7px 15px",borderRadius:8,border:`1px solid ${S.chromeBdr}`,background:"transparent",color:S.chromeFg,fontSize:12.5,fontWeight:500,cursor:"pointer",whiteSpace:"nowrap"}}>{saindo?"Saindo…":"Sair"}</button>}
       </div>
 
       {/* CONTEÚDO — v74: superfície lisa, largura máx. nas telas de lista */}
@@ -521,7 +526,7 @@ export default function App(){
 
       {canCloseRoute&&tab!=="config"&&<div style={{background:S.acc+"18",border:`1px solid ${S.acc}44`,borderRadius:12,padding:"10px 14px",marginBottom:10}}><p style={{fontSize:13,color:S.acc,margin:"0 0 8px"}}>{todayVisits.length} visita(s) hoje — fechar o roteiro?</p><button onClick={()=>setShowEndDay(true)} style={{width:"100%",padding:10,fontSize:13,background:S.acc,border:"none",fontWeight:600,borderRadius:8,color:"#fff"}}>Fechar roteiro do dia</button></div>}
 
-      <PdvsTab visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}} focusReq={focusReq} rfv={rfvMap} excl={exclOrgs} pendMapa={pendMapa} prospDe={prospDe}/>
+      <PdvsTab onIris={abrirIris} visible={tab==="pdvs"} orgs={orgs} allOrgs={allOrgs} setOrgs={setOrgs} visits={visits} plocs={plocs} active={active} ldId={ldId} geoErr={geoErr} user={user} token={token} syncing={syncing} syncMsg={syncMsg} onSync={doSync} onCheckin={checkin} onCheckout={o2=>setCoTarget(o2)} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} onQuick={quickAction} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}} focusReq={focusReq} rfv={rfvMap} excl={exclOrgs} pendMapa={pendMapa} prospDe={prospDe}/>
       <CrmTab onIris={abrirIris} visible={tab.startsWith("crm")} prospDe={prospDe} onProspSalvar={salvarProsp} onIrRotas={()=>{try{localStorage.setItem("jc:rotasModo","planejar");}catch{}setTab("rotas");}} onProspFim={x=>{fetch(`${DASH_CRM}/api/crm/prospeccoes?id=${x.id}`,{method:"DELETE",headers:{"X-Session":token}}).catch(()=>{});setProspMap(p=>{const n={...p};n[x.chave]=(n[x.chave]||[]).filter(y=>y.id!==x.id);return n;});}} secao={tab.startsWith("crm")?tab.replace("crm_",""):"inicio"} bump={crmBump} focus={crmFocus} onCrmChange={()=>setCrmBump(b=>b+1)} token={token} user={user} allOrgs={allOrgs} visits={visits} plocs={plocs} onEdit={o2=>setEditTarget(o2)} onPerson={o2=>setPersonTarget(o2)} rfv={rfvMap} onNovaEmpresa={()=>setSearchAdd(true)} excl={exclOrgs} pessoasQ={pessoaQ0} onRemoto={quickAction}/>
       <Suspense fallback={null}>{mapaLigado&&<MapaTab visible={tab==="mapa"} orgs={orgs} plocs={plocs} user={user} rfv={rfvMap} excl={exclOrgs} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}</Suspense>
       {tab==="rotas"&&<RotasTab excl={exclOrgs} onEdit={o2=>setEditTarget(o2)} onNovaEmpresa={()=>setSearchAdd(true)} onProspSalvar={salvarProsp} onCrmChange={()=>setCrmBump(b=>b+1)} sel={rotasSel} setSel={setRotasSel} visits={visits} dayBases={dayBases} user={user} plocs={plocs} orgs={orgs} rfv={rfvMap} token={token} pendMapa={pendMapa} prospDe={prospDe} onOpenFicha={o2=>{setCrmFocus({org:o2,t:Date.now()});setTab("crm_empresas");if(mob)setNavOpen(false);}}/>}

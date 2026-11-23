@@ -581,6 +581,7 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
             .map(([k, v]) => <div key={k} style={{ display: "flex", justifyContent: "space-between", gap: 10, padding: "5px 0", borderBottom: `1px solid ${S.cl}` }}>
               <span style={{ fontSize: 12, color: S.ts }}>{k}</span><span style={{ fontSize: 12.5, color: S.txt, textAlign: "right" }}>{v}</span></div>)}
           {cnpjN && <button onClick={() => window.open(`${DASH}/?cliente=${cnpjN}`, "_blank", "noopener")} style={{ width: "100%", marginTop: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: S.pri, color: "#fff", border: "none", borderRadius: 10, padding: "10px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><ExternalLink size={14} />Ficha completa no Dashboard</button>}
+          {cnpjN && onIris && <button onClick={() => onIris(org)} title="Abrir a Íris já com este cliente" style={{ width: "100%", marginTop: 8, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, background: "transparent", color: S.pl, border: `1px solid ${S.pri}`, borderRadius: 10, padding: "9px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}><Sparkles size={14} />Abrir na Íris</button>}
         </> : <p style={{ margin: 0, fontSize: 12, color: S.ts }}>{info?.erro ? "Erro: " + info.erro : "Carregando..."}</p>}
       </Crd>
     </div>}
