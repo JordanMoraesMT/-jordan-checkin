@@ -395,7 +395,7 @@ export default function App(){
     setCrmFocus({org,t:Date.now()});setTab("crm_empresas");
   },[allOrgs,token,user]);
 
-  if(!token||!user)return <Login aviso={sesExp?"Sua sessão expirou. Entre de novo — nada do que estava no aparelho foi apagado, e o que faltou enviar vai sozinho depois do login.":""} onLogin={(t,u)=>{setSesExp(false);setToken(t);setUser(u);sS("jc:session",t);sS("jc:user",u);setSSOCookie(t);}}/>;
+  if(!token||!user)return <Login onLogin={(t,u)=>{setSesExp(false);setToken(t);setUser(u);sS("jc:session",t);sS("jc:user",u);setSSOCookie(t);}}/>;
 
   // ─── Navegação: grupos iguais ao Dashboard (sidebar) + lista plana (bottom nav mobile) ───
   const isAdmin=user?.id===743088;
