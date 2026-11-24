@@ -20,8 +20,10 @@ export async function salvarPremissas(p) {
 }
 
 /** check-outs desde o início + vendas por cliente×representada (período e 12 meses) */
-export function carregarBase(token, inicio, hoje) {
-  const chave = `${inicio}|${hoje}`;
+// v135: `uids` = de quem buscar as visitas do app no sync (vendedor: só ele; admin: todos). O servidor do sync também confere.
+export function carregarBase(token, inicio, hoje, uids) {
+  const ids = (uids && uids.length ? uids : (USERS || []).map(u => u.id)).map(String);
+  const chave = `${inicio}|${hoje}|${ids.join(",")}`;
   if (cacheBase && cacheBase.chave === chave && Date.now() - cacheBase.t < DEZ_MIN) return cacheBase.p;
   const H = { headers: { "X-Session": token }, cache: "no-store" };
   const pIni = inicio.slice(0, 7), pFim = hoje.slice(0, 7), p12 = mesMenos(pFim, 11);
@@ -36,7 +38,7 @@ export function carregarBase(token, inicio, hoje) {
     porInd(pIni, pFim), porInd(p12, pFim),
     fetch(`${DASH}/api/crm/tram-taxas`, H).then(r => r.ok ? r.json() : null).catch(() => null),
     // v88: visitas do app (têm check-in E check-out) — últimas 200 de cada usuário
-    Promise.all((USERS || []).map(u => syncFetch(`visits_${u.id}`, { cache: "no-store" }).then(r => r.json()).then(d => Array.isArray(d && d.active) ? d.active : []).catch(() => []))).then(l => l.flat()),
+    Promise.all(ids.map(id => syncFetch(`visits_${id}`, { cache: "no-store" }).then(r => r.json()).then(d => Array.isArray(d && d.active) ? d.active : []).catch(() => []))).then(l => l.flat()),
   ]).then(([a, v, f, tt, kv]) => {
     setTramTaxas(tt); // v87: taxa Tramontina por cliente direto dos extratos (sem rota → foto de tramTaxas.js)
     const ok = !!(a && a.atividades);

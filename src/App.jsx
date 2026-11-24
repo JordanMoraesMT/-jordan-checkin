@@ -93,7 +93,7 @@ export default function App(){
   const syncPush=async(data)=>{try{await syncFetch(`${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:data})});}catch(e){console.warn("syncPush:",e);}};
   const syncClear=async()=>{try{await syncFetch(`${user.id}`,{method:"DELETE"});}catch(e){console.warn("syncClear:",e);}};
   const syncVisitSave=async(visit)=>{try{const r=await syncFetch(`visits_${user.id}`);const d=await r.json();const all=[visit,...(d.active||[])].slice(0,200);await syncFetch(`visits_${user.id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({active:all})});}catch(e){console.warn("syncVisitSave:",e);}};
-  const syncVisitLoad=async()=>{try{const ids=[743088,743347];let remote=[];for(const uid of ids){const r=await syncFetch(`visits_${uid}`,{cache:"no-store"});const buf=await r.arrayBuffer();const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);const d=JSON.parse(txt);if(d.active)remote.push(...d.active.map(v=>({...v,orgName:fixMojibake(v.orgName||""),city:fixMojibake(v.city||""),note:fixMojibake(v.note||"")})));}if(remote.length){setVisits(prev=>{const chave=(v,t)=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(t);
+  const syncVisitLoad=async()=>{try{const ids=user.id===743088?[743088,743347]:[user.id];let remote=[];for(const uid of ids){const r=await syncFetch(`visits_${uid}`,{cache:"no-store"});const buf=await r.arrayBuffer();const txt=new TextDecoder("utf-8",{fatal:false}).decode(buf);const d=JSON.parse(txt);if(d.active)remote.push(...d.active.map(v=>({...v,orgName:fixMojibake(v.orgName||""),city:fixMojibake(v.city||""),note:fixMojibake(v.note||"")})));}if(remote.length){setVisits(prev=>{const chave=(v,t)=>v.orgId+"|"+(v.userName||"")+"|"+toLocalDate(t);
       // v90: identidade da visita = cliente + usuário + HORA do check-in. Antes era cliente+dia: a 2ª visita ao mesmo
       // cliente no dia nunca chegava aos outros aparelhos (ex.: América Santa Helena 08/10 09:18).
       const exata=v=>v.orgId+"|"+(v.userName||"")+"|"+v.checkinTime;
@@ -149,9 +149,8 @@ export default function App(){
   const syncPull=async()=>{try{
     const r=await syncFetch(`${user.id}`);const d=await r.json();
     setActive(prev=>{if(d.active&&(!prev||prev.fromSync))return{...d.active,fromSync:true};if(!d.active&&prev?.fromSync)return null;return prev;});
-    const otherId=user.id===743088?743347:743088;
-    const r2=await syncFetch(`${otherId}`);const d2=await r2.json();
-    setTeamActive(d2.active||null);
+    // v135: só o admin busca a visita em andamento do outro (o vendedor não recebe dado que não vê)
+    let d2={};if(user.id===743088){const r2=await syncFetch(`743347`);d2=await r2.json().catch(()=>({}));setTeamActive(d2.active||null);}else setTeamActive(null);
     const r3=await syncFetch(`plocs`);const d3=await r3.json();
     // v44: GPS durável do D1 (crm_gps) entra no merge — sobrevive a qualquer perda do KV
     let d1gps={};try{const rg=await fetch(`${DASH_CRM}/api/crm/gps`,{headers:{"X-Session":token}});const dg=await rg.json();(dg.gps||[]).forEach(g=>{if(g.org_id)d1gps[g.org_id]={lat:g.lat,lng:g.lng,...(g.geo?{geo:1}:{})};});}catch(e){}
@@ -223,12 +222,15 @@ export default function App(){
 
   const doSync=async(t)=>{setSyncing(true);setSyncMsg("Conectando...");try{
     const tk=t||token;
+    // v135: a lista de clientes já sai junto com os catálogos (antes esperava o /api/config voltar — 1 ida e volta a mais
+    // na rede do celular). O processamento continua DEPOIS dos catálogos, na mesma ordem de antes.
+    const pCli=fetch(`${DASH_CRM}/api/crm/clientes?limit=5000`,{headers:{"X-Session":tk},cache:"no-store"});pCli.catch(()=>{});
     await loadCatalogos(tk).catch(()=>{}); // catálogos (status/segmento/usuario/industria) do D1
     let all=[],exc=[],fonteD1=false;
     // Fonte única = D1 (dashboard.jordanmt.com). Chave de vinculo = CNPJ.
     try{
       setSyncMsg("Carregando clientes...");
-      const r=await fetch(`${DASH_CRM}/api/crm/clientes?limit=5000`,{headers:{"X-Session":tk},cache:"no-store"});
+      const r=await pCli;
       if(r.ok){const d=await r.json();
         if(d&&d.ok&&Array.isArray(d.clientes)){
           for(const o of d.clientes){(o.excluido?exc:all).push(o);}
@@ -315,7 +317,7 @@ export default function App(){
   const semanaChave=(()=>{const d=new Date();const dia=(d.getDay()+6)%7;d.setDate(d.getDate()-dia);return d.toISOString().slice(0,10);})();
   const[semanaFechada,setSemanaFechada]=useState(()=>sL("jc:semanaFechada","")===semanaChave);
   useEffect(()=>{if(!token||!user||!allOrgs.length||!rfvMap)return;let vivo=true;const t=setTimeout(async()=>{try{
-      const P=await carregarPremissas();const hoje=todayLocal();const b=await carregarBase(token,P.inicio,hoje);if(!vivo)return;
+      const P=await carregarPremissas();const hoje=todayLocal();const b=await carregarBase(token,P.inicio,hoje,user?.id===743088?null:[user?.id]);if(!vivo)return;
       const nrm=x=>String(x||"").toLowerCase().trim();const meus=allOrgs.filter(o=>!o.excluido&&nrm(o.owner)===nrm(user.name));if(!meus.length)return;
       const vis=b.visitas.filter(v=>String(v.user_id||"")===String(user.id)||nrm(v.user_nome)===nrm(user.name));
       const ue={};b.visitas.forEach(v=>{const d=new Date(Date.parse(String(v.criado_em).replace(" ","T")+"Z")-4*3600000).toISOString().slice(0,10);if(v.org_id&&(!ue[v.org_id]||d>ue[v.org_id]))ue[v.org_id]=d;});
@@ -416,7 +418,7 @@ export default function App(){
   // cookie e volta para a tela de entrada. Como a sessão é compartilhada, encerra também o Dashboard e a Íris neste navegador.
   const sair=async()=>{if(saindo)return;setSaindo(true);const ses=token||readCookie("ses");
     if(ses){try{await Promise.race([fetch(`${API}/logout`,{method:"POST",headers:{"X-Session":ses},keepalive:true}).catch(()=>{}),new Promise(r=>setTimeout(r,2500))]);}catch{}}
-    clearSSOCookie();setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);setSaindo(false);};
+    clearSSOCookie();try{localStorage.removeItem("jc:homes");}catch{}setToken("");setUser(null);setOrgs([]);sS("jc:session","");sS("jc:user",null);setSaindo(false);};
   const dataHoje=fD(new Date());
 
   return(<div style={{display:"flex",height:"100vh",overflow:"hidden",background:S.chrome,color:S.txt,fontFamily:"'Archivo',system-ui,sans-serif"}}>

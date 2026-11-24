@@ -69,6 +69,9 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
   const futureT=filtered.filter(t=>!t.done&&t.due&&t.due.slice(0,10)>today);
   const noDueT=filtered.filter(t=>!t.due);
   const doneT=filtered.filter(t=>t.done);
+  // v135: cada bloco da lista desenha 40 por vez ("Ver mais") — 90 dias de tarefas passam de 400 linhas
+  const[vcA,setVcA]=useState({});useEffect(()=>{setVcA({});},[filter,period,userFilter,customFrom,customTo]);
+  const lote=(k,arr)=>{const n=vcA[k]||40;return<>{arr.slice(0,n).map(renderTask)}{arr.length>n&&<button onClick={()=>setVcA(p=>({...p,[k]:n+40}))} style={{width:"100%",margin:"4px 0 12px",padding:12,fontSize:13,background:S.card,border:`1px solid ${S.brd}`,borderRadius:10,color:S.pl,cursor:"pointer"}}>Ver mais {Math.min(40,arr.length-n)} de {arr.length-n}</button>}</>;};
   // Calendário: quem contar para os pontinhos/lista respeita o filtro de equipe
   const calWho=!isAdmin?meWho:userFilter;
   const marks=useMemo(()=>{const m={};tasks.forEach(t=>{if(t.due&&!t.done&&userMatch(t,calWho)){const d=t.due.slice(0,10);if(m[d]!==S.dng)m[d]=t.due.slice(0,10)<today?S.dng:S.gold;}});return m;},[tasks,today,calWho]);
@@ -143,10 +146,10 @@ function AgendaTab({visible,token,user,allOrgs,onCrmChange,bump}){
     </div>}
     {view==="lista"&&<>
     {lo&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Carregando...</p>}
-    {!lo&&filter==="pending"&&<>{overdue.length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"0 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.dng}}>⚠️ Atrasadas ({overdue.length})</span></div>{overdue.map(renderTask)}</>}
-      {todayT.filter(t=>!t.done).length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"14px 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.gold}}>📌 Hoje ({todayT.filter(t=>!t.done).length})</span></div>{todayT.filter(t=>!t.done).map(renderTask)}</>}
-      {futureT.length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"14px 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.pl}}>🗓️ Próximas ({futureT.length})</span></div>{futureT.map(renderTask)}</>}</>}
-    {!lo&&filter==="done"&&<>{doneT.length?doneT.map(renderTask):<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma finalizada no período</p>}</>}
+    {!lo&&filter==="pending"&&<>{overdue.length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"0 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.dng}}>⚠️ Atrasadas ({overdue.length})</span></div>{lote("atr",overdue)}</>}
+      {todayT.filter(t=>!t.done).length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"14px 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.gold}}>📌 Hoje ({todayT.filter(t=>!t.done).length})</span></div>{lote("hoje",todayT.filter(t=>!t.done))}</>}
+      {futureT.length>0&&<><div style={{display:"flex",alignItems:"center",gap:9,margin:"14px 4px 12px"}}><span style={{fontSize:13,fontWeight:700,color:S.pl}}>🗓️ Próximas ({futureT.length})</span></div>{lote("prox",futureT)}</>}</>}
+    {!lo&&filter==="done"&&<>{doneT.length?lote("feitas",doneT):<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma finalizada no período</p>}</>}
     {!lo&&!filtered.length&&filter==="pending"&&<p style={{color:S.ts,textAlign:"center",padding:"2rem 0"}}>Nenhuma tarefa pendente</p>}
     </>}
     {/* Add Task Modal */}

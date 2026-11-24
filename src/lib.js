@@ -1,11 +1,16 @@
 // TeamCheck — biblioteca: constantes e utilitários
 const API="https://agendor-proxy.administrativo-fc3.workers.dev";
 const OSRM="https://router.project-osrm.org/route/v1/driving";
-let HOMES={743088:{lat:-15.677694,lng:-55.954778,label:"Casa Jordan"},743347:{lat:-15.653611,lng:-56.026833,label:"Casa Alisson"}};
+// v135: endereço de casa NÃO fica no código (o JavaScript do site é público). Vem do cadastro de usuários (/api/config, com sessão)
+// e fica guardado só neste aparelho (jc:homes) para funcionar sem rede.
+let HOMES=(()=>{try{return JSON.parse(localStorage.getItem("jc:homes"))||{};}catch{return {};}})();
 const LUNCH_START=12,LUNCH_END=13,PG=20;
 // ─── Timezone: Cuiabá (UTC-4, sem horário de verão) ───
 const TZ="America/Cuiaba";
-const toLocalDate=(d)=>{const dt=new Date(d);return dt.toLocaleDateString("en-CA",{timeZone:TZ});};// YYYY-MM-DD
+// v135: formatador criado UMA vez (toLocaleDateString com fuso criava um novo a cada chamada — ~27× mais lento; era o
+// gargalo ao abrir Empresas no celular). Mesmo resultado, inclusive "Invalid Date" para data inválida.
+const _fmtDiaCba=new Intl.DateTimeFormat("en-CA",{timeZone:TZ,year:"numeric",month:"2-digit",day:"2-digit"});
+const toLocalDate=(d)=>{const dt=new Date(d);return isNaN(dt)?"Invalid Date":_fmtDiaCba.format(dt);};// YYYY-MM-DD
 const todayLocal=()=>toLocalDate(new Date());
 const TYPES=[{id:"VISITA",l:"Visita"},{id:"LIGACAO",l:"Ligação"},{id:"EMAIL",l:"E-mail"},{id:"REUNIAO",l:"Reunião"},{id:"WHATSAPP",l:"WhatsApp"},{id:"PROPOSTA",l:"Proposta"}];
 // Backend próprio: D1 via Worker do Dashboard (fonte de verdade)
@@ -49,13 +54,15 @@ const S={bg:"var(--bg)",card:"var(--card)",cardSolid:"var(--card-solid)",cl:"var
   shadow:"var(--card-shadow)",track:"var(--track)",seam:"var(--seam-shadow)",contentShadow:"var(--content-shadow)",mono:"'IBM Plex Mono',ui-monospace,monospace"};
 // paleta de gráficos — idêntica ao Dashboard (theme.js → PC)
 const PC=["#0AAEE8","#06B6D4","#12C265","#FFB020","#8B5CF6","#FF4D8D","#FB4B3A","#06C281","#38C6F5","#A78BFA","#34D399","#F59E0B"];
-const fT=d=>new Date(d).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:TZ});
-const fD=d=>new Date(d).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:TZ});
+const _F=o=>new Intl.DateTimeFormat("pt-BR",{...o,timeZone:TZ});const _fH=_F({hour:"2-digit",minute:"2-digit"}),_fDMA=_F({day:"2-digit",month:"2-digit",year:"numeric"}),_fDM=_F({day:"2-digit",month:"2-digit"});
+const _fmtOuInv=(f,d)=>{const x=d instanceof Date?d:new Date(d);return isNaN(x)?"Invalid Date":f.format(x);};// v135: formatadores criados uma vez (mesmo texto de antes)
+const fT=d=>_fmtOuInv(_fH,d);
+const fD=d=>_fmtOuInv(_fDMA,d);
 // Datetime do D1: "YYYY-MM-DD HH:MM:SS" é UTC naïve → força Z; se já tiver fuso, respeita. Converte p/ Cuiabá.
 const d1date=s=>{const x=String(s||"");const temFuso=/[zZ]$|[+\-]\d{2}:?\d{2}$/.test(x.slice(10));return new Date(temFuso?x:(x.replace(" ","T")+"Z"));};
-const fTU=s=>{const d=d1date(s);return isNaN(d)?String(s):d.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",timeZone:TZ});};
-const fDU=s=>{const d=d1date(s);return isNaN(d)?String(s):d.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",timeZone:TZ});};
-const fDS=d=>new Date(d).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",timeZone:TZ});
+const fTU=s=>{const d=d1date(s);return isNaN(d)?String(s):_fH.format(d);};
+const fDU=s=>{const d=d1date(s);return isNaN(d)?String(s):_fDMA.format(d);};
+const fDS=d=>_fmtOuInv(_fDM,d);
 const mins=(a,b)=>Math.max(0,Math.round((new Date(b)-new Date(a))/60000));
 const hrsMin=m=>m>=60?`${Math.floor(m/60)}h${(m%60).toString().padStart(2,"0")}`:`${m}min`;
 const hourDec=d=>{const t=new Date(d);return t.getHours()+t.getMinutes()/60;};
@@ -169,7 +176,7 @@ async function loadCatalogos(token){
       USERS=us.map(x=>({id:x.agendor_id,n:x.nome}));
       const h={};
       for(const x of us){let e={};try{e=JSON.parse(x.extra||"{}");}catch{} if(e.homeLat!=null&&e.homeLng!=null)h[x.agendor_id]={lat:e.homeLat,lng:e.homeLng,label:"Casa "+String(x.nome||"").split(" ")[0]};}
-      if(Object.keys(h).length) HOMES=h;
+      if(Object.keys(h).length){HOMES=h;try{localStorage.setItem("jc:homes",JSON.stringify(h));}catch{}}
     }
     return true;
   }catch(e){console.warn("catalogos:",e);return false;}

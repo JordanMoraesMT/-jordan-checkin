@@ -284,7 +284,7 @@ function PlanejarRota({ onIris, orgs, plocs, visits, rfv, user, token, onOpenFic
   const [ocultaDist, setOcultaDist] = useState(p0.ocultaDist !== false); // v79: esconde "atender a distância" por padrão
   // v79: veredito da Análise de visitas ("vale nova visita?") — mesma régua, mesmo cache
   const [base, setBase] = useState(null); const [prem, setPrem] = useState(null);
-  useEffect(() => { let vivo = true; carregarPremissas().then(p => { if (!vivo) return; setPrem(p); if (token) carregarBase(token, p.inicio, todayLocal()).then(b => { if (vivo) setBase(b); }).catch(() => {}); }); return () => { vivo = false; }; }, [token]);
+  useEffect(() => { let vivo = true; carregarPremissas().then(p => { if (!vivo) return; setPrem(p); if (token) carregarBase(token, p.inicio, todayLocal(), user?.id === 743088 ? null : [user?.id]).then(b => { if (vivo) setBase(b); }).catch(() => {}); }); return () => { vivo = false; }; }, [token]);
 
   useEffect(() => { sS(PREF, { outro, owner, cid, bai, cat, fRfv, fSr, canal, uf, seg, grp, fInd, fSit, dias, ordem, sel: [...sel], partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist }); },
     [outro, owner, cid, bai, cat, fRfv, fSr, canal, uf, seg, grp, fInd, fSit, dias, ordem, sel, partidaTipo, voltar, saida, minVisita, dia, plano, ocultaDist]); // eslint-disable-line

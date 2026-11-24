@@ -573,7 +573,8 @@ function ClienteCRM({ org, token, user, visits, plocs, onBack, onEdit, onPerson,
         <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 800, color: S.txt }}>Resumo comercial</p>
         {info?.compras ? <>
           {[["Última compra", info.compras.ultima_compra ? fD(info.compras.ultima_compra + "T12:00:00") : "—"],
-            ["Faturamento 12m", info.compras.fat_12m != null ? "R$ " + Number(info.compras.fat_12m).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "—"],
+            // v135: vendedor não vê valor em R$ (regra do Jordan); o servidor também deve deixar de mandar o fat_12m para ele
+            ...(user?.id === 743088 ? [["Faturamento 12m", info.compras.fat_12m != null ? "R$ " + Number(info.compras.fat_12m).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) : "—"]] : []),
             ["Pedidos (total)", info.compras.pedidos ?? "—"], ["Indústrias", info.compras.industrias || "—"],
             ...(info.entregas?.via?.length ? [["Faturado via", info.entregas.via.map(x => `${x.nome || x.cnpj} (${x.pedidos} ped.)`).join(", ")]] : []),
             ...(info.entregas?.para?.length ? [["Entregue a (central)", info.entregas.para.map(x => `${x.nome || x.cnpj} (${x.pedidos} ped.)`).join(", ")]] : []),
@@ -1258,6 +1259,8 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   const [q, setQ] = useState("");
   const [feed, setFeed] = useState([]); const [ld, setLd] = useState(false); const [erro, setErro] = useState("");
   const [fTipo, setFTipo] = useState([]); const [fUser, setFUser] = useState([]); const [fDias, setFDias] = useState(90); // v41: multi (combináveis)
+  // v135: o feed desenha 50 por vez ("Ver mais") — em 90 dias passa de 1.000 atividades
+  const [fVc, setFVc] = useState(50);
   const [showTarefa, setShowTarefa] = useState(false);// modal "Nova tarefa" no Início (mesmo da Agenda)
 
   const carregaFeed = async () => { setLd(true); setErro("");
@@ -1271,6 +1274,7 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
   useEffect(() => { if (visible && token) carregaFeed(); }, [visible, fDias, bump]);
   // v41: tipo e equipe filtram no aparelho (combináveis entre si)
   const feedF = useMemo(() => feed.filter(a => (!fTipo.length || fTipo.includes(a.tipo)) && (!fUser.length || fUser.includes(String(a.user_id)) || fUser.some(uid => { const U = USERS.find(u => String(u.id) === uid); return U && (a.user_nome || "") && (a.user_nome === U.n || a.user_nome.includes(U.n.split(" ")[0])); }))), [feed, fTipo, fUser]);
+  useEffect(() => { setFVc(50); }, [feedF]);
 
   const achados = useMemo(() => { const t = normBusca(q.trim()); if (t.length < 2) return [];
     const casa = o => normBusca(o.nickname || o.name || "").includes(t) || (soDig(t) && soDig(o.cnpj).includes(soDig(t))) || normBusca(o.addr?.city_name || "").includes(t);
@@ -1338,7 +1342,8 @@ export function CrmTab({ visible, secao = "inicio", bump, focus, onCrmChange, to
     <p style={{ fontSize: 12, color: S.ts, margin: "0 0 8px" }}>{ld ? "Carregando atividades..." : `${feedF.length} atividade(s) no período`}</p>
     {erro && <Crd style={{ borderColor: S.dng + "66" }}><p style={{ margin: 0, fontSize: 12.5, color: S.dng }}>Erro ao carregar o feed: {erro}</p><p style={{ margin: "4px 0 0", fontSize: 11.5, color: S.ts }}>Verifique se o Dashboard está no ar (rotas CRM) e se você está logado.</p></Crd>}
     {!ld && !erro && !feedF.length && <Crd><p style={{ margin: 0, fontSize: 13, color: S.ts, textAlign: "center" }}>Sem atividades no período. Elas aparecem aqui a cada check-out, ligação, WhatsApp ou registro manual na tela do cliente.</p></Crd>}
-    {feedF.map(a => <AtvCard key={a.id} a={a} onOrg={abrePorFeed} onFinish={async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setFeed(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } }} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={async (x) => { if (!confirm("Excluir esta atividade do CRM?")) return; try { await crm(token, `/api/crm/atividades?id=${x.id}`, { method: "DELETE" }); setFeed(p => p.filter(y => y.id !== x.id)); } catch (e) { alert("Erro: " + e.message); } }} />)}
+    {feedF.slice(0, fVc).map(a => <AtvCard key={a.id} a={a} onOrg={abrePorFeed} onFinish={async (x) => { if (!confirm("Finalizar esta tarefa?")) return; try { await crm(token, "/api/crm/tarefa-concluir", { method: "PUT", body: JSON.stringify({ id: x.id }) }); setFeed(p => p.map(y => y.id === x.id ? { ...y, concluida: 1 } : y)); onCrmChange && onCrmChange(); } catch (e) { alert("Erro: " + e.message); } }} canDel={user?.role === "admin" || a.user_id === user?.id} onDel={async (x) => { if (!confirm("Excluir esta atividade do CRM?")) return; try { await crm(token, `/api/crm/atividades?id=${x.id}`, { method: "DELETE" }); setFeed(p => p.filter(y => y.id !== x.id)); } catch (e) { alert("Erro: " + e.message); } }} />)}
+    {fVc < feedF.length && <button onClick={() => setFVc(v => v + 50)} style={{ width: "100%", marginTop: 8, padding: 12, fontSize: 13, background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.pl, cursor: "pointer" }}>Ver mais {Math.min(50, feedF.length - fVc)} de {feedF.length - fVc}</button>}
   </div>}
   </div>);
 }

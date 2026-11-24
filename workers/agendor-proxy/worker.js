@@ -1,4 +1,11 @@
-// agendor-proxy — v13 (18/nov/2026)
+// agendor-proxy — v14 (24/nov/2026)
+// Novidade da v14 — o sync confere DE QUEM é a chave (regra no servidor, não só na tela):
+//   Vendedor (papel diferente de admin) só lê e grava as chaves pessoais DELE: "<id>", "visits_<id>", "semana_<id>"
+//   (id = userId da sessão). Chave pessoal de outro usuário → 403. "analisePremissas" (premissas da Análise, com as
+//   taxas de comissão) só o admin grava ou apaga. Chaves compartilhadas (plocs, dayBases) seguem como antes.
+//   Admin continua lendo tudo. Sem sessão (só se SYNC_EXIGE_SESSAO não for "1") o comportamento é o antigo.
+//   GET /api/config: vendedor deixa de receber homeLat/homeLng (endereço de casa) dos outros usuários.
+// --- v13 (18/nov/2026) ---
 // Novidade da v13: o evento "uso" do log_acesso NÃO é gravado quando o cabeçalho Origin vem vazio (chamada de
 //   servidor para servidor, ex.: o /me que o Dashboard faz pelo Cloudflare). Era ruído com IP do Cloudflare; desde a
 //   v360 o próprio Dashboard grava o uso com o IP real. Logins, logout, reset etc. continuam sendo gravados sempre.
@@ -336,7 +343,14 @@ export default {
           const { results } = await DB.prepare(
             "SELECT id,tipo,nome,agendor_id,cor,extra,ativo,ordem FROM config_catalogo ORDER BY tipo, ordem, nome"
           ).all();
-          return json({ itens: results || [] }, cors);
+          // v14: vendedor não recebe o endereço de casa (homeLat/homeLng) dos OUTROS usuários; o admin recebe tudo.
+          let itens = results || [];
+          if (usrCfg.role !== "admin") itens = itens.map(x => {
+            if (x.tipo !== "usuario" || String(x.agendor_id) === String(usrCfg.userId) || !x.extra) return x;
+            try { const e = JSON.parse(x.extra); if (e && (e.homeLat != null || e.homeLng != null)) { delete e.homeLat; delete e.homeLng; return { ...x, extra: JSON.stringify(e) }; } } catch (er) {}
+            return x;
+          });
+          return json({ itens }, cors);
         }
         if (request.method === "POST") {
           let b; try { b = await request.json(); } catch { return json({ error: "json invalido" }, cors, 400); }
@@ -498,12 +512,14 @@ export default {
 
     // ===== v10: portão do SYNC e do CNPJ =====
     // SYNC_EXIGE_SESSAO="1" → sessão obrigatória. Sem a variável (transição) → sessão conferida SE vier.
+    let usuarioSync = null;   // v14
     if (url.searchParams.has("sync") || url.searchParams.has("cnpj")) {
       const temSessao = !!request.headers.get("X-Session");
       const exige = String(env.SYNC_EXIGE_SESSAO || "") === "1";
       if (temSessao || exige) {
         const u = await sessaoUsuario(request, env);
         if (!u) return json({ error: "sessao" }, cors, 401);
+        usuarioSync = u;
       }
     }
 
@@ -512,6 +528,12 @@ export default {
       const uid = url.searchParams.get("sync");
       if (!uid) return json({ error: "missing sync id" }, cors);
       if (!SYNC_CHAVE_OK.test(uid)) return json({ error: "sync id invalido" }, cors, 400);
+      // v14: dono da chave
+      if (usuarioSync && usuarioSync.role !== "admin") {
+        const pessoal = uid.match(/^(?:visits_|semana_)?(\d+)$/);
+        if (pessoal && String(pessoal[1]) !== String(usuarioSync.userId)) return json({ error: "sem permissao para esta chave" }, cors, 403);
+        if (uid === "analisePremissas" && request.method !== "GET") return json({ error: "apenas admin" }, cors, 403);
+      }
       if (request.method === "PUT" && Number(request.headers.get("Content-Length") || 0) > SYNC_MAX_BYTES) return json({ error: "conteudo grande demais" }, cors, 413);
       try {
         if (request.method === "GET") {

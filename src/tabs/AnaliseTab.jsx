@@ -7,7 +7,6 @@ import { S, USERS, API, DASH, todayLocal, csv, CC, CATS, CANAIS, sL, sS, marcaFo
 import { SearchSelect, MultiSelect, DateField, Kpi, ColunasMenu, ColFiltro } from "../components";
 import { analisar, PREMISSAS_PADRAO, CONTAS, ROTULO_CONTA, tramTaxasInfo } from "../analiseVisitas.js";
 import { carregarBase, carregarPremissas, salvarPremissas } from "../analiseDados.js";
-import { TRAM_GERADO } from "../tramTaxas.js";
 
 const brl = v => (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 });
 const n1 = v => (v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -88,7 +87,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
   useEffect(() => { carregarPremissas().then(setPrem); }, []);
   const salvaPrem = async (p) => { setPrem(p); setPremEd(null); setPremAberta(false); try { await salvarPremissas(p); } catch (e) { alert("Não consegui salvar as premissas: " + e.message); } };
   useEffect(() => { if (!token) return; let vivo = true; setLd(true); setErro("");
-    carregarBase(token, inicio, hoje).then(r => { if (!vivo) return;
+    carregarBase(token, inicio, hoje, isAdmin ? null : [user?.id]).then(r => { if (!vivo) return;
       setVisitas(r.visitas); setVendInd(r.vendInd); setFat12Ind(r.fat12Ind);
       if (r.falhouVisitas) setErro("Não consegui ler as visitas."); else if (r.falhouVendas) setErro("Parte das vendas por representada não carregou — o cálculo usa a média da carteira para o que faltou.");
     }).catch(e => { if (vivo) setErro(String(e.message || e)); }).finally(() => { if (vivo) setLd(false); });
@@ -135,6 +134,8 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
     if (fVis.length) l = l.filter(x => fVis.includes(fxVis(x.visitas))); if (fHr.length) l = l.filter(x => fxHr(x).some(v => fHr.includes(v)));
     if (fPm.length) l = l.filter(x => fPm.includes(pmDe(x))); if (fVd.length) l = l.filter(x => fVd.includes(x.vendido > 0 ? FX_VD[0] : FX_VD[1]));
     if (fUc.length) l = l.filter(x => fUc.includes(faixaD(diasDe(x.ultCompra)))); return l; }, [A, q, fCid, fCat, fSeg, fCanal, fClasse, fResp, fUv, fVis, fHr, fPm, fVd, fUc, sels.length]); // eslint-disable-line
+  // v135: a tabela desenha 80 linhas por vez ("Ver mais"); filtros, ordem e exportação continuam sobre todas
+  const [vcA, setVcA] = useState(80);
   const linhasF = useMemo(() => { let l = linhasBase;
     if (fSit.length) l = l.filter(x => fSit.includes(x.situacao)); if (fVer.length) l = l.filter(x => fVer.includes(x.veredito));
     if (fDiag.length) l = l.filter(x => fDiag.includes(x.diagnostico)); if (fSau.length) l = l.filter(x => fSau.includes(x.saude));
@@ -142,6 +143,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
       if (k === "veredito") return ((ORDV[a.veredito] - ORDV[b.veredito]) || ((b.diasSem ?? 9999) - (a.diasSem ?? 9999))) * ord.d;
       const va = a[k], vb = b[k]; if (va == null && vb == null) return 0; if (va == null) return 1; if (vb == null) return -1; return (typeof va === "string" ? va.localeCompare(vb) : va - vb) * ord.d; });
   }, [linhasBase, fSit, fVer, fDiag, fSau, ord]);
+  useEffect(() => { setVcA(80); }, [linhasBase, fSit, fVer, fDiag, fSau, ord]);
   const chips = useMemo(() => { const out = []; const add = (arr, set, pref = "") => arr.forEach(v => out.push({ k: pref + v, l: pref + v, tira: () => set(a => a.filter(x => x !== v)) }));
     if (sels.length > 1) add(fResp, setFResp); add(fCid, setFCid); add(fCat, setFCat); add(fSeg, setFSeg); add(fCanal, setFCanal); add(fClasse, setFClasse, "Classe "); add(fVer, setFVer); add(fSit, setFSit); add(fDiag, setFDiag); add(fSau, setFSau, "Saúde: ");
     add(fVis, setFVis, "Visitas: "); add(fPm, setFPm, "Por mês: "); add(fUv, setFUv, "Visita: "); add(fHr, setFHr, "PDV: "); add(fVd, setFVd); add(fUc, setFUc, "Compra: ");
@@ -274,7 +276,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
           {th("nome", "Cliente")}{V("vendedor") && th("vendedor", "Responsável")}{V("cidade") && th("cidade", "Cidade")}{V("cat") && th("cat", "Categoria · canal")}{V("veredito") && th("veredito", "Vale nova visita?")}{V("classe") && th("classe", "Classe")}{V("visitas") && th("visitas", "Visitas", 1)}{V("porMes") && th("porMes", "Por mês · ideal", 1)}{V("diasSem") && th("diasSem", "Última visita", 1)}{V("emLoja") && th("emLoja", "Horas no PDV", 1)}{V("situacao") && th("situacao", "Situação")}
           {V("diagnostico") && th("diagnostico", "Diagnóstico")}{V("indice") && th("indice", "Saúde", 1)}{V("vendido") && th("vendido", "Vendido período", 1)}{V("fat12m") && th("fat12m", "Fat. 12m", 1)}
         </tr></thead>
-        <tbody>{linhasF.map(x => <tr key={x.id}>
+        <tbody>{linhasF.slice(0, vcA).map(x => <tr key={x.id}>
           <td style={{ ...td, width: nomeW, minWidth: nomeW, maxWidth: nomeW, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: quebra ? "normal" : "nowrap" }} title={quebra ? undefined : x.nome}><button onClick={() => onOpenFicha && onOpenFicha(x.org)} style={{ border: "none", padding: 0, background: "transparent", color: S.txt, fontWeight: 600, fontSize: 13.5, textAlign: "left", maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: quebra ? "normal" : "nowrap", wordBreak: "break-word" }}>{x.nome}</button>
             <div style={{ fontSize: 12, color: S.ts, overflow: "hidden", textOverflow: "ellipsis" }}>{[x.bairro, !V("cidade") && x.cidade].filter(Boolean).join(" · ")}{!V("cat") && x.status ? " · " + x.status : ""}</div></td>
           {V("vendedor") && <td style={{ ...td, whiteSpace: "nowrap", ...wSt("vendedor") }}>{(x.vendedor || "").split(" ")[0]}</td>}
@@ -297,6 +299,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
           {V("fat12m") && <td style={{ ...tdn, ...wSt("fat12m") }}>{x.fat12m ? brl(x.fat12m) : "—"}<div style={{ fontSize: 11, color: S.ts }}>{x.ultCompra ? "últ. " + dBR(x.ultCompra) : ""}</div></td>}
         </tr>)}{!linhasF.length && <tr><td colSpan={20} style={{ ...td, color: S.ts, textAlign: "left", padding: "16px 12px" }}>Nenhum cliente com esses filtros. <button onClick={limparFiltros} style={{ border: "none", background: "transparent", padding: 0, color: S.pl, fontWeight: 600, fontSize: 13.5 }}>Limpar filtros</button></td></tr>}</tbody>
       </table>
+      {vcA < linhasF.length && <button onClick={() => setVcA(v => v + 80)} style={{ width: "100%", margin: "8px 0 0", padding: 12, fontSize: 13, background: S.card, border: `1px solid ${S.brd}`, borderRadius: 10, color: S.pl, cursor: "pointer" }}>Ver mais {Math.min(80, linhasF.length - vcA)} de {linhasF.length - vcA}</button>}
     </div>
 
     <button onClick={() => setVerJornada(v => !v)} aria-expanded={verJornada} style={{ width: "100%", height: 44, display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 12px", fontSize: 14, fontWeight: 600, marginBottom: 8 }}>Jornada por dia ({A.dias.length} dias){verJornada ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
@@ -322,7 +325,7 @@ export function AnaliseTab({ token, allOrgs, rfv, user, isAdmin, onOpenFicha }) 
             {CONTAS.filter(ind => !marcaFora(ind)).map(ind => <label key={ind} style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 12.5, color: S.t2 }}>{ROTULO_CONTA[ind] || ind}</span>
               <input type="number" step="0.01" value={pe.taxas[ind] ?? 5} onChange={e => setPe(p => ({ ...p, taxas: { ...p.taxas, [ind]: +e.target.value } }))} className="num" style={{ height: 40, boxSizing: "border-box" }} /></label>)}
           </div>
-          <p style={{ margin: "6px 0 0", fontSize: 12, color: S.ts }}>Tramontina 4,16% e Pado 5% vêm dos extratos (out/25–jun/26); Pado 1,5% para Vale Formoso e Irmãos Domingos. Plastilit: tubos (categoria "Tubos") a 3% e o resto a 4% — a soma item a item dá o ponderado de cada pedido. Tramontina: usa a taxa real de cada cliente nos extratos quando existe ({(() => { const t = tramTaxasInfo(); const mm = x => x ? x.split("-").reverse().join("/") : "?"; return t ? `${t.total} clientes, extratos ${mm(t.desde)} a ${mm(t.ate)}, atualiza sozinho a cada extrato novo` : `152 clientes, foto de ${TRAM_GERADO.split("-").reverse().join("/")}`; })()}); os demais, a média acima.</p>
+          <p style={{ margin: "6px 0 0", fontSize: 12, color: S.ts }}>Tramontina 4,16% e Pado 5% vêm dos extratos (out/25–jun/26); Pado 1,5% para Vale Formoso e Irmãos Domingos. Plastilit: tubos (categoria "Tubos") a 3% e o resto a 4% — a soma item a item dá o ponderado de cada pedido. Tramontina: usa a taxa real de cada cliente nos extratos quando existe ({(() => { const t = tramTaxasInfo(); const mm = x => x ? x.split("-").reverse().join("/") : "?"; return t ? `${t.total} clientes, extratos ${mm(t.desde)} a ${mm(t.ate)}, atualiza sozinho a cada extrato novo` : "taxa por cliente indisponível agora (usa a média)"; })()}); os demais, a média acima.</p>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(200px,1fr))", gap: 10 }}>
           <label style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={{ fontSize: 12.5, color: S.t2 }}>Início do TeamCheck</span><DateField value={pe.inicio} onChange={v => setPe(p => ({ ...p, inicio: v }))} today={hoje} placeholder="Data" /></label>
